@@ -1,0 +1,32 @@
+[versions]
+# Toolchain (see IMPLEMENTATION_PLAN.md §6; verified against Maven metadata 2026-09-05)
+agp = "9.4.0"
+kotlin = "2.4.10"
+spotless = "8.10.2"
+ktfmt = "0.64"
+detekt = "2.0.0-alpha.6"
+
+# AndroidX
+activity = "1.13.0"
+compose-bom = "2026.08.00"
+material3 = "1.5.0-alpha27"
+core = "1.19.0"
+lifecycle = "2.11.0"
+
+[libraries]
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }

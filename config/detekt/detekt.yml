@@ -1,0 +1,28 @@
+# Runs on top of detekt's defaults with allRules = true. Only deviations live here.
+
+comments:
+  # KDoc-on-everything is for library APIs; this is an app.
+  UndocumentedPublicClass:
+    active: false
+  UndocumentedPublicFunction:
+    active: false
+  UndocumentedPublicProperty:
+    active: false
+
+style:
+  # ktfmt owns formatting and line length.
+  MaxLineLength:
+    active: false
+  # Compose code is full of layout literals; named constants would add noise.
+  MagicNumber:
+    ignoreAnnotated: ['Composable']
+
+naming:
+  # Composable functions are PascalCase by convention.
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+
+complexity:
+  # Composables take many named parameters.
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
