@@ -15,21 +15,14 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
-import com.grayvines.runway.ui.drag.DragController
+import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.drag.DragSource
-import com.grayvines.runway.ui.drag.DragState
-import com.grayvines.runway.ui.drag.DropAreaTracker
-import com.grayvines.runway.ui.drag.DropAreas
-import com.grayvines.runway.ui.drag.DropTarget
-import com.grayvines.runway.ui.drag.Edge
-import com.grayvines.runway.ui.drag.EdgeDwell
+import com.grayvines.runway.ui.drag.DragWorkspace
+import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
-import com.grayvines.runway.ui.drag.edgeAt
-import com.grayvines.runway.ui.drag.targetFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -66,38 +59,9 @@ data class HomeState(
 
 class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _goHome = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val pending = MutableStateFlow<PendingMove?>(null)
 
     /** Fires when the HOME intent arrives while already showing. */
     val goHome: SharedFlow<Unit> = _goHome
-
-    private val _flipPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
-
-    /** Page delta requested by dwelling at an edge while dragging. */
-    val flipPage: SharedFlow<Int> = _flipPage
-
-    val state: StateFlow<HomeState> =
-        combine(
-                graph.settings.settings,
-                graph.workspace.observe(Container.HOME),
-                graph.workspace.observe(Container.DOCK),
-                graph.appRepository.apps,
-                pending,
-            ) { settings, home, dock, apps, pendingMove ->
-                val byKey = apps.associateBy { it.key }
-                val plain = home.toPages(byKey) to dock.toPages(byKey)
-                val (homePages, dockPages) =
-                    pendingMove?.applyTo(plain.first, plain.second) ?: plain
-                HomeState(
-                    settings = settings,
-                    homePages = homePages,
-                    dockPages = dockPages,
-                    searchTarget = graph.searchTargets.resolve(settings.searchTarget),
-                    loaded = true,
-                )
-            }
-            .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())
 
     private val lookup =
         object : WorkspaceLookup {
@@ -116,108 +80,72 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     ?: emptyList()
         }
 
-    private val dragController = DragController(lookup)
+    /** Persistence for drags; failures are logged and reported, never thrown. */
+    private val dragWorkspace =
+        object : DragWorkspace {
+            override val homePageCount: Int
+                get() = state.value.homePages.size
 
-    /** The drag in progress, if any. */
-    val drag: StateFlow<DragState?> = dragController.state
+            override suspend fun move(move: PendingMove): Boolean =
+                logged("could not save the move; the item snaps back") {
+                    with(move) {
+                        graph.workspace.moveItem(itemId, container, page, x, y, displaced)
+                    }
+                }
+
+            override suspend fun awaitReflected(move: PendingMove) {
+                graph.workspace.observe(move.container).first { it.reflects(move) }
+            }
+
+            override suspend fun addHomePage(index: Int): Boolean =
+                logged("could not add a page") {
+                    graph.workspace.addPage(Container.HOME, index)
+                    state.first { it.homePages.size > index }
+                }
+
+            private suspend fun logged(what: String, block: suspend () -> Unit): Boolean =
+                try {
+                    block()
+                    true
+                } catch (e: SQLiteException) {
+                    Log.e(TAG, what, e)
+                    false
+                }
+        }
+
+    val dragging = DragCoordinator(viewModelScope, lookup, dragWorkspace)
+
+    val state: StateFlow<HomeState> =
+        combine(
+                graph.settings.settings,
+                graph.workspace.observe(Container.HOME),
+                graph.workspace.observe(Container.DOCK),
+                graph.appRepository.apps,
+                dragging.pending,
+            ) { settings, home, dock, apps, pendingMove ->
+                val byKey = apps.associateBy { it.key }
+                val plain = home.toPages(byKey) to dock.toPages(byKey)
+                val (homePages, dockPages) =
+                    pendingMove?.applyTo(plain.first, plain.second) ?: plain
+                HomeState(
+                    settings = settings,
+                    homePages = homePages,
+                    dockPages = dockPages,
+                    searchTarget = graph.searchTargets.resolve(settings.searchTarget),
+                    loaded = true,
+                )
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())
 
     init {
         viewModelScope.launch { graph.workspace.ensureInitialised() }
     }
 
-    /** Where home and dock currently are on screen; a still finger is re-evaluated on change. */
-    val areas = DropAreaTracker { drag.value?.let { dragTo(it.pointer) } }
-    private val dropAreas: DropAreas
-        get() = areas.areas
-
-    /** Resting at a page edge flips pages, or adds one past the end. */
-    private val edgeDwell =
-        EdgeDwell(
-            viewModelScope,
-            object : EdgeDwell.Actions {
-                override fun isPastTheEnd(edge: Edge) =
-                    edge == Edge.RIGHT && areas.areas.homePage >= state.value.homePages.size - 1
-
-                override fun flip(delta: Int) {
-                    _flipPage.tryEmit(delta)
-                }
-
-                override suspend fun addPage(): Boolean {
-                    val count = state.value.homePages.size
-                    return runCatching {
-                        graph.workspace.addPage(Container.HOME, count)
-                        state.first { it.homePages.size > count }
-                    }
-                        .onFailure { Log.e(TAG, "could not add a page", it) }
-                        .isSuccess
-                }
-            },
-        )
-
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
         val source =
             DragSource(item.id, item.kind, container, page, item.x, item.y, item.spanX, item.spanY)
-        dragController.start(source, pointer, grab)
-    }
-
-    fun dragTo(pointer: Point) {
-        val current = drag.value ?: return
-        val target: DropTarget? =
-            dropAreas.targetFor(pointer, current.grab, current.source.spanX, current.source.spanY)
-        val edge = dropAreas.edgeAt(pointer)
-        edgeDwell.hover(edge)
-        dragController.move(pointer, target, edge)
-    }
-
-    fun endDrag() {
-        edgeDwell.stop()
-        val source = drag.value?.source ?: return
-        val move = dragController.drop() ?: return
-        val pendingMove =
-            when (val target = move.target) {
-                is DropTarget.HomeCell ->
-                    PendingMove(
-                        source.itemId,
-                        Container.HOME,
-                        target.page,
-                        target.x,
-                        target.y,
-                        move.displaced,
-                    )
-                is DropTarget.DockSlot ->
-                    PendingMove(
-                        source.itemId,
-                        Container.DOCK,
-                        target.page,
-                        target.slot,
-                        0,
-                        emptyMap(),
-                    )
-            }
-        // Shown immediately; the database catches up, then the override is dropped.
-        pending.value = pendingMove
-        viewModelScope.launch {
-            try {
-                with(pendingMove) {
-                    graph.workspace.moveItem(itemId, container, page, x, y, displaced)
-                }
-                graph.workspace.observe(pendingMove.container).first { it.reflects(pendingMove) }
-            } catch (e: SQLiteException) {
-                Log.e(TAG, "could not save the move; the item snaps back", e)
-            } finally {
-                if (pending.value == pendingMove) pending.value = null
-            }
-        }
-    }
-
-    private fun ContainerContent.reflects(move: PendingMove) = pages.any { p ->
-        p.index == move.page &&
-            p.items.any { it.id == move.itemId && it.x == move.x && it.y == move.y }
-    }
-
-    fun cancelDrag() {
-        edgeDwell.stop()
-        dragController.cancel()
+        dragging.startDrag(source, pointer, grab)
     }
 
     fun launch(item: HomeItem) {
@@ -256,4 +184,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         const val STOP_TIMEOUT_MS = 5_000L
         const val TAG = "Runway"
     }
+}
+
+/** True once the observed layout shows [move] applied. */
+internal fun ContainerContent.reflects(move: PendingMove) = pages.any { p ->
+    p.index == move.page && p.items.any { it.id == move.itemId && it.x == move.x && it.y == move.y }
 }

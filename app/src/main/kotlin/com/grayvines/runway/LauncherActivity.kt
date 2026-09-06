@@ -27,30 +27,39 @@ class LauncherActivity : ComponentActivity() {
         setContent {
             RunwayTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
-                val drag by viewModel.drag.collectAsStateWithLifecycle()
+                val drag by viewModel.dragging.drag.collectAsStateWithLifecycle()
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
-                    flipPage = viewModel.flipPage,
+                    flipPage = viewModel.dragging.flipPage,
                     onLaunch = viewModel::launch,
                     drag =
                         DragSession(
                             state = drag,
                             onStart = viewModel::startDrag,
-                            onMove = viewModel::dragTo,
-                            onEnd = viewModel::endDrag,
-                            onCancel = viewModel::cancelDrag,
+                            onMove = viewModel.dragging::dragTo,
+                            onEnd = viewModel.dragging::endDrag,
+                            onCancel = viewModel.dragging::cancelDrag,
                         ),
                     onHomePagePositioned = { page, bounds ->
                         val s = state.settings
-                        viewModel.areas.homePagePositioned(page, bounds, s.columns, s.pageRows)
+                        viewModel.dragging.areas.homePagePositioned(
+                            page,
+                            bounds,
+                            s.columns,
+                            s.pageRows,
+                        )
                     },
                     onHomePageShown = { page ->
                         val s = state.settings
-                        viewModel.areas.homePageShown(page, s.columns, s.pageRows)
+                        viewModel.dragging.areas.homePageShown(page, s.columns, s.pageRows)
                     },
                     onDockPagePositioned = { page, bounds ->
-                        viewModel.areas.dockPagePositioned(page, bounds, state.settings.dockSlots)
+                        viewModel.dragging.areas.dockPagePositioned(
+                            page,
+                            bounds,
+                            state.settings.dockSlots,
+                        )
                     },
                 )
             }

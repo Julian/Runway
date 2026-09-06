@@ -3,6 +3,7 @@ package com.grayvines.runway.ui.home
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.ui.drag.PendingMove
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
