@@ -25,12 +25,13 @@ abstract class RunwayDatabase : RoomDatabase() {
 
     companion object {
         /** Bump together with a migration and its test in `RunwayDatabaseMigrationTest`. */
-        const val VERSION = 1
+        const val VERSION = 2
 
         fun open(context: Context): RunwayDatabase =
             Room.databaseBuilder<RunwayDatabase>(context, "runway.db")
                 .setDriver(AndroidSQLiteDriver())
                 .setQueryCoroutineContext(Dispatchers.IO)
+                .addMigrations(*Migrations.all.toTypedArray())
                 .build()
     }
 }

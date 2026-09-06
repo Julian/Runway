@@ -164,6 +164,15 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `moveItem can swap two neighbours through each other's cells`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1) // page 0: 2 at x0, 3 at x1
+        repo.moveItem(2, Container.HOME, 0, 1, 0, displaced = mapOf(3L to Footprint(0, 0)))
+        val byId = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+        assertEquals(1, byId[2L]?.x)
+        assertEquals(0, byId[3L]?.x)
+    }
+
+    @Test
     fun `clear leaves an empty first page in each container`() = runTest {
         repo.autoFill(apps(10), columns = 7, pageRows = 1, dockSlots = 6)
         repo.clear()

@@ -53,7 +53,13 @@ data class PageEntity(val container: Container, @ColumnInfo(name = "page_index")
 /** One placement of a thing in a container. Which columns apply depends on [kind]/[container]. */
 @Entity(
     tableName = "items",
-    indices = [Index("container", "page_index"), Index("folder_id")],
+    indices =
+        [
+            Index("container", "page_index"),
+            Index("folder_id"),
+            // One item per cell; drawer rows have no cell and nulls never collide.
+            Index("container", "page_index", "x", "y", unique = true),
+        ],
     foreignKeys =
         [
             ForeignKey(

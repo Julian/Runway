@@ -49,6 +49,10 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM items WHERE id IN (:ids)") suspend fun deleteItems(ids: List<Long>)
 
+    /** Lifts items off their cells so they can be re-placed without colliding on the way. */
+    @Query("UPDATE items SET page_index = NULL, x = NULL, y = NULL WHERE id IN (:ids)")
+    suspend fun park(ids: List<Long>)
+
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()

@@ -25,20 +25,30 @@ class SearchTargetResolver(private val context: Context) {
         try {
             context.startActivity(search.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "$packageName no longer handles web search; opening it instead", e)
-            context.packageManager.getLaunchIntentForPackage(packageName)?.let {
-                context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
+            openInstead(packageName, e)
+        } catch (e: SecurityException) {
+            openInstead(packageName, e)
+        }
+    }
+
+    /** The target no longer handles the search, or refuses it (not exported after all). */
+    private fun openInstead(packageName: String, why: Exception) {
+        Log.w(TAG, "$packageName would not take the search; opening it instead", why)
+        context.packageManager.getLaunchIntentForPackage(packageName)?.let {
+            context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 
     fun resolve(preferredPackage: String?): SearchTarget? {
         val pm = context.packageManager
+        // Only activities other apps may start: a browser's private search entry point shows up
+        // in the query but refuses us.
         val handlers =
             pm.queryIntentActivities(
-                Intent(Intent.ACTION_WEB_SEARCH),
-                PackageManager.ResolveInfoFlags.of(0),
-            )
+                    Intent(Intent.ACTION_WEB_SEARCH),
+                    PackageManager.ResolveInfoFlags.of(0),
+                )
+                .filter { it.activityInfo.exported }
         val chosen =
             handlers.firstOrNull { it.activityInfo.packageName == preferredPackage }
                 ?: handlers.firstOrNull { it.activityInfo.packageName == FIREFOX }

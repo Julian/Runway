@@ -51,6 +51,9 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         y: Int,
         displaced: Map<Long, Footprint>,
     ) = write {
+        // Every cell has one item at a time, and the moves can chain through each other's old
+        // cells, so all movers leave their cells before any lands.
+        dao.park(displaced.keys.toList() + id)
         displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
         dao.place(id, container, page, x, y)
     }
