@@ -23,14 +23,30 @@ data class DropAreas(
     val dock: Bounds? = null,
     val dockPage: Int = 0,
     val dockSlots: Int = 1,
+    /** Visual zoom applied to the areas while dragging, about [zoomPivot]; bounds are unzoomed. */
+    val zoom: Float = 1f,
+    val zoomPivot: Point = Point(0f, 0f),
 )
 
 /**
  * Maps the dragged item's position to a drop target. The item's top-left corner (pointer minus grab
  * offset) snaps to the nearest cell; the pointer itself decides which area is meant.
  */
-fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): DropTarget? {
-    val topLeft = Point(pointer.x - grab.x, pointer.y - grab.y)
+fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): DropTarget? =
+    unzoomed(pointer).let { p ->
+        targetForUnzoomed(p, Point(p.x - grab.x / zoom, p.y - grab.y / zoom), spanX, spanY)
+    }
+
+/** Maps a screen point back into the unzoomed coordinates the bounds were reported in. */
+private fun DropAreas.unzoomed(p: Point) =
+    Point(zoomPivot.x + (p.x - zoomPivot.x) / zoom, zoomPivot.y + (p.y - zoomPivot.y) / zoom)
+
+private fun DropAreas.targetForUnzoomed(
+    pointer: Point,
+    topLeft: Point,
+    spanX: Int,
+    spanY: Int,
+): DropTarget? {
     val homeArea = home?.takeIf { pointer in it }
     val dockArea = dock?.takeIf { pointer in it }
     return when {

@@ -42,6 +42,18 @@ class DropGeometryTest {
     }
 
     @Test
+    fun `a visual zoom is undone before hit-testing`() {
+        // Zoomed to half size about the centre (150,125): screen point (225,175) is unzoomed
+        // (300,225),
+        // i.e. the dock's right edge; (75,75) is unzoomed (0,25), the first home cell.
+        val zoomed = areas.copy(zoom = 0.5f, zoomPivot = Point(150f, 125f))
+        assertEquals(DropTarget.DockSlot(0, 2), zoomed.targetFor(Point(220f, 175f), noGrab, 1, 1))
+        assertEquals(DropTarget.HomeCell(1, 0, 0), zoomed.targetFor(Point(75f, 75f), noGrab, 1, 1))
+        // The same screen point without zoom lands elsewhere.
+        assertEquals(DropTarget.HomeCell(1, 2, 1), areas.targetFor(Point(220f, 175f), noGrab, 1, 1))
+    }
+
+    @Test
     fun `outside every area is no target`() {
         assertNull(areas.targetFor(Point(150f, 300f), noGrab, 1, 1))
         assertNull(DropAreas().targetFor(Point(10f, 10f), noGrab, 1, 1))

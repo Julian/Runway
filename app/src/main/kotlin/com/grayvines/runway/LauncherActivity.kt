@@ -57,6 +57,10 @@ class LauncherActivity : ComponentActivity() {
                                 dockSlots = state.settings.dockSlots,
                             )
                     },
+                    onZoom = { zoom, pivot ->
+                        viewModel.dropAreas =
+                            viewModel.dropAreas.copy(zoom = zoom, zoomPivot = pivot)
+                    },
                 )
             }
         }

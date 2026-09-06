@@ -172,6 +172,23 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun theHomeAreaZoomsOutWhileDragging() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val resting = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val zoomed = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "zoomed ${zoomed.width} vs resting ${resting.width}",
+            zoomed.width < resting.width,
+        )
+        release()
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val back = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        assertEquals(resting.width, back.width, 1f)
+    }
+
+    @Test
     fun theLiftedIconIsDrawnLargerThanItsCellIcon() {
         val grid = useGrid(columns = 5, rows = 7)
         val resting = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot
