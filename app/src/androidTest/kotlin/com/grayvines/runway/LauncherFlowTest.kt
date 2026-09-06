@@ -376,6 +376,45 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun movingADockIconIntoAnEmptySlotLeavesTheOthersAlone() {
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        val neighbour = labelAtDockSlot(1)
+        val last = labelAtDockSlot(settings.dockSlots - 1)
+        drag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots))
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots }
+        assertEquals(1, placementOf(neighbour)?.x)
+        assertEquals(settings.dockSlots - 1, placementOf(last)?.x)
+        assertEquals(1, grid.dockSlotAt(icon(neighbour).fetchSemanticsNode().boundsInRoot.center))
+    }
+
+    @Test
+    fun aDropAfterAPageFlipSettlesIntoItsCellOnTheNewPage() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val onPageTwo = labelOnPage(1)
+        val row = settings.pageRows - 1
+        holdDrag(from = firstHomeApp, to = grid.rightEdge(row))
+        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        compose.waitForIdle()
+        release()
+        assertSettlesTowards(firstHomeApp, grid.homeCell(settings.columns - 1, row))
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+    }
+
+    @Test
+    fun aDockIconHeldAtAHomeEdgeFlipsThePage() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val onPageTwo = labelOnPage(1)
+        holdDrag(from = firstDockApp, to = grid.rightEdge(row = settings.pageRows - 1))
+        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        compose.waitForIdle()
+        release()
+        compose.waitUntil(TIMEOUT_MS) {
+            placementOf(firstDockApp)?.let { it.container == Container.HOME && it.pageIndex == 1 }
+                ?: false
+        }
+    }
+
+    @Test
     fun dockIconsCanBeDraggedOntoAHomePage() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstDockApp, to = grid.homeCell(4, 4))
