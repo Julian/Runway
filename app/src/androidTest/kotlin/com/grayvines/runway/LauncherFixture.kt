@@ -1,6 +1,8 @@
 package com.grayvines.runway
 
+import android.content.Intent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
@@ -169,17 +171,23 @@ open class LauncherFixture {
         compose.mainClock.autoAdvance = false
         try {
             // The overlay carries the icon while it settles; afterwards the cell shows it.
-            fun icon() =
-                compose
-                    .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                    .fetchSemanticsNodes()
-                    .firstOrNull()
-                    ?: compose
-                        .onNode(hasContentDescription(label), useUnmergedTree = true)
-                        .fetchSemanticsNode()
+            fun icon(): SemanticsNode {
+                val overlay =
+                    compose
+                        .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                        .fetchSemanticsNodes()
+                        .firstOrNull()
+                return overlay ?: cellIcon(label).fetchSemanticsNode()
+            }
+            // Measured against the destination cell where it is drawn that frame: the home area
+            // is still zooming back out, so the cell itself moves a little.
+            fun gap(): Float {
+                val cell = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
+                return (icon().boundsInRoot.center - cell).getDistance()
+            }
             compose.mainClock
                 .advanceTimeByFrame() // the first held frame is still the pre-release one
-            var distance = (icon().boundsInRoot.center - slotCentre).getDistance()
+            var distance = gap()
             var width = icon().boundsInRoot.width
             android.util.Log.d(
                 "RunwaySettle",
@@ -188,7 +196,7 @@ open class LauncherFixture {
             repeat(SETTLE_FRAMES) { frame ->
                 compose.mainClock.advanceTimeByFrame()
                 val bounds = icon().boundsInRoot
-                val now = (bounds.center - slotCentre).getDistance()
+                val now = gap()
                 android.util.Log.d(
                     "RunwaySettle",
                     "frame ${frame + 2}: ${bounds.center} distance $now width ${bounds.width}",
@@ -207,6 +215,25 @@ open class LauncherFixture {
         } finally {
             compose.mainClock.autoAdvance = true
         }
+        // And, once everything has come to rest, it is in the slot it was aimed at.
+        compose.waitForIdle()
+        val rest = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
+        assertTrue(
+            "came to rest at $rest, not $slotCentre",
+            (rest - slotCentre).getDistance() < SETTLE_REST_PX,
+        )
+    }
+
+    /**
+     * The HOME intent, addressed explicitly: the test install resets the device's default home app,
+     * so the HOME key would open the stock launcher instead.
+     */
+    protected fun sendHomeIntent() {
+        app.startActivity(
+            Intent(Intent.ACTION_MAIN, null, app, LauncherActivity::class.java)
+                .addCategory(Intent.CATEGORY_HOME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 
     protected fun assertUnmoved(label: String) {
@@ -317,3 +344,4 @@ const val LONG_TIMEOUT_MS = 15_000L
 const val PRESS_SETTLE_MS = 250L
 const val SETTLE_FRAMES = 24
 const val SETTLE_TOLERANCE_PX = 2f
+const val SETTLE_REST_PX = 4f

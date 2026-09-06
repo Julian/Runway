@@ -1,6 +1,5 @@
 package com.grayvines.runway
 
-import android.content.Intent
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
@@ -45,12 +44,7 @@ class LauncherShellTest : LauncherFixture() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
         compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
 
-        // Addressed explicitly: the test install resets the device's default home app.
-        app.startActivity(
-            Intent(Intent.ACTION_MAIN, null, app, LauncherActivity::class.java)
-                .addCategory(Intent.CATEGORY_HOME)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        sendHomeIntent()
         compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
@@ -63,7 +57,7 @@ class LauncherShellTest : LauncherFixture() {
             "${target!!.label} did not come to the front",
             device.wait(Until.hasObject(By.pkg(target.packageName)), TIMEOUT_MS),
         )
-        device.pressHome()
+        sendHomeIntent()
         compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 

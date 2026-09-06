@@ -1,6 +1,5 @@
 package com.grayvines.runway
 
-import android.content.Intent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -81,11 +80,7 @@ class DrawerTest : LauncherFixture() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
         compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
         openDrawer()
-        app.startActivity(
-            Intent(Intent.ACTION_MAIN, null, app, LauncherActivity::class.java)
-                .addCategory(Intent.CATEGORY_HOME)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        sendHomeIntent()
         awaitDrawerClosed()
         assertTrue(
             "HOME with the drawer open must not also change page",
