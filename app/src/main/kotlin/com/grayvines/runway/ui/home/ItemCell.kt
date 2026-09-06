@@ -45,7 +45,6 @@ import com.grayvines.runway.ui.drag.Point
 private const val ICON_BITMAP_SIZE = 256
 
 /** Icons shrink a little under a finger, whether or not a drag follows. */
-private const val PRESSED_SCALE = 0.9f
 
 /** How long a finger must rest on an icon before it lifts; longer than the platform default. */
 private const val LIFT_HOLD_MS = 550L
@@ -76,7 +75,8 @@ fun ItemCell(
     val handlers by rememberUpdatedState(drag)
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(if (pressed) PRESSED_SCALE else 1f, label = "press")
+    val pressScale by
+        animateFloatAsState(if (pressed) DragMotion.PRESSED_SCALE else 1f, label = "press")
     val viewConfiguration = LocalViewConfiguration.current
     val liftConfiguration =
         remember(viewConfiguration) {

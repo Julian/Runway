@@ -1,6 +1,6 @@
 package com.grayvines.runway.ui.home
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -15,7 +15,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,10 +31,7 @@ import kotlinx.coroutines.flow.Flow
 /** Fraction of a grid cell's shorter side left empty around an icon. */
 private const val ICON_INSET = 0.3f
 
-/** While dragging the home area pulls back a little, as if seen from a step further away. */
-private const val DRAG_ZOOM = 0.94f
 private val DRAG_CORNER = 28.dp
-private const val DRAG_BORDER_ALPHA = 0.35f
 
 /**
  * The launcher surface. The grid is [Settings.columns] × [Settings.rows]; the search bar and the
@@ -67,7 +64,8 @@ fun HomeScreen(
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        Column(Modifier.fillMaxSize().pulledBackWhile(drag.state != null).padding(insets)) {
+        val lift = liftProgress(lifting = drag.state != null)
+        Column(Modifier.fillMaxSize().pulledBack(lift).padding(insets)) {
             if (settings.searchBarAtTop) {
                 SearchBar(rowHeight = cell.height, target = state.searchTarget)
             }
@@ -104,6 +102,7 @@ fun HomeScreen(
             item = state.item(drag.draggedId ?: drag.settling?.itemId),
             cell = cell,
             iconSize = iconSize,
+            lift = lift,
         )
     }
 }
@@ -133,12 +132,26 @@ private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings):
 }
 
 /**
- * Zooms out slightly with a faint rounded border while [active]; reports the zoom for hit-testing.
+ * One progress for the whole pick-up, 0 at rest and 1 fully lifted: the icon comes forward as the
+ * home area steps back, and on release both return on the settle spring.
  */
 @Composable
-private fun Modifier.pulledBackWhile(active: Boolean): Modifier {
-    val zoom by animateFloatAsState(if (active) DRAG_ZOOM else 1f, label = "zoom")
-    val borderAlpha by animateFloatAsState(if (active) DRAG_BORDER_ALPHA else 0f, label = "border")
+private fun liftProgress(lifting: Boolean): Float {
+    val lift = remember { Animatable(0f) }
+    LaunchedEffect(lifting) {
+        if (lifting) {
+            lift.animateTo(1f, DragMotion.lift)
+        } else {
+            lift.animateTo(0f, DragMotion.settle)
+        }
+    }
+    return lift.value
+}
+
+/** Pulled back by [lift] (0 at rest, 1 fully lifted) behind a faint rounded border. */
+private fun Modifier.pulledBack(lift: Float): Modifier {
+    val zoom = DragMotion.lerp(1f, DragMotion.ZOOM, lift)
+    val borderAlpha = (DragMotion.BORDER_ALPHA * lift).coerceIn(0f, 1f)
     return graphicsLayer {
             scaleX = zoom
             scaleY = zoom

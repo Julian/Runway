@@ -1,8 +1,6 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -23,28 +21,27 @@ import com.grayvines.runway.ui.drag.Settling
 
 const val DRAG_OVERLAY_TAG = "drag-overlay"
 
-/** The lifted icon grows a little: a finger covers it, and the growth says "picked up". */
-private const val LIFTED_SCALE = 1.2f
-
 /**
  * Draws the lifted cell above everything else, in root coordinates. While dragging it follows the
  * pointer at its lifted size. On release it carries the icon from where the finger let go to the
  * cell it belongs to (which reports its own position, so a page still zooming out is tracked) and
  * eases it back to resting size, then hands over to the cell. Drawing this here rather than in the
- * page means a release outside the page is not clipped on its way back.
+ * page means a release outside the page is not clipped on its way back. [lift] is how far the
+ * pick-up has progressed, shared with the home area's pull-back so the two move as one.
  */
 @Composable
-fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp) {
+fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: Float) {
     val app = item?.app ?: return
     val state = drag.state
     val settling = drag.settling
     when {
         state != null ->
-            Lifted(
+            OverlayCell(
                 app,
                 Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y),
                 cell,
                 iconSize,
+                DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift),
             )
         settling != null ->
             Settle(
@@ -56,24 +53,6 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp) 
                 onDone = { drag.onSettled(settling.itemId) },
             )
     }
-}
-
-@Composable
-private fun Lifted(
-    app: AppEntry,
-    at: Point,
-    cell: DpSize,
-    iconSize: Dp,
-) {
-    // Starts at rest size and swells up, overshooting slightly, like something being picked up.
-    val scale = remember { Animatable(1f) }
-    LaunchedEffect(Unit) {
-        scale.animateTo(
-            LIFTED_SCALE,
-            spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        )
-    }
-    OverlayCell(app, at, cell, iconSize, scale.value)
 }
 
 @Composable
@@ -92,15 +71,19 @@ private fun Settle(
     // Wait for the destination cell to report where it is before setting off.
     LaunchedEffect(settling, target != null) {
         if (target != null) {
-            progress.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow))
+            progress.animateTo(1f, DragMotion.settle)
             onDone()
         }
     }
     val t = progress.value
     val centre =
-        if (target == null) from else Point(lerp(from.x, target.x, t), lerp(from.y, target.y, t))
+        if (target == null) {
+            from
+        } else {
+            Point(DragMotion.lerp(from.x, target.x, t), DragMotion.lerp(from.y, target.y, t))
+        }
     val at = Point(centre.x - half.x, centre.y - half.y)
-    OverlayCell(app, at, cell, iconSize, LIFTED_SCALE + (1f - LIFTED_SCALE) * t)
+    OverlayCell(app, at, cell, iconSize, DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t))
 }
 
 @Composable
@@ -126,5 +109,3 @@ private fun OverlayCell(
         )
     }
 }
-
-private fun lerp(from: Float, to: Float, t: Float) = from + (to - from) * t

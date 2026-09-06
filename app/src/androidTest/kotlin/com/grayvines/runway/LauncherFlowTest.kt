@@ -27,6 +27,7 @@ import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -233,6 +234,56 @@ class LauncherFlowTest {
             "lifted ${lifted.width} vs resting ${resting.width}",
             lifted.width > resting.width * 1.1f,
         )
+        release()
+    }
+
+    @Test
+    fun theLiftAndThePullBackMoveAsOne() {
+        useGrid(columns = 5, rows = 7)
+        val restingIcon = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.width
+        val restingArea =
+            compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot.width
+        val start = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onRoot().performTouchInput { down(start) }
+            // Run the hold, then watch frame by frame from the moment the icon lifts.
+            compose.mainClock.advanceTimeBy(LIFT_HOLD_MS - FRAME_MS)
+            val icons = mutableListOf<Float>()
+            val areas = mutableListOf<Float>()
+            repeat(LIFT_FRAMES) {
+                compose.mainClock.advanceTimeByFrame()
+                val overlay =
+                    compose
+                        .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                        .fetchSemanticsNodes()
+                        .firstOrNull()
+                if (overlay != null) {
+                    icons += overlay.boundsInRoot.width
+                    areas +=
+                        compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot.width
+                }
+            }
+            assertTrue("the icon never lifted", icons.size > LIFT_FRAMES / 2)
+            assertTrue(
+                "lift starts at the pressed size, not a jump to full: ${icons.first()} vs $restingIcon",
+                icons.first() < restingIcon,
+            )
+            val iconPeak = icons.indexOf(icons.max())
+            val areaTrough = areas.indexOf(areas.min())
+            assertTrue(
+                "icon peaked at frame $iconPeak but the area bottomed out at $areaTrough",
+                abs(iconPeak - areaTrough) <= 1,
+            )
+            assertTrue(
+                "no overshoot on lift: ${icons.max()} vs ${restingIcon * 1.2f}",
+                icons.max() > restingIcon * 1.2f,
+            )
+            assertEquals(restingIcon * 1.2f, icons.last(), 2f)
+            assertEquals(restingArea * 0.94f, areas.last(), 2f)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
         release()
     }
 
@@ -532,6 +583,9 @@ class LauncherFlowTest {
     private companion object {
         const val TIMEOUT_MS = 5_000L
         const val LONG_PRESS_MS = 1_000L
+        const val LIFT_HOLD_MS = 550L
+        const val FRAME_MS = 16L
+        const val LIFT_FRAMES = 60
         const val DRAG_STEPS = 10
         const val DRAG_STEP_MS = 30L
         const val LIFT_ANIMATION_MS = 1_000L
