@@ -21,10 +21,12 @@ ln -s "/Applications/Android Studio.app/Contents/jbr" ~/Library/Java/JavaVirtual
 ./gradlew installAsHome    # install the debug build, make it the home app, go home
 ```
 
-Unit tests can be run via:
+Unit tests run on the host; instrumented tests drive the real launcher on a
+connected emulator or device (and replace its layout):
 
 ```sh
 ./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
 ```
 
 Debug builds use the application id `com.grayvines.runway.debug` so they can be installed alongside a release build without touching its layout.

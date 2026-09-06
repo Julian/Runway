@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.room3)
 }
 
 android {
@@ -13,6 +15,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -43,7 +46,11 @@ android {
         abortOnError = true
         checkDependencies = true
     }
+
+    testOptions { unitTests.all { it.useJUnitPlatform() } }
 }
+
+room3 { schemaDirectory("$projectDir/schemas") }
 
 kotlin {
     compilerOptions {
@@ -84,13 +91,42 @@ tasks.register("installAsHome") {
     dependsOn("installDebug", "setDefaultHome", "goHome")
 }
 
+// Instrumented tests uninstall the app afterwards; put the debug build back as home.
+tasks
+    .matching { it.name == "connectedDebugAndroidTest" }
+    .configureEach {
+        finalizedBy("installAsHome")
+    }
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
 
+    // Pinned so the instrumented tests' coroutines-test matches the app's coroutines-core.
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.room3.runtime)
+    implementation(libs.sqlite.framework)
+    ksp(libs.room3.compiler)
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.sqlite.bundled.jvm)
+
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core.ktx)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

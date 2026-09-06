@@ -43,5 +43,17 @@
                 <category android:name="android.intent.category.LAUNCHER_APP" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="true"
+            android:taskAffinity="${applicationId}.settings"
+            android:label="Runway settings"
+            android:theme="@style/Theme.Runway.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

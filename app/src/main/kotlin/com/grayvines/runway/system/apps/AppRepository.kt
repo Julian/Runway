@@ -7,8 +7,11 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
+import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -20,9 +23,17 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps
 
+    private val _removed = MutableSharedFlow<AppRef>(extraBufferCapacity = REMOVAL_BUFFER)
+
+    /** Package name (as [AppRef.component]) and profile of each uninstalled app. */
+    val removed: SharedFlow<AppRef> = _removed
+
     private val callback =
         object : LauncherApps.Callback() {
-            override fun onPackageRemoved(packageName: String, user: UserHandle) = refresh()
+            override fun onPackageRemoved(packageName: String, user: UserHandle) {
+                _removed.tryEmit(AppRef(packageName, userManager.getSerialNumberForUser(user)))
+                refresh()
+            }
 
             override fun onPackageAdded(packageName: String, user: UserHandle) = refresh()
 
@@ -70,4 +81,8 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
             label = label.toString(),
             icon = getIcon(0), // device density
         )
+
+    private companion object {
+        const val REMOVAL_BUFFER = 16
+    }
 }

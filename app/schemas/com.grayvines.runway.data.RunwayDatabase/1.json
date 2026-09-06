@@ -1,0 +1,294 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "1cc8bdfdab61a090479aa2ed21fca522",
+    "entities": [
+      {
+        "tableName": "folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `color` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "folder_apps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`folder_id` INTEGER NOT NULL, `component` TEXT NOT NULL, `profile` INTEGER NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`folder_id`, `component`, `profile`), FOREIGN KEY(`folder_id`) REFERENCES `folders`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "folderId",
+            "columnName": "folder_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "component",
+            "columnName": "component",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profile",
+            "columnName": "profile",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "folder_id",
+            "component",
+            "profile"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "folders",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "folder_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`container` TEXT NOT NULL, `page_index` INTEGER NOT NULL, PRIMARY KEY(`container`, `page_index`))",
+        "fields": [
+          {
+            "fieldPath": "container",
+            "columnName": "container",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "index",
+            "columnName": "page_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "container",
+            "page_index"
+          ]
+        }
+      },
+      {
+        "tableName": "items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, `container` TEXT NOT NULL, `page_index` INTEGER, `x` INTEGER, `y` INTEGER, `span_x` INTEGER NOT NULL, `span_y` INTEGER NOT NULL, `component` TEXT, `profile` INTEGER, `shortcut_id` TEXT, `folder_id` INTEGER, `app_widget_id` INTEGER, `provider` TEXT, `label_override` TEXT, FOREIGN KEY(`folder_id`) REFERENCES `folders`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "container",
+            "columnName": "container",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pageIndex",
+            "columnName": "page_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "x",
+            "columnName": "x",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "y",
+            "columnName": "y",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "spanX",
+            "columnName": "span_x",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spanY",
+            "columnName": "span_y",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "component",
+            "columnName": "component",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "profile",
+            "columnName": "profile",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "shortcutId",
+            "columnName": "shortcut_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "folderId",
+            "columnName": "folder_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "appWidgetId",
+            "columnName": "app_widget_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "provider",
+            "columnName": "provider",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "labelOverride",
+            "columnName": "label_override",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_items_container_page_index",
+            "unique": false,
+            "columnNames": [
+              "container",
+              "page_index"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_container_page_index` ON `${TABLE_NAME}` (`container`, `page_index`)"
+          },
+          {
+            "name": "index_items_folder_id",
+            "unique": false,
+            "columnNames": [
+              "folder_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_folder_id` ON `${TABLE_NAME}` (`folder_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "folders",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "folder_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "hidden_apps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`component` TEXT NOT NULL, `profile` INTEGER NOT NULL, PRIMARY KEY(`component`, `profile`))",
+        "fields": [
+          {
+            "fieldPath": "component",
+            "columnName": "component",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profile",
+            "columnName": "profile",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "component",
+            "profile"
+          ]
+        }
+      },
+      {
+        "tableName": "badge_mutes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`component` TEXT NOT NULL, `profile` INTEGER NOT NULL, PRIMARY KEY(`component`, `profile`))",
+        "fields": [
+          {
+            "fieldPath": "component",
+            "columnName": "component",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profile",
+            "columnName": "profile",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "component",
+            "profile"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1cc8bdfdab61a090479aa2ed21fca522')"
+    ]
+  }
+}
