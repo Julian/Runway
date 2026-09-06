@@ -16,12 +16,17 @@ import com.grayvines.runway.system.search.SearchTarget
 import com.grayvines.runway.ui.drag.DragController
 import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragState
+import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.DropAreas
 import com.grayvines.runway.ui.drag.DropTarget
+import com.grayvines.runway.ui.drag.Edge
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
+import com.grayvines.runway.ui.drag.edgeAt
 import com.grayvines.runway.ui.drag.targetFor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -64,6 +69,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Fires when the HOME intent arrives while already showing. */
     val goHome: SharedFlow<Unit> = _goHome
+
+    private val _flipPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    /** Page delta requested by dwelling at an edge while dragging. */
+    val flipPage: SharedFlow<Int> = _flipPage
+    private var edgeDwell: Job? = null
 
     val state: StateFlow<HomeState> =
         combine(
@@ -110,12 +121,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** The drag in progress, if any. */
     val drag: StateFlow<DragState?> = dragController.state
 
-    /** Where home and dock currently are on screen; the UI keeps this current. */
-    var dropAreas: DropAreas = DropAreas()
-
     init {
         viewModelScope.launch { graph.workspace.ensureInitialised() }
     }
+
+    /** Where home and dock currently are on screen; a still finger is re-evaluated on change. */
+    val areas = DropAreaTracker { drag.value?.let { dragTo(it.pointer) } }
+    private val dropAreas: DropAreas
+        get() = areas.areas
 
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
         val source =
@@ -127,10 +140,26 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         val current = drag.value ?: return
         val target: DropTarget? =
             dropAreas.targetFor(pointer, current.grab, current.source.spanX, current.source.spanY)
-        dragController.move(pointer, target)
+        val edge = dropAreas.edgeAt(pointer)
+        if (edge != current.edge) restartEdgeDwell(edge)
+        dragController.move(pointer, target, edge)
+    }
+
+    /** While the finger rests at an edge, flip a page every [EDGE_DWELL_MS]. */
+    private fun restartEdgeDwell(edge: Edge?) {
+        edgeDwell?.cancel()
+        edgeDwell = edge?.let {
+            viewModelScope.launch {
+                while (true) {
+                    delay(EDGE_DWELL_MS)
+                    _flipPage.tryEmit(it.pageDelta)
+                }
+            }
+        }
     }
 
     fun endDrag() {
+        restartEdgeDwell(null)
         val source = drag.value?.source ?: return
         val move = dragController.drop() ?: return
         val pendingMove =
@@ -172,7 +201,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    fun cancelDrag() = dragController.cancel()
+    fun cancelDrag() {
+        restartEdgeDwell(null)
+        dragController.cancel()
+    }
 
     fun launch(item: HomeItem) {
         item.app?.let(graph.appRepository::launch)
@@ -208,5 +240,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+        const val EDGE_DWELL_MS = 450L
     }
 }

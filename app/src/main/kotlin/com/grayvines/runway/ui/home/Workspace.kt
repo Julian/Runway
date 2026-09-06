@@ -49,9 +49,7 @@ fun Workspace(
             handlersFor = { item -> drag?.handlersFor(item, page) },
             modifier =
                 Modifier.onGloballyPositioned { coords ->
-                    if (page == pagerState.currentPage) {
-                        onPagePositioned(page, coords.boundsInRoot().toBounds())
-                    }
+                    onPagePositioned(page, coords.boundsInRoot().toBounds())
                 },
         )
     }

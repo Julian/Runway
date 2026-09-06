@@ -31,6 +31,7 @@ class LauncherActivity : ComponentActivity() {
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
+                    flipPage = viewModel.flipPage,
                     onLaunch = viewModel::launch,
                     drag =
                         DragSession(
@@ -41,25 +42,15 @@ class LauncherActivity : ComponentActivity() {
                             onCancel = viewModel::cancelDrag,
                         ),
                     onHomePagePositioned = { page, bounds ->
-                        viewModel.dropAreas =
-                            viewModel.dropAreas.copy(
-                                home = bounds,
-                                homePage = page,
-                                columns = state.settings.columns,
-                                rows = state.settings.pageRows,
-                            )
+                        val s = state.settings
+                        viewModel.areas.homePagePositioned(page, bounds, s.columns, s.pageRows)
+                    },
+                    onHomePageShown = { page ->
+                        val s = state.settings
+                        viewModel.areas.homePageShown(page, s.columns, s.pageRows)
                     },
                     onDockPagePositioned = { page, bounds ->
-                        viewModel.dropAreas =
-                            viewModel.dropAreas.copy(
-                                dock = bounds,
-                                dockPage = page,
-                                dockSlots = state.settings.dockSlots,
-                            )
-                    },
-                    onZoom = { zoom, pivot ->
-                        viewModel.dropAreas =
-                            viewModel.dropAreas.copy(zoom = zoom, zoomPivot = pivot)
+                        viewModel.areas.dockPagePositioned(page, bounds, state.settings.dockSlots)
                     },
                 )
             }

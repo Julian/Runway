@@ -172,6 +172,19 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun dwellingAtTheRightEdgeFlipsToTheNextPageAndDropsThere() {
+        // The seed's 4×3 pages hold 12; page 2 holds the rest, with its bottom row free.
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val onPageTwo = labelOnPage(1)
+        holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
+        // The dwell timer runs on real time, so wait rather than advance the test clock.
+        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        compose.waitForIdle() // let the page scroll settle before dropping
+        release()
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+    }
+
+    @Test
     fun theHomeAreaZoomsOutWhileDragging() {
         val grid = useGrid(columns = 5, rows = 7)
         val resting = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
@@ -265,6 +278,13 @@ class LauncherFlowTest {
 
         fun searchBar() = Offset(page.center.x, page.top / 2)
 
+        /** Just inside the right edge zone, on [row]. */
+        fun rightEdge(row: Int) =
+            Offset(
+                page.right - page.width * 0.02f,
+                page.top + (row + 0.5f) * page.height / pageRows,
+            )
+
         /** The home cell a root-pixel point falls in. */
         fun cellAt(p: Offset) =
             ((p.x - page.left) / (page.width / columns)).toInt() to
@@ -323,6 +343,21 @@ class LauncherFlowTest {
             .flatMap { graph.workspace.observe(it).first().pages }
             .flatMap { it.items }
             .firstOrNull { it.component == component }
+    }
+
+    private fun labelOnPage(page: Int): String = runBlocking {
+        val item =
+            graph.workspace
+                .observe(Container.HOME)
+                .first()
+                .pages
+                .first { it.index == page }
+                .items
+                .first()
+        graph.appRepository.apps
+            .first { it.isNotEmpty() }
+            .first { it.ref.component == item.component }
+            .label
     }
 
     private fun labelAtHomeCell(x: Int, y: Int): String = runBlocking {

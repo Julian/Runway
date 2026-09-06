@@ -10,22 +10,22 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.drag.Bounds
-import com.grayvines.runway.ui.drag.Point
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -45,29 +45,26 @@ private const val DRAG_BORDER_ALPHA = 0.35f
 fun HomeScreen(
     state: HomeState,
     goHome: Flow<Unit>,
+    flipPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
+    onHomePageShown: (page: Int) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
-    onZoom: (zoom: Float, pivot: Point) -> Unit,
 ) {
     if (!state.loaded) return
     val settings = state.settings
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
-    LaunchedEffect(goHome) { goHome.collect { homePager.animateScrollToPage(0) } }
+    PagerCommands(homePager, goHome, flipPage)
+    LaunchedEffect(homePager) { snapshotFlow { homePager.currentPage }.collect(onHomePageShown) }
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        val pivot = with(LocalDensity.current) { Point(maxWidth.toPx() / 2, maxHeight.toPx() / 2) }
-        Column(
-            Modifier.fillMaxSize()
-                .pulledBackWhile(drag.state != null, pivot, onZoom)
-                .padding(insets)
-        ) {
+        Column(Modifier.fillMaxSize().pulledBackWhile(drag.state != null).padding(insets)) {
             if (settings.searchBarAtTop) {
                 SearchBar(rowHeight = cell.height, target = state.searchTarget)
             }
@@ -108,6 +105,18 @@ fun HomeScreen(
     }
 }
 
+/** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */
+@Composable
+private fun PagerCommands(pager: PagerState, goHome: Flow<Unit>, flipPage: Flow<Int>) {
+    LaunchedEffect(goHome) { goHome.collect { pager.animateScrollToPage(0) } }
+    LaunchedEffect(flipPage) {
+        flipPage.collect { delta ->
+            val next = pager.currentPage + delta
+            if (next in 0 until pager.pageCount) pager.animateScrollToPage(next)
+        }
+    }
+}
+
 /** One grid cell: the window minus system bars, divided by the grid. */
 @Composable
 private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings): DpSize {
@@ -124,14 +133,9 @@ private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings):
  * Zooms out slightly with a faint rounded border while [active]; reports the zoom for hit-testing.
  */
 @Composable
-private fun Modifier.pulledBackWhile(
-    active: Boolean,
-    pivot: Point,
-    onZoom: (zoom: Float, pivot: Point) -> Unit,
-): Modifier {
+private fun Modifier.pulledBackWhile(active: Boolean): Modifier {
     val zoom by animateFloatAsState(if (active) DRAG_ZOOM else 1f, label = "zoom")
     val borderAlpha by animateFloatAsState(if (active) DRAG_BORDER_ALPHA else 0f, label = "border")
-    LaunchedEffect(zoom, pivot) { onZoom(zoom, pivot) }
     return graphicsLayer {
             scaleX = zoom
             scaleY = zoom

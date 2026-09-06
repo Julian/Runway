@@ -42,15 +42,20 @@ class DropGeometryTest {
     }
 
     @Test
-    fun `a visual zoom is undone before hit-testing`() {
-        // Zoomed to half size about the centre (150,125): screen point (225,175) is unzoomed
-        // (300,225),
-        // i.e. the dock's right edge; (75,75) is unzoomed (0,25), the first home cell.
-        val zoomed = areas.copy(zoom = 0.5f, zoomPivot = Point(150f, 125f))
-        assertEquals(DropTarget.DockSlot(0, 2), zoomed.targetFor(Point(220f, 175f), noGrab, 1, 1))
-        assertEquals(DropTarget.HomeCell(1, 0, 0), zoomed.targetFor(Point(75f, 75f), noGrab, 1, 1))
-        // The same screen point without zoom lands elsewhere.
-        assertEquals(DropTarget.HomeCell(1, 2, 1), areas.targetFor(Point(220f, 175f), noGrab, 1, 1))
+    fun `edges are the outer 8 percent of the home area`() {
+        assertEquals(Edge.LEFT, areas.edgeAt(Point(10f, 100f)))
+        assertEquals(Edge.RIGHT, areas.edgeAt(Point(290f, 100f)))
+        assertNull(areas.edgeAt(Point(150f, 100f)))
+        assertNull(areas.edgeAt(Point(10f, 225f))) // in the dock, not the home area
+        assertEquals(Edge.RIGHT, areas.edgeAt(Point(340f, 100f))) // past the side still counts
+        assertNull(DropAreas().edgeAt(Point(10f, 100f)))
+    }
+
+    @Test
+    fun `past a side still drops into the edge column`() {
+        assertEquals(DropTarget.HomeCell(1, 2, 0), areas.targetFor(Point(340f, 20f), noGrab, 1, 1))
+        assertEquals(DropTarget.HomeCell(1, 0, 1), areas.targetFor(Point(-30f, 150f), noGrab, 1, 1))
+        assertEquals(DropTarget.DockSlot(0, 2), areas.targetFor(Point(340f, 225f), noGrab, 1, 1))
     }
 
     @Test
