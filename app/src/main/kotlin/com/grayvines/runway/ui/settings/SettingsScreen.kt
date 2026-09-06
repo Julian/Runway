@@ -1,29 +1,40 @@
 package com.grayvines.runway.ui.settings
 
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.search.SearchTarget
 
 @Composable
 fun SettingsScreen(
     settings: Settings,
+    searchTargets: List<SearchTarget>,
     onChange: ((Settings) -> Settings) -> Unit,
     debugActions: DebugActions?,
 ) {
@@ -56,6 +67,25 @@ fun SettingsScreen(
             Section("Search bar")
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->
                 onChange { it.copy(searchBarAtTop = v) }
+            }
+            Section("Search with")
+            Choice(
+                label = "Automatic",
+                detail = "Firefox if installed, otherwise the first app that can",
+                selected = settings.searchTarget == null,
+                icon = null,
+            ) {
+                onChange { it.copy(searchTarget = null) }
+            }
+            searchTargets.forEach { target ->
+                Choice(
+                    label = target.label,
+                    detail = null,
+                    selected = settings.searchTarget == target.packageName,
+                    icon = target.icon,
+                ) {
+                    onChange { it.copy(searchTarget = target.packageName) }
+                }
             }
 
             if (debugActions != null) {
@@ -90,6 +120,45 @@ private fun Stepper(label: String, value: Int, min: Int, max: Int, onValue: (Int
         TextButton(onClick = { onValue(value + 1) }, enabled = value < max) { Text("+") }
     }
 }
+
+/** One radio row: an optional app icon, a label, an optional second line. */
+@Composable
+private fun Choice(
+    label: String,
+    detail: String?,
+    selected: Boolean,
+    icon: Drawable?,
+    onSelect: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        if (icon != null) {
+            val bitmap =
+                remember(icon) {
+                    icon.toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap()
+                }
+            Image(bitmap, contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(label)
+            if (detail != null) {
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private const val CHOICE_ICON_PX = 96
 
 @Composable
 private fun Toggle(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {

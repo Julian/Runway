@@ -15,9 +15,34 @@ class SearchTarget(val packageName: String, val label: String, val icon: Drawabl
  * a search off to it. The launcher never talks to a search engine itself.
  */
 class SearchTargetResolver(private val context: Context) {
+    /** Every app that can take a web search, as the settings picker lists them. */
+    fun handlers(): List<SearchTarget> {
+        val pm = context.packageManager
+        // Only activities other apps may start: a browser's private search entry point shows up
+        // in the query but refuses us.
+        return pm.queryIntentActivities(
+                Intent(Intent.ACTION_WEB_SEARCH),
+                PackageManager.ResolveInfoFlags.of(0),
+            )
+            .filter { it.activityInfo.exported }
+            .map {
+                // The app's own name and icon: an activity may call itself just "Search".
+                val app = it.activityInfo.applicationInfo
+                SearchTarget(app.packageName, app.loadLabel(pm).toString(), app.loadIcon(pm))
+            }
+    }
+
+    fun resolve(preferredPackage: String?): SearchTarget? {
+        val handlers = handlers()
+        return handlers.firstOrNull { it.packageName == preferredPackage }
+            ?: handlers.firstOrNull { it.packageName == FIREFOX }
+            ?: handlers.firstOrNull()
+    }
+
     /**
-     * Opens [target]'s search. If it no longer handles the intent (updated or uninstalled since it
-     * was resolved), opens the app instead; with no target at all, nothing happens.
+     * Opens [target]'s search. If it no longer handles the intent, or refuses it (updated,
+     * uninstalled, or not exported after all), opens the app instead; with no target at all,
+     * nothing happens.
      */
     fun search(target: SearchTarget?) {
         val packageName = target?.packageName ?: return
@@ -36,25 +61,6 @@ class SearchTargetResolver(private val context: Context) {
         Log.w(TAG, "$packageName would not take the search; opening it instead", why)
         context.packageManager.getLaunchIntentForPackage(packageName)?.let {
             context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-
-    fun resolve(preferredPackage: String?): SearchTarget? {
-        val pm = context.packageManager
-        // Only activities other apps may start: a browser's private search entry point shows up
-        // in the query but refuses us.
-        val handlers =
-            pm.queryIntentActivities(
-                    Intent(Intent.ACTION_WEB_SEARCH),
-                    PackageManager.ResolveInfoFlags.of(0),
-                )
-                .filter { it.activityInfo.exported }
-        val chosen =
-            handlers.firstOrNull { it.activityInfo.packageName == preferredPackage }
-                ?: handlers.firstOrNull { it.activityInfo.packageName == FIREFOX }
-                ?: handlers.firstOrNull()
-        return chosen?.let {
-            SearchTarget(it.activityInfo.packageName, it.loadLabel(pm).toString(), it.loadIcon(pm))
         }
     }
 

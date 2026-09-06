@@ -1,7 +1,9 @@
 package com.grayvines.runway
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -12,6 +14,7 @@ import androidx.test.uiautomator.Until
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -59,6 +62,38 @@ class LauncherShellTest : LauncherFixture() {
         )
         sendHomeIntent()
         compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+    }
+
+    @Test
+    fun theSearchBarFollowsThePickedTarget() {
+        val handlers = graph.searchTargets.handlers()
+        assumeTrue("no web-search handler installed", handlers.isNotEmpty())
+        val picked = handlers.last()
+        runBlocking { graph.settings.update { it.copy(searchTarget = picked.packageName) } }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .any { it.config[SemanticsProperties.ContentDescription] == listOf(picked.label) }
+        }
+    }
+
+    @Test
+    fun pickingASearchTargetInSettingsIsSaved() {
+        val handlers = graph.searchTargets.handlers()
+        assumeTrue("needs two web-search handlers to pick between", handlers.size >= 2)
+        val current = graph.searchTargets.resolve(null)!!
+        val other = handlers.first { it.packageName != current.packageName }
+        icon(firstHomeApp).performClick()
+        assertTrue(
+            "settings did not open",
+            device.wait(Until.hasObject(By.text("Search with")), TIMEOUT_MS),
+        )
+        device.findObject(By.text(other.label)).click()
+        compose.waitUntil(TIMEOUT_MS) {
+            runBlocking { graph.settings.settings.first().searchTarget } == other.packageName
+        }
+        device.pressBack()
     }
 
     @Test

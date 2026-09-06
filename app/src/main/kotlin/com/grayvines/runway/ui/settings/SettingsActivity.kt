@@ -21,11 +21,13 @@ class SettingsActivity : ComponentActivity() {
         enableEdgeToEdge()
         val graph = appGraph
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val searchTargets = graph.searchTargets.handlers()
         setContent {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
                 SettingsScreen(
                     settings = settings,
+                    searchTargets = searchTargets,
                     onChange = { transform ->
                         graph.appScope.launch { graph.settings.update(transform) }
                     },
