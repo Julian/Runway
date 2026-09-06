@@ -23,6 +23,11 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
             ContainerContent(pages.map { PageContent(it.index, byPage[it.index].orEmpty()) })
         }
 
+    /** Adds a page at [index] if it does not exist yet. */
+    suspend fun addPage(container: Container, index: Int) = write {
+        dao.insertPage(PageEntity(container, index))
+    }
+
     /** Guarantees the first home and dock page exist. */
     suspend fun ensureInitialised() = write {
         dao.insertPage(PageEntity(Container.HOME, 0))

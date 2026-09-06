@@ -185,6 +185,23 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun aLongHoldPastTheLastPageAddsAPageAndDropsThere() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val pagesBefore = runBlocking { graph.workspace.observe(Container.HOME).first().pages.size }
+        val onLastPage = labelOnPage(pagesBefore - 1)
+        holdDrag(from = firstHomeApp, to = grid.rightEdge(row = 0))
+        // Flips to the last page first, then after the longer hold a new page appears and shows.
+        compose.waitUntil(LONG_TIMEOUT_MS) {
+            runBlocking { graph.workspace.observe(Container.HOME).first().pages.size } ==
+                pagesBefore + 1
+        }
+        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(onLastPage).isDisplayedOrFalse() }
+        compose.waitForIdle()
+        release()
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == pagesBefore }
+    }
+
+    @Test
     fun theHomeAreaZoomsOutWhileDragging() {
         val grid = useGrid(columns = 5, rows = 7)
         val resting = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
@@ -394,6 +411,7 @@ class LauncherFlowTest {
         const val DRAG_STEPS = 10
         const val DRAG_STEP_MS = 30L
         const val LIFT_ANIMATION_MS = 1_000L
+        const val LONG_TIMEOUT_MS = 15_000L
         const val PRESS_SETTLE_MS = 250L
     }
 }

@@ -20,13 +20,12 @@ import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.DropAreas
 import com.grayvines.runway.ui.drag.DropTarget
 import com.grayvines.runway.ui.drag.Edge
+import com.grayvines.runway.ui.drag.EdgeDwell
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import com.grayvines.runway.ui.drag.edgeAt
 import com.grayvines.runway.ui.drag.targetFor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -74,7 +73,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Page delta requested by dwelling at an edge while dragging. */
     val flipPage: SharedFlow<Int> = _flipPage
-    private var edgeDwell: Job? = null
 
     val state: StateFlow<HomeState> =
         combine(
@@ -130,6 +128,26 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val dropAreas: DropAreas
         get() = areas.areas
 
+    /** Resting at a page edge flips pages, or adds one past the end. */
+    private val edgeDwell =
+        EdgeDwell(
+            viewModelScope,
+            object : EdgeDwell.Actions {
+                override fun isPastTheEnd(edge: Edge) =
+                    edge == Edge.RIGHT && areas.areas.homePage >= state.value.homePages.size - 1
+
+                override fun flip(delta: Int) {
+                    _flipPage.tryEmit(delta)
+                }
+
+                override suspend fun addPage() {
+                    val count = state.value.homePages.size
+                    graph.workspace.addPage(Container.HOME, count)
+                    state.first { it.homePages.size > count }
+                }
+            },
+        )
+
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
         val source =
             DragSource(item.id, item.kind, container, page, item.x, item.y, item.spanX, item.spanY)
@@ -141,25 +159,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         val target: DropTarget? =
             dropAreas.targetFor(pointer, current.grab, current.source.spanX, current.source.spanY)
         val edge = dropAreas.edgeAt(pointer)
-        if (edge != current.edge) restartEdgeDwell(edge)
+        edgeDwell.hover(edge)
         dragController.move(pointer, target, edge)
     }
 
-    /** While the finger rests at an edge, flip a page every [EDGE_DWELL_MS]. */
-    private fun restartEdgeDwell(edge: Edge?) {
-        edgeDwell?.cancel()
-        edgeDwell = edge?.let {
-            viewModelScope.launch {
-                while (true) {
-                    delay(EDGE_DWELL_MS)
-                    _flipPage.tryEmit(it.pageDelta)
-                }
-            }
-        }
-    }
-
     fun endDrag() {
-        restartEdgeDwell(null)
+        edgeDwell.stop()
         val source = drag.value?.source ?: return
         val move = dragController.drop() ?: return
         val pendingMove =
@@ -202,7 +207,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun cancelDrag() {
-        restartEdgeDwell(null)
+        edgeDwell.stop()
         dragController.cancel()
     }
 
@@ -240,6 +245,5 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
-        const val EDGE_DWELL_MS = 450L
     }
 }

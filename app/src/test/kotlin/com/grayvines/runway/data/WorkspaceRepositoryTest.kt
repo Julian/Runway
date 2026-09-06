@@ -94,6 +94,16 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `addPage appends an empty page and is idempotent`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        repo.addPage(Container.HOME, 1)
+        repo.addPage(Container.HOME, 1)
+        val pages = repo.observe(Container.HOME).first().pages
+        assertEquals(listOf(0, 1), pages.map { it.index })
+        assertTrue(pages[1].items.isEmpty())
+    }
+
+    @Test
     fun `clear leaves an empty first page in each container`() = runTest {
         repo.autoFill(apps(10), columns = 7, pageRows = 1, dockSlots = 6)
         repo.clear()
