@@ -15,15 +15,13 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
-import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragWorkspace
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
-import com.grayvines.runway.ui.menu.ItemMenuActions
-import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.menu.ItemMenuHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,28 +75,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _drawerOpen = MutableStateFlow(false)
     val drawerOpen: StateFlow<Boolean> = _drawerOpen
 
-    private val _itemMenu = MutableStateFlow<ItemMenuState?>(null)
-
-    /** The menu a long press opened, until it is dismissed, acted on, or turned into a drag. */
-    val itemMenu: StateFlow<ItemMenuState?> = _itemMenu
-
-    /** The menu's actions, each closing it. */
-    val itemMenuActions =
-        ItemMenuActions(
-            appInfo = { withMenuItem { it.app?.let(graph.appRepository::showAppInfo) } },
-            uninstall = { withMenuItem { it.app?.let(graph.appRepository::uninstall) } },
-            remove = {
-                withMenuItem { item ->
-                    viewModelScope.launch {
-                        try {
-                            graph.workspace.removeItem(item.id)
-                        } catch (e: SQLiteException) {
-                            Log.e(TAG, "could not remove the item", e)
-                        }
-                    }
-                }
-            },
-        )
+    /** The long-press item menu. */
+    val itemMenu = ItemMenuHost(graph, viewModelScope)
 
     private val lookup =
         object : WorkspaceLookup {
@@ -182,22 +160,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch { graph.workspace.ensureInitialised() }
     }
 
-    fun holdItem(item: HomeItem, container: Container, page: Int, cell: Bounds) {
-        _itemMenu.value = ItemMenuState(item, container, page, cell)
-    }
-
-    fun dismissItemMenu() {
-        _itemMenu.value = null
-    }
-
-    private inline fun withMenuItem(block: (HomeItem) -> Unit) {
-        val menu = _itemMenu.value ?: return
-        _itemMenu.value = null
-        block(menu.item)
-    }
-
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
-        _itemMenu.value = null
+        itemMenu.dismiss()
         val source =
             DragSource(item.id, item.kind, container, page, item.x, item.y, item.spanX, item.spanY)
         dragging.startDrag(source, pointer, grab)
@@ -205,6 +169,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun launch(item: HomeItem) {
         item.app?.let(graph.appRepository::launch)
+    }
+
+    /** The search bar was tapped: hand off to the target app. */
+    fun search() {
+        graph.searchTargets.search(state.value.searchTarget)
     }
 
     /** Launches from the drawer; the drawer closes behind the app. */
@@ -224,7 +193,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */
     fun onHomeIntent() {
         when {
-            _itemMenu.value != null -> _itemMenu.value = null
+            itemMenu.isOpen -> itemMenu.dismiss()
             _drawerOpen.value -> _drawerOpen.value = false
             else -> _goHome.tryEmit(Unit)
         }

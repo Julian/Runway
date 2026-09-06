@@ -63,6 +63,7 @@ fun HomeScreen(
     flipHomePage: Flow<Int>,
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
+    onSearch: () -> Unit,
     drag: DragSession,
     itemMenu: ItemMenuState?,
     itemMenuActions: ItemMenuActions,
@@ -106,6 +107,7 @@ fun HomeScreen(
             cell = cell,
             iconSize = iconSize,
             onLaunch = onLaunch,
+            onSearch = onSearch,
             drag = drag,
             pagesModifier = Modifier.pullsDrawer(drawer, releaseDrawer),
             onHomePagePositioned = onHomePagePositioned,
@@ -165,6 +167,7 @@ private fun HomeColumn(
     cell: DpSize,
     iconSize: Dp,
     onLaunch: (HomeItem) -> Unit,
+    onSearch: () -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
@@ -176,7 +179,7 @@ private fun HomeColumn(
     val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
     Column(modifier) {
         if (settings.searchBarAtTop) {
-            SearchBar(rowHeight = cell.height, target = state.searchTarget)
+            SearchBar(rowHeight = cell.height, target = state.searchTarget, onSearch = onSearch)
         }
         Workspace(
             pages = state.homePages,
@@ -192,7 +195,7 @@ private fun HomeColumn(
             modifier = Modifier.weight(1f).then(pagesModifier),
         )
         if (!settings.searchBarAtTop) {
-            SearchBar(rowHeight = cell.height, target = state.searchTarget)
+            SearchBar(rowHeight = cell.height, target = state.searchTarget, onSearch = onSearch)
         }
         Dock(
             pages = state.dockPages,

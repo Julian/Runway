@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -16,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -34,11 +37,12 @@ private const val PILL_ICON_HEIGHT = 0.55f
 private const val PILL_ICON_ALPHA = 0.75f
 private const val ICON_BITMAP_SIZE = 128
 
+const val SEARCH_BAR_TAG = "search-bar"
 const val SEARCH_TARGET_ICON_TAG = "search-target-icon"
 
-/** A pill showing the app that will handle the search. */
+/** A pill showing the app that will handle the search; a tap hands off to it. */
 @Composable
-fun SearchBar(rowHeight: Dp, target: SearchTarget?) {
+fun SearchBar(rowHeight: Dp, target: SearchTarget?, onSearch: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
@@ -48,6 +52,13 @@ fun SearchBar(rowHeight: Dp, target: SearchTarget?) {
                 Modifier.fillMaxWidth()
                     .height(min(rowHeight * PILL_HEIGHT, PILL_MAX_HEIGHT))
                     .background(Scrim, CircleShape)
+                    .clip(CircleShape)
+                    .clickable(
+                        onClickLabel = target?.let { "Search with ${it.label}" } ?: "Search",
+                        role = Role.Button,
+                        onClick = onSearch,
+                    )
+                    .testTag(SEARCH_BAR_TAG)
                     .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

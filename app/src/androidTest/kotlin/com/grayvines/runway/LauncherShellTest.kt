@@ -10,6 +10,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.runBlocking
@@ -50,6 +51,19 @@ class LauncherShellTest : LauncherFixture() {
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+    }
+
+    @Test
+    fun tappingTheSearchBarHandsOffToTheTargetApp() {
+        val target = graph.searchTargets.resolve(null)
+        assumeTrue("no web-search handler installed", target != null)
+        compose.onNodeWithTag(SEARCH_BAR_TAG).performClick()
+        assertTrue(
+            "${target!!.label} did not come to the front",
+            device.wait(Until.hasObject(By.pkg(target.packageName)), TIMEOUT_MS),
+        )
+        device.pressHome()
         compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
