@@ -17,13 +17,16 @@ import kotlinx.coroutines.Dispatchers
             HiddenAppEntity::class,
             BadgeMuteEntity::class,
         ],
-    version = 1,
+    version = RunwayDatabase.VERSION,
     exportSchema = true,
 )
 abstract class RunwayDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDao
 
     companion object {
+        /** Bump together with a migration and its test in `RunwayDatabaseMigrationTest`. */
+        const val VERSION = 1
+
         fun open(context: Context): RunwayDatabase =
             Room.databaseBuilder<RunwayDatabase>(context, "runway.db")
                 .setDriver(AndroidSQLiteDriver())

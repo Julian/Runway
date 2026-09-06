@@ -94,6 +94,9 @@ android {
 
 room3 { schemaDirectory("$projectDir/schemas") }
 
+// The exported schemas ride along with the instrumented tests for the migration test.
+android.sourceSets["androidTest"].assets.srcDir("$projectDir/schemas")
+
 kotlin {
     compilerOptions {
         allWarningsAsErrors = true
@@ -204,5 +207,14 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.room3.testing)
+
+    constraints {
+        // Lifecycle pulls in kotlinx.serialization 1.7; Room's testing artifact reads the
+        // exported schema with a newer runtime, and the instrumented classpath must match the
+        // app's, so the app's is raised.
+        implementation(libs.kotlinx.serialization.core)
+        implementation(libs.kotlinx.serialization.json)
+    }
     debugImplementation(libs.compose.ui.test.manifest)
 }
