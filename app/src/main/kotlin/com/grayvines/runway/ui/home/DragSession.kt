@@ -11,6 +11,9 @@ import com.grayvines.runway.ui.drag.Settling
 class DragSession(
     val state: DragState?,
     val settling: Settling? = null,
+    /** Root-pixel centre of the cell a settling item belongs to, once that cell reports it. */
+    val settleTarget: Point? = null,
+    val onSettleTargetPositioned: (Point) -> Unit = {},
     val onSettled: (itemId: Long) -> Unit = {},
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
@@ -22,9 +25,6 @@ class DragSession(
 
     /** Where a displaced item is previewed while the drag hovers. */
     fun previewFor(id: Long): Footprint? = (state?.plan as? DropPlan.Move)?.displaced?.get(id)
-
-    /** Where [id] was just released, root pixels, if it is the item settling into its cell. */
-    fun settleFrom(id: Long): Point? = settling?.takeIf { it.itemId == id }?.from
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         DragHandlers(

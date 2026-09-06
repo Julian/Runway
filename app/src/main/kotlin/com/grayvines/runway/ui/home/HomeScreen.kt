@@ -100,8 +100,8 @@ fun HomeScreen(
             )
         }
         DragOverlay(
-            drag = drag.state,
-            item = state.item(drag.draggedId),
+            drag = drag,
+            item = state.item(drag.draggedId ?: drag.settling?.itemId),
             cell = cell,
             iconSize = iconSize,
         )

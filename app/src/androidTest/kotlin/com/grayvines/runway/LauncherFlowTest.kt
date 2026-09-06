@@ -6,8 +6,8 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -315,9 +315,12 @@ class LauncherFlowTest {
     }
 
     @Test
-    fun droppingOutsideAnyAreaSnapsBack() {
+    fun droppingOutsideAnyAreaSlidesBackToItsCell() {
         val grid = useGrid(columns = 5, rows = 7)
-        drag(from = firstHomeApp, to = grid.searchBar())
+        holdDrag(from = firstHomeApp, to = grid.searchBar())
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        release()
+        assertSettlesTowards(firstHomeApp, grid.homeCell(0, 0))
         assertUnmoved(firstHomeApp)
     }
 
@@ -411,27 +414,41 @@ class LauncherFlowTest {
         // so nothing in between would ever be observed. Hold the clock and step it by hand.
         compose.mainClock.autoAdvance = false
         try {
-            // The overlay may still exist on the first held frame; sample the cell, not it.
-            fun centre() =
+            // The overlay carries the icon while it settles; afterwards the cell shows it.
+            fun icon() =
                 compose
-                    .onNode(
-                        hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG),
-                        useUnmergedTree = true,
-                    )
-                    .fetchSemanticsNode()
-                    .boundsInRoot
-                    .center
-            var distance = (centre() - slotCentre).getDistance()
-            android.util.Log.d("RunwaySettle", "frame 0: ${centre()} distance $distance")
+                    .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .firstOrNull()
+                    ?: compose
+                        .onNode(hasContentDescription(label), useUnmergedTree = true)
+                        .fetchSemanticsNode()
+            compose.mainClock
+                .advanceTimeByFrame() // the first held frame is still the pre-release one
+            var distance = (icon().boundsInRoot.center - slotCentre).getDistance()
+            var width = icon().boundsInRoot.width
+            android.util.Log.d(
+                "RunwaySettle",
+                "frame 1: ${icon().boundsInRoot.center} distance $distance width $width",
+            )
             repeat(SETTLE_FRAMES) { frame ->
                 compose.mainClock.advanceTimeByFrame()
-                val now = (centre() - slotCentre).getDistance()
-                android.util.Log.d("RunwaySettle", "frame ${frame + 1}: ${centre()} distance $now")
+                val bounds = icon().boundsInRoot
+                val now = (bounds.center - slotCentre).getDistance()
+                android.util.Log.d(
+                    "RunwaySettle",
+                    "frame ${frame + 2}: ${bounds.center} distance $now width ${bounds.width}",
+                )
                 assertTrue(
                     "moved away from its slot: $distance -> $now",
                     now <= distance + SETTLE_TOLERANCE_PX,
                 )
+                assertTrue(
+                    "grew while settling: $width -> ${bounds.width}",
+                    bounds.width <= width + SETTLE_TOLERANCE_PX,
+                )
                 distance = now
+                width = bounds.width
             }
         } finally {
             compose.mainClock.autoAdvance = true
@@ -520,7 +537,7 @@ class LauncherFlowTest {
         const val LIFT_ANIMATION_MS = 1_000L
         const val LONG_TIMEOUT_MS = 15_000L
         const val PRESS_SETTLE_MS = 250L
-        const val SETTLE_FRAMES = 12
+        const val SETTLE_FRAMES = 24
         const val SETTLE_TOLERANCE_PX = 2f
     }
 }

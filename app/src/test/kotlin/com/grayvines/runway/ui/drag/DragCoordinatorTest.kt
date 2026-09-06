@@ -159,7 +159,7 @@ class DragCoordinatorTest {
     }
 
     @Test
-    fun `an invalid or missing target drops nothing`() = runTest {
+    fun `an invalid or missing target drops nothing but still settles back`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)
         c.layOut()
@@ -169,6 +169,7 @@ class DragCoordinatorTest {
         runCurrent()
         assertEquals(emptyList<PendingMove>(), workspace.moves)
         assertNull(c.pending.value)
+        assertEquals(Settling(1, Point(100f, 250f)), c.settling.value) // slides home from here
     }
 
     @Test

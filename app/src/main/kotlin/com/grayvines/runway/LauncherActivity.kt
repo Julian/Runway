@@ -7,10 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
@@ -32,6 +35,7 @@ class LauncherActivity : ComponentActivity() {
                 val drag by viewModel.dragging.drag.collectAsStateWithLifecycle()
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
                 val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
+                var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
                 HomeScreen(
                     state = state,
@@ -42,6 +46,8 @@ class LauncherActivity : ComponentActivity() {
                         DragSession(
                             state = drag,
                             settling = settling,
+                            settleTarget = settleTarget,
+                            onSettleTargetPositioned = { settleTarget = it },
                             onSettled = viewModel.dragging::settled,
                             onStart = viewModel::startDrag,
                             onMove = viewModel.dragging::dragTo,

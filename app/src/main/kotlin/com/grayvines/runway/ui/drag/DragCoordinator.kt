@@ -93,16 +93,18 @@ class DragCoordinator(
     fun endDrag() {
         edgeDwell.stop()
         val state = drag.value ?: return
-        val move = controller.drop() ?: return
+        val move = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
-        val pendingMove = move.asPendingMove(state.source.itemId).copy(from = from)
-        _pending.value = pendingMove
+        // Whether the drop lands or is refused, the icon settles from where it was released.
         val settling = Settling(state.source.itemId, from)
         _settling.value = settling
         scope.launch {
             delay(SETTLE_TIMEOUT_MS) // safety net if the item never draws (e.g. off-screen page)
             if (_settling.value == settling) _settling.value = null
         }
+        if (move == null) return
+        val pendingMove = move.asPendingMove(state.source.itemId).copy(from = from)
+        _pending.value = pendingMove
         scope.launch {
             try {
                 if (workspace.move(pendingMove)) workspace.awaitReflected(pendingMove)

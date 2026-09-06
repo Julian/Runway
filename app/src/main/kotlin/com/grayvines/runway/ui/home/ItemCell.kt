@@ -67,6 +67,7 @@ fun ItemCell(
     iconSize: Dp,
     labels: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     drag: DragHandlers? = null,
     lifted: Boolean = false,
 ) {
@@ -87,7 +88,8 @@ fun ItemCell(
     CompositionLocalProvider(LocalViewConfiguration provides liftConfiguration) {
         Column(
             modifier =
-                Modifier.fillMaxSize()
+                modifier
+                    .fillMaxSize()
                     .onGloballyPositioned { coords = it }
                     .clickable(
                         interactionSource = interactions,
