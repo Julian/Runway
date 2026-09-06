@@ -17,6 +17,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
+import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG

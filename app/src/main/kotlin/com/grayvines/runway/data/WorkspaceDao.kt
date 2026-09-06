@@ -44,6 +44,11 @@ interface WorkspaceDao {
     )
     suspend fun deleteItemsOfPackage(packageName: String, profile: Long)
 
+    @Query("SELECT * FROM items WHERE kind = :kind")
+    suspend fun itemsOfKind(kind: ItemKind): List<ItemEntity>
+
+    @Query("DELETE FROM items WHERE id IN (:ids)") suspend fun deleteItems(ids: List<Long>)
+
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()

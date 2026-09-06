@@ -141,6 +141,29 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `retainApps drops placements of apps gone from a reported profile only`() = runTest {
+        val work = AppRef("work/.Main", 10)
+        repo.autoFill(apps(3) + work, columns = 3, pageRows = 1, dockSlots = 1)
+        // App 2 was uninstalled while the launcher was down; the work profile is off entirely.
+        repo.retainApps(setOf(apps(3)[0].let { AppRef(it.component, it.profile) }, apps(3)[2]))
+        val placed =
+            (repo.observe(Container.HOME).first().pages +
+                    repo.observe(Container.DOCK).first().pages)
+                .flatMap { it.items }
+                .map { it.component }
+        assertEquals(setOf("pkg1/.Main", "pkg3/.Main", "work/.Main"), placed.toSet())
+    }
+
+    @Test
+    fun `retainApps prunes a page the removal leaves empty`() = runTest {
+        repo.autoFill(apps(4), columns = 3, pageRows = 1, dockSlots = 1) // dock 1; page 0: 2,3,4
+        repo.addPage(Container.HOME, 1)
+        repo.moveItem(4, Container.HOME, 1, 0, 0, emptyMap())
+        repo.retainApps(apps(3).toSet())
+        assertEquals(listOf(0), repo.observe(Container.HOME).first().pages.map { it.index })
+    }
+
+    @Test
     fun `clear leaves an empty first page in each container`() = runTest {
         repo.autoFill(apps(10), columns = 7, pageRows = 1, dockSlots = 6)
         repo.clear()

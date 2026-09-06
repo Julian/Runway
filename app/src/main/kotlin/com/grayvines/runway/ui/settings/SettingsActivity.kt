@@ -8,6 +8,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grayvines.runway.appGraph
+import com.grayvines.runway.data.autoFill
+import com.grayvines.runway.data.clear
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.theme.SettingsTheme
 import kotlinx.coroutines.flow.first

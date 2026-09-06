@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 /** Application-wide singletons. */
@@ -33,6 +34,12 @@ class AppGraph(private val context: Context) {
     fun start() {
         appScope.launch {
             appRepository.removed.collect { workspace.removePackage(it.component, it.profile) }
+        }
+        // Every fresh app list also reconciles the layout, for uninstalls missed while not running.
+        appScope.launch {
+            appRepository.apps
+                .filter { it.isNotEmpty() }
+                .collect { apps -> workspace.retainApps(apps.mapTo(mutableSetOf()) { it.ref }) }
         }
     }
 }

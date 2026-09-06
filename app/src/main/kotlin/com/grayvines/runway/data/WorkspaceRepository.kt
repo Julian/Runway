@@ -16,7 +16,7 @@ data class ContainerContent(val pages: List<PageContent>)
 data class PageContent(val index: Int, val items: List<ItemEntity>)
 
 class WorkspaceRepository(private val db: RunwayDatabase) {
-    private val dao = db.workspaceDao()
+    internal val dao = db.workspaceDao()
 
     fun observe(container: Container): Flow<ContainerContent> =
         combine(dao.observePages(container), dao.observeItems(container)) { pages, items ->
@@ -62,50 +62,35 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         pruneTrailingEmptyPages(Container.DOCK)
     }
 
+    /**
+     * Drops app placements whose app is not among [installed], within the profiles [installed]
+     * covers. A profile with no app in the list is left alone: it is off (quiet mode), not empty,
+     * and its icons come back with it. Catches uninstalls that happened while the launcher was not
+     * running.
+     */
+    suspend fun retainApps(installed: Set<AppRef>) {
+        val profiles = installed.mapTo(mutableSetOf()) { it.profile }
+        val stale =
+            dao.itemsOfKind(ItemKind.APP).filter { item ->
+                val component = item.component
+                val profile = item.profile
+                component != null &&
+                    profile != null &&
+                    profile in profiles &&
+                    AppRef(component, profile) !in installed
+            }
+        if (stale.isEmpty()) return
+        write { dao.deleteItems(stale.map { it.id }) }
+        pruneTrailingEmptyPages(Container.HOME)
+        pruneTrailingEmptyPages(Container.DOCK)
+    }
+
     /** An app was uninstalled: its icons go, leaving holes. */
     suspend fun removePackage(packageName: String, profile: Long) = write {
         dao.deleteItemsOfPackage(packageName, profile)
     }
 
-    suspend fun clear() = write {
-        dao.deleteAllItems()
-        dao.deleteAllPages()
-        dao.insertPage(PageEntity(Container.HOME, 0))
-        dao.insertPage(PageEntity(Container.DOCK, 0))
-    }
-
-    /** Debug helper: fills the dock, then home pages row by row, with [apps] in order. */
-    suspend fun autoFill(apps: List<AppRef>, columns: Int, pageRows: Int, dockSlots: Int) = write {
-        dao.deleteAllItems()
-        dao.deleteAllPages()
-        dao.insertPage(PageEntity(Container.DOCK, 0))
-        apps.take(dockSlots).forEachIndexed { slot, app ->
-            dao.insertItem(app.placement(Container.DOCK, page = 0, x = slot, y = 0))
-        }
-        val perPage = columns * pageRows
-        apps.drop(dockSlots).chunked(perPage).forEachIndexed { page, pageApps ->
-            dao.insertPage(PageEntity(Container.HOME, page))
-            pageApps.forEachIndexed { i, app ->
-                dao.insertItem(
-                    app.placement(Container.HOME, page, x = i % columns, y = i / columns)
-                )
-            }
-        }
-        dao.insertPage(PageEntity(Container.HOME, 0))
-    }
-
-    private fun AppRef.placement(container: Container, page: Int, x: Int, y: Int) =
-        ItemEntity(
-            kind = ItemKind.APP,
-            container = container,
-            pageIndex = page,
-            x = x,
-            y = y,
-            component = component,
-            profile = profile,
-        )
-
-    private suspend fun <T> write(block: suspend () -> T): T =
+    internal suspend fun <T> write(block: suspend () -> T): T =
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction { block() }
         }
