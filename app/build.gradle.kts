@@ -47,7 +47,15 @@ android {
         checkDependencies = true
     }
 
-    testOptions { unitTests.all { it.useJUnitPlatform() } }
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+            it.testLogging {
+                events("failed")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
+    }
 }
 
 room3 { schemaDirectory("$projectDir/schemas") }
@@ -91,11 +99,39 @@ tasks.register("installAsHome") {
     dependsOn("installDebug", "setDefaultHome", "goHome")
 }
 
+// The connected test task only says "there were failing tests"; name them, with messages.
+val printConnectedTestFailures by tasks.registering {
+    val results = layout.buildDirectory.dir("outputs/androidTest-results/connected")
+    doLast {
+        val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+        results
+            .get()
+            .asFile
+            .walkTopDown()
+            .filter { it.extension == "xml" }
+            .flatMap { file ->
+                val cases = parser.parse(file).getElementsByTagName("testcase")
+                (0 until cases.length).asSequence().map { cases.item(it) as org.w3c.dom.Element }
+            }
+            .filter { it.getElementsByTagName("failure").length > 0 }
+            .forEach { case ->
+                val failure = case.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
+                val message = failure.getAttribute("message").ifEmpty { failure.textContent }
+                logger.error(
+                    "FAILED {}.{}\n    {}",
+                    case.getAttribute("classname"),
+                    case.getAttribute("name"),
+                    message.lineSequence().first(),
+                )
+            }
+    }
+}
+
 // Instrumented tests uninstall the app afterwards; put the debug build back as home.
 tasks
     .matching { it.name == "connectedDebugAndroidTest" }
     .configureEach {
-        finalizedBy("installAsHome")
+        finalizedBy(printConnectedTestFailures, "installAsHome")
     }
 
 dependencies {
