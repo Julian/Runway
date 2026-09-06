@@ -59,10 +59,16 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          api-level: 37.1
-          system-image-api-level: 37.1
-          target: google_apis_ps16k
+          # API 36, not 37: the only API 37 x86 image this runner can name is the 16 KB
+          # page-size one, whose system server dies during installs here. 36 is our minSdk.
+          api-level: 36
+          target: google_apis
           arch: x86_64
           profile: pixel_6
+          disk-size: 8G # the default is too small; installs fail with ENOSPC
+          ram-size: 4096M
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest
+          script: |
+            adb wait-for-device
+            until adb shell cmd package list packages >/dev/null 2>&1; do sleep 2; done
+            ./gradlew :app:connectedDebugAndroidTest || { adb logcat -d -t 400 '*:E'; exit 1; }
