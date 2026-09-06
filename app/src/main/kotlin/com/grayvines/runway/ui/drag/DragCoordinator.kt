@@ -2,11 +2,15 @@ package com.grayvines.runway.ui.drag
 
 import com.grayvines.runway.data.Container
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+/** A just-dropped item and where (root px, cell top-left) its settle animation starts. */
+data class Settling(val itemId: Long, val from: Point)
 
 /** What the coordinator needs from persistence. Implementations report failure, never throw. */
 interface DragWorkspace {
@@ -41,6 +45,14 @@ class DragCoordinator(
 
     /** A committed drop the database has not reflected yet. */
     val pending: StateFlow<PendingMove?> = _pending
+
+    private val _settling = MutableStateFlow<Settling?>(null)
+
+    /**
+     * The dropped item until its settle animation has run. Outlives [pending], which a fast write
+     * can clear before the UI has even drawn a frame.
+     */
+    val settling: StateFlow<Settling?> = _settling
 
     private val _flipPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
@@ -80,10 +92,17 @@ class DragCoordinator(
     /** Commits the planned drop, if any; the override shows it until the database catches up. */
     fun endDrag() {
         edgeDwell.stop()
-        val source = drag.value?.source ?: return
+        val state = drag.value ?: return
         val move = controller.drop() ?: return
-        val pendingMove = move.asPendingMove(source.itemId)
+        val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
+        val pendingMove = move.asPendingMove(state.source.itemId).copy(from = from)
         _pending.value = pendingMove
+        val settling = Settling(state.source.itemId, from)
+        _settling.value = settling
+        scope.launch {
+            delay(SETTLE_TIMEOUT_MS) // safety net if the item never draws (e.g. off-screen page)
+            if (_settling.value == settling) _settling.value = null
+        }
         scope.launch {
             try {
                 if (workspace.move(pendingMove)) workspace.awaitReflected(pendingMove)
@@ -91,6 +110,11 @@ class DragCoordinator(
                 if (_pending.value == pendingMove) _pending.value = null
             }
         }
+    }
+
+    /** The UI finished animating [itemId] into its cell. */
+    fun settled(itemId: Long) {
+        if (_settling.value?.itemId == itemId) _settling.value = null
     }
 
     fun cancelDrag() {
@@ -103,6 +127,10 @@ class DragCoordinator(
             is DropTarget.HomeCell ->
                 PendingMove(itemId, Container.HOME, t.page, t.x, t.y, displaced)
             is DropTarget.DockSlot ->
-                PendingMove(itemId, Container.DOCK, t.page, t.slot, 0, emptyMap())
+                PendingMove(itemId, Container.DOCK, t.page, t.slot, 0, displaced)
         }
+
+    private companion object {
+        const val SETTLE_TIMEOUT_MS = 2_000L
+    }
 }

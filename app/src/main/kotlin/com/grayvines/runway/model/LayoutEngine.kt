@@ -62,6 +62,26 @@ object LayoutEngine {
         return ResizeBounds(maxWidth, maxHeight)
     }
 
+    /**
+     * Reordering within one row: moving the item at slot [from] to slot [to]. An empty target is a
+     * plain move. An occupied target makes room: the run of occupied slots from [to] toward [from]
+     * shifts one slot that way, up to the first gap (the vacated [from] counts as one). Returns the
+     * new footprints of the shifted items; [items] must not include the moving item.
+     */
+    fun shiftFor(items: List<Placed>, from: Int, to: Int): Map<Long, Footprint> {
+        if (from == to) return emptyMap()
+        val bySlot = items.associateBy { it.footprint.x }
+        val towardFrom = if (from < to) -1 else 1
+        val moves = mutableMapOf<Long, Footprint>()
+        var slot = to
+        while (slot != from) {
+            val occupant = bySlot[slot] ?: break // a gap: nothing beyond it needs to move
+            moves[occupant.id] = occupant.footprint.copy(x = slot + towardFrom)
+            slot += towardFrom
+        }
+        return moves
+    }
+
     /** Page count after dropping trailing empty pages, never below [minPages]. */
     fun pageCountAfterPrune(pageCount: Int, nonEmptyPages: Set<Int>, minPages: Int = 1): Int {
         val lastUsed = nonEmptyPages.maxOrNull() ?: -1

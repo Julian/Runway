@@ -121,16 +121,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.workspace.observe(Container.HOME),
                 graph.workspace.observe(Container.DOCK),
                 graph.appRepository.apps,
-                dragging.pending,
-            ) { settings, home, dock, apps, pendingMove ->
+            ) { settings, home, dock, apps ->
                 val byKey = apps.associateBy { it.key }
-                val plain = home.toPages(byKey) to dock.toPages(byKey)
-                val (homePages, dockPages) =
-                    pendingMove?.applyTo(plain.first, plain.second) ?: plain
                 HomeState(
                     settings = settings,
-                    homePages = homePages,
-                    dockPages = dockPages,
+                    homePages = home.toPages(byKey),
+                    dockPages = dock.toPages(byKey),
                     searchTarget = graph.searchTargets.resolve(settings.searchTarget),
                     loaded = true,
                 )

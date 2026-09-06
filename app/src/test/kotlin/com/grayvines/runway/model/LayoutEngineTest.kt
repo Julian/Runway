@@ -127,6 +127,43 @@ class LayoutEngineTest {
     }
 
     @Nested
+    inner class ShiftFor {
+        private val row = listOf(at(1, 0, 0), at(2, 1, 0), at(3, 2, 0), at(4, 3, 0))
+
+        @Test
+        fun `moving right shifts the slots in between left`() {
+            val moves = LayoutEngine.shiftFor(row.filter { it.id != 1L }, from = 0, to = 2)
+            assertEquals(mapOf(2L to Footprint(0, 0), 3L to Footprint(1, 0)), moves)
+        }
+
+        @Test
+        fun `moving left shifts the slots in between right`() {
+            val moves = LayoutEngine.shiftFor(row.filter { it.id != 4L }, from = 3, to = 1)
+            assertEquals(mapOf(2L to Footprint(2, 0), 3L to Footprint(3, 0)), moves)
+        }
+
+        @Test
+        fun `an empty target is a plain move, nothing shifts`() {
+            // Seven slots, the last empty: slot 5 to slot 7 must not disturb slot 6.
+            val dock = (0..5).map { at(it + 1L, it, 0) }
+            assertEquals(
+                emptyMap<Long, Footprint>(),
+                LayoutEngine.shiftFor(dock.filter { it.id != 5L }, from = 4, to = 6),
+            )
+            assertEquals(emptyMap<Long, Footprint>(), LayoutEngine.shiftFor(row, from = 1, to = 1))
+        }
+
+        @Test
+        fun `an occupied target shifts only up to the nearest gap`() {
+            val gapped = listOf(at(1, 0, 0), at(2, 1, 0), at(4, 3, 0)) // slot 2 empty
+            assertEquals(
+                mapOf(4L to Footprint(2, 0)),
+                LayoutEngine.shiftFor(gapped.filter { it.id != 1L }, from = 0, to = 3),
+            )
+        }
+    }
+
+    @Nested
     inner class PageCountAfterPrune {
         @Test
         fun `drops trailing empty pages only`() {

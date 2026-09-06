@@ -7,12 +7,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
+import com.grayvines.runway.ui.home.applying
 import com.grayvines.runway.ui.theme.RunwayTheme
 
 /** The HOME activity. Holds no state of its own. */
@@ -26,8 +28,11 @@ class LauncherActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             RunwayTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
+                val base by viewModel.state.collectAsStateWithLifecycle()
                 val drag by viewModel.dragging.drag.collectAsStateWithLifecycle()
+                val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
+                val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
+                val state = remember(base, pending) { base.applying(pending) }
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
@@ -36,6 +41,8 @@ class LauncherActivity : ComponentActivity() {
                     drag =
                         DragSession(
                             state = drag,
+                            settling = settling,
+                            onSettled = viewModel.dragging::settled,
                             onStart = viewModel::startDrag,
                             onMove = viewModel.dragging::dragTo,
                             onEnd = viewModel.dragging::endDrag,

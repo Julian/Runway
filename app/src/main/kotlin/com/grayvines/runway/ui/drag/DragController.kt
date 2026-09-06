@@ -101,18 +101,24 @@ class DragController(private val lookup: WorkspaceLookup) {
         return DropPlan.Move(target, displaced)
     }
 
-    /** The dock never displaces; an occupied slot is refused (folders come later). */
+    /**
+     * Within a dock page a move reorders (slots between shift toward the vacated one). Arrivals
+     * from elsewhere never displace: an occupied slot is refused (folders come later).
+     */
     private fun planDock(source: DragSource, target: DropTarget.DockSlot): DropPlan {
         if (source.kind == ItemKind.WIDGET) return DropPlan.Invalid
         if (target.slot !in 0 until lookup.dockSlots) return DropPlan.Invalid
         if (source.isAt(Container.DOCK, target.page, Footprint(target.slot, 0))) {
             return DropPlan.Invalid
         }
-        val occupied =
-            lookup.dockItems(target.page).any {
-                it.id != source.itemId && it.footprint.x == target.slot
-            }
-        return if (occupied) DropPlan.Invalid else DropPlan.Move(target, emptyMap())
+        val others = lookup.dockItems(target.page).filter { it.id != source.itemId }
+        val reordering = source.container == Container.DOCK && source.page == target.page
+        return when {
+            reordering ->
+                DropPlan.Move(target, LayoutEngine.shiftFor(others, source.x, target.slot))
+            others.any { it.footprint.x == target.slot } -> DropPlan.Invalid
+            else -> DropPlan.Move(target, emptyMap())
+        }
     }
 
     private fun DragSource.isAt(container: Container, page: Int, footprint: Footprint) =

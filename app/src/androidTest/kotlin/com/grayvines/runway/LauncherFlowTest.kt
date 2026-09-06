@@ -5,6 +5,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -144,13 +146,11 @@ class LauncherFlowTest {
     fun aDroppedIconIsDrawnAtItsTargetBeforeTheDatabaseCatchesUp() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
-        drag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        // No waiting on the database: what is on screen right after the finger lifts.
-        compose.waitForIdle()
-        assertEquals(
-            grid.cellAt(icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center),
-            1 to 0,
-        )
+        // Released off-centre; the cell must start there and only ever approach its slot.
+        holdDrag(from = firstHomeApp, to = grid.homeCell(1, 0) + Offset(grid.cellWidth() / 3, 0f))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        release()
+        assertSettlesTowards(firstHomeApp, grid.homeCell(1, 0))
         assertEquals(grid.cellAt(icon(neighbour).fetchSemanticsNode().boundsInRoot.center), 0 to 0)
     }
 
@@ -262,6 +262,59 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun draggingADockIconOntoAnotherDockSlotReordersTheDock() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
+        drag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots - 1 }
+        assertEquals(settings.dockSlots - 2, placementOf(lastDockApp)?.x) // shifted one left
+        assertEquals(Container.DOCK, placementOf(firstDockApp)?.container)
+    }
+
+    @Test
+    fun dockNeighboursSlideOverWhileTheDragIsStillInProgress() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
+        holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+        assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
+        release()
+    }
+
+    @Test
+    fun aReorderedDockIsDrawnSettledOneFrameAfterRelease() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
+        holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        release()
+        compose.mainClock.advanceTimeByFrame()
+        val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+        assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
+        assertSettlesTowards(firstDockApp, grid.dockSlot(settings.dockSlots - 1))
+        // And it stays there while the database catches up.
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots - 1 }
+        assertEquals(
+            settings.dockSlots - 2,
+            grid.dockSlotAt(icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center),
+        )
+    }
+
+    @Test
+    fun anAdjacentDockReorderSettlesWithoutRevisitingItsOldSlot() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val neighbour = labelAtDockSlot(1)
+        // Released off-centre, as a finger does: the settle has real distance to cover.
+        holdDrag(from = firstDockApp, to = grid.dockSlot(1) + Offset(grid.dockSlotWidth() / 3, 0f))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        release()
+        assertSettlesTowards(firstDockApp, grid.dockSlot(1))
+        assertEquals(0, grid.dockSlotAt(icon(neighbour).fetchSemanticsNode().boundsInRoot.center))
+    }
+
+    @Test
     fun droppingOutsideAnyAreaSnapsBack() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstHomeApp, to = grid.searchBar())
@@ -301,6 +354,13 @@ class LauncherFlowTest {
                 page.right - page.width * 0.02f,
                 page.top + (row + 0.5f) * page.height / pageRows,
             )
+
+        fun dockSlotWidth() = dock.width / dockSlots
+
+        fun cellWidth() = page.width / columns
+
+        /** The dock slot a root-pixel point falls in. */
+        fun dockSlotAt(p: Offset) = ((p.x - dock.left) / (dock.width / dockSlots)).toInt()
 
         /** The home cell a root-pixel point falls in. */
         fun cellAt(p: Offset) =
@@ -342,6 +402,42 @@ class LauncherFlowTest {
         compose.onRoot().performTouchInput { up() }
     }
 
+    /**
+     * Frame by frame after a release, the dropped icon only ever gets closer to [slotCentre]: no
+     * jumping back to where it came from, no shaking. Positions are logged for diagnosis.
+     */
+    private fun assertSettlesTowards(label: String, slotCentre: Offset) {
+        // With the clock auto-advancing, fetching a node runs every animation to completion first,
+        // so nothing in between would ever be observed. Hold the clock and step it by hand.
+        compose.mainClock.autoAdvance = false
+        try {
+            // The overlay may still exist on the first held frame; sample the cell, not it.
+            fun centre() =
+                compose
+                    .onNode(
+                        hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG),
+                        useUnmergedTree = true,
+                    )
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+                    .center
+            var distance = (centre() - slotCentre).getDistance()
+            android.util.Log.d("RunwaySettle", "frame 0: ${centre()} distance $distance")
+            repeat(SETTLE_FRAMES) { frame ->
+                compose.mainClock.advanceTimeByFrame()
+                val now = (centre() - slotCentre).getDistance()
+                android.util.Log.d("RunwaySettle", "frame ${frame + 1}: ${centre()} distance $now")
+                assertTrue(
+                    "moved away from its slot: $distance -> $now",
+                    now <= distance + SETTLE_TOLERANCE_PX,
+                )
+                distance = now
+            }
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+    }
+
     private fun assertUnmoved(label: String) {
         compose.waitForIdle()
         assertEquals(0 to 0, homeCellOf(label))
@@ -371,6 +467,17 @@ class LauncherFlowTest {
                 .first { it.index == page }
                 .items
                 .first()
+        graph.appRepository.apps
+            .first { it.isNotEmpty() }
+            .first { it.ref.component == item.component }
+            .label
+    }
+
+    private fun labelAtDockSlot(slot: Int): String = runBlocking {
+        val item =
+            graph.workspace.observe(Container.DOCK).first().pages.first().items.first {
+                it.x == slot
+            }
         graph.appRepository.apps
             .first { it.isNotEmpty() }
             .first { it.ref.component == item.component }
@@ -413,5 +520,7 @@ class LauncherFlowTest {
         const val LIFT_ANIMATION_MS = 1_000L
         const val LONG_TIMEOUT_MS = 15_000L
         const val PRESS_SETTLE_MS = 250L
+        const val SETTLE_FRAMES = 12
+        const val SETTLE_TOLERANCE_PX = 2f
     }
 }

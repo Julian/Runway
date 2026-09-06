@@ -65,6 +65,7 @@ fun HomeScreen(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
+        val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
         Column(Modifier.fillMaxSize().pulledBackWhile(drag.state != null).padding(insets)) {
             if (settings.searchBarAtTop) {
@@ -90,7 +91,7 @@ fun HomeScreen(
                 pages = state.dockPages,
                 pagerState = dockPager,
                 slots = settings.dockSlots,
-                rowHeight = cell.height,
+                slot = dockSlot,
                 iconSize = iconSize,
                 labels = settings.dockLabels,
                 onLaunch = onLaunch,

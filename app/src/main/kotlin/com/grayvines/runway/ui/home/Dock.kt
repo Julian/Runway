@@ -1,8 +1,5 @@
 package com.grayvines.runway.ui.home
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
@@ -13,6 +10,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.drag.Bounds
 
@@ -24,7 +22,7 @@ fun Dock(
     pages: List<HomePage>,
     pagerState: PagerState,
     slots: Int,
-    rowHeight: Dp,
+    slot: DpSize,
     iconSize: Dp,
     labels: Boolean,
     onLaunch: (HomeItem) -> Unit,
@@ -33,28 +31,20 @@ fun Dock(
 ) {
     HorizontalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxWidth().height(rowHeight).testTag(DOCK_TAG),
+        modifier = Modifier.fillMaxWidth().height(slot.height).testTag(DOCK_TAG),
     ) { page ->
-        val bySlot = pages[page].items.associateBy { it.x }
-        Row(
-            Modifier.fillMaxSize().onGloballyPositioned { coords ->
-                onPagePositioned(page, coords.boundsInRoot().toBounds())
-            }
-        ) {
-            repeat(slots) { slot ->
-                Box(Modifier.weight(1f).fillMaxSize()) {
-                    bySlot[slot]?.let { item ->
-                        ItemCell(
-                            item,
-                            iconSize = iconSize,
-                            labels = labels,
-                            onClick = { onLaunch(item) },
-                            drag = drag?.handlersFor(item, page, Container.DOCK),
-                            lifted = item.id == drag?.draggedId,
-                        )
-                    }
-                }
-            }
-        }
+        GridPage(
+            items = pages[page].items.filter { it.x < slots },
+            cell = slot,
+            iconSize = iconSize,
+            labels = labels,
+            onLaunch = onLaunch,
+            drag = drag,
+            handlersFor = { item -> drag?.handlersFor(item, page, Container.DOCK) },
+            modifier =
+                Modifier.onGloballyPositioned { coords ->
+                    onPagePositioned(page, coords.boundsInRoot().toBounds())
+                },
+        )
     }
 }

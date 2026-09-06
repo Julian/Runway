@@ -67,6 +67,24 @@ class DragControllerTest {
     }
 
     @Test
+    fun `a dock item dropped on another dock slot reorders the row`() {
+        dock[0] = listOf(Placed(9, Footprint(0, 0)), Placed(8, Footprint(1, 0)))
+        lift(9, Container.DOCK)
+        controller.move(origin, DropTarget.DockSlot(0, 1))
+        assertEquals(
+            DropPlan.Move(DropTarget.DockSlot(0, 1), mapOf(8L to Footprint(0, 0))),
+            controller.state.value?.plan,
+        )
+    }
+
+    @Test
+    fun `an arrival on an occupied dock slot is still refused`() {
+        lift(1) // from home
+        controller.move(origin, DropTarget.DockSlot(0, 0))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+    }
+
+    @Test
     fun `widgets never go in the dock`() {
         controller.start(DragSource(5, ItemKind.WIDGET, Container.HOME, 0, 2, 1), origin, origin)
         controller.move(origin, DropTarget.DockSlot(0, 1))

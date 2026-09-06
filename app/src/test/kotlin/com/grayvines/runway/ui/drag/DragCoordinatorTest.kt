@@ -72,13 +72,78 @@ class DragCoordinatorTest {
         c.dragTo(Point(250f, 150f)) // cell (2,1), free
         c.endDrag()
         runCurrent()
-        val expected = PendingMove(1, Container.HOME, 0, 2, 1, emptyMap())
+        // Released with the pointer at (250,150) and the grab at (50,50): the cell's corner was
+        // (200,100).
+        val expected = PendingMove(1, Container.HOME, 0, 2, 1, emptyMap(), from = Point(200f, 100f))
         assertEquals(listOf(expected), workspace.moves)
         assertEquals(expected, c.pending.value)
         assertNull(c.drag.value)
         workspace.reflected.complete(Unit)
         runCurrent()
         assertNull(c.pending.value)
+    }
+
+    @Test
+    fun `a dock reorder writes the shifted neighbours too`() = runTest {
+        val dockLookup =
+            object : WorkspaceLookup by lookup {
+                override val dockSlots = 3
+
+                override fun dockItems(page: Int) =
+                    listOf(
+                        Placed(7, Footprint(0, 0)),
+                        Placed(8, Footprint(1, 0)),
+                        Placed(9, Footprint(2, 0)),
+                    )
+            }
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, dockLookup, workspace)
+        c.layOut()
+        c.areas.dockPagePositioned(0, Bounds(0f, 200f, 300f, 250f), 3)
+        c.startDrag(DragSource(7, ItemKind.APP, Container.DOCK, 0, 0, 0), Point(50f, 225f), grab)
+        c.dragTo(Point(250f, 225f)) // slot 2
+        c.endDrag()
+        runCurrent()
+        val expected =
+            PendingMove(
+                7,
+                Container.DOCK,
+                0,
+                2,
+                0,
+                mapOf(8L to Footprint(0, 0), 9L to Footprint(1, 0)),
+                from = Point(200f, 175f),
+            )
+        assertEquals(listOf(expected), workspace.moves)
+    }
+
+    @Test
+    fun `the settle signal outlives a fast write and ends when the UI says so`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.endDrag()
+        workspace.reflected.complete(Unit) // the database is faster than a frame
+        runCurrent()
+        assertNull(c.pending.value)
+        assertEquals(Settling(1, Point(200f, 100f)), c.settling.value)
+        c.settled(99) // some other item: ignored
+        assertEquals(Settling(1, Point(200f, 100f)), c.settling.value)
+        c.settled(1)
+        assertNull(c.settling.value)
+    }
+
+    @Test
+    fun `an undrawn settle is dropped after a timeout`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.endDrag()
+        advanceTimeBy(2_001)
+        assertNull(c.settling.value)
     }
 
     @Test

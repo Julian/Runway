@@ -4,6 +4,16 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.drag.PendingMove
 
 /**
+ * This state with [move] applied. Done in composition, on the same frame the drag state clears, so
+ * the dropped icon and its displaced neighbours never revert between the two.
+ */
+fun HomeState.applying(move: PendingMove?): HomeState {
+    if (move == null) return this
+    val (home, dock) = move.applyTo(homePages, dockPages)
+    return copy(homePages = home, dockPages = dock)
+}
+
+/**
  * Home and dock pages with [move] applied. Idempotent: applying to already-moved data is a no-op.
  */
 fun PendingMove.applyTo(

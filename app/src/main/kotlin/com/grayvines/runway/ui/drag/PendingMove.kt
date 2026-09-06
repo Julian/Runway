@@ -14,4 +14,6 @@ data class PendingMove(
     val x: Int,
     val y: Int,
     val displaced: Map<Long, Footprint>,
+    /** Root-pixel top-left of the lifted cell at release; the settle animation starts there. */
+    val from: Point? = null,
 )
