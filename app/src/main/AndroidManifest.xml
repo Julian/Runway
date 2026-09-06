@@ -22,7 +22,8 @@
     <application
         android:name=".RunwayApp"
         android:label="Runway"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true"
@@ -51,7 +52,6 @@
             android:name=".ui.settings.SettingsActivity"
             android:exported="true"
             android:taskAffinity="${applicationId}.settings"
-            android:label="Runway settings"
             android:theme="@style/Theme.Runway.Settings">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
