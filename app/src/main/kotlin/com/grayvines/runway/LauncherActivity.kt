@@ -61,6 +61,9 @@ class LauncherActivity : ComponentActivity() {
                             state.settings.dockSlots,
                         )
                     },
+                    onDockPageShown = { page ->
+                        viewModel.dragging.areas.dockPageShown(page, state.settings.dockSlots)
+                    },
                 )
             }
         }

@@ -38,9 +38,7 @@ fun Dock(
         val bySlot = pages[page].items.associateBy { it.x }
         Row(
             Modifier.fillMaxSize().onGloballyPositioned { coords ->
-                if (page == pagerState.currentPage) {
-                    onPagePositioned(page, coords.boundsInRoot().toBounds())
-                }
+                onPagePositioned(page, coords.boundsInRoot().toBounds())
             }
         ) {
             repeat(slots) { slot ->

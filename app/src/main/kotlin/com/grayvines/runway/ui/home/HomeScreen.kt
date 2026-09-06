@@ -51,6 +51,7 @@ fun HomeScreen(
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onHomePageShown: (page: Int) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
+    onDockPageShown: (page: Int) -> Unit,
 ) {
     if (!state.loaded) return
     val settings = state.settings
@@ -58,6 +59,7 @@ fun HomeScreen(
     val dockPager = rememberPagerState { state.dockPages.size }
     PagerCommands(homePager, goHome, flipPage)
     LaunchedEffect(homePager) { snapshotFlow { homePager.currentPage }.collect(onHomePageShown) }
+    LaunchedEffect(dockPager) { snapshotFlow { dockPager.currentPage }.collect(onDockPageShown) }
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     BoxWithConstraints(Modifier.fillMaxSize()) {

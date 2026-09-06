@@ -28,6 +28,20 @@ class DropAreaTrackerTest {
     }
 
     @Test
+    fun `the dock tracks its own pages the same way`() {
+        val dock0 = Bounds(0f, 100f, 100f, 120f)
+        val dock1 = Bounds(100f, 100f, 200f, 120f)
+        tracker.dockPagePositioned(0, dock0, 3)
+        tracker.dockPagePositioned(1, dock1, 3)
+        assertEquals(dock0, tracker.areas.dock)
+        tracker.dockPageShown(1, 3)
+        assertEquals(dock1, tracker.areas.dock)
+        assertEquals(1, tracker.areas.dockPage)
+        tracker.homePageShown(1, 4, 3) // the pagers are independent
+        assertEquals(dock1, tracker.areas.dock)
+    }
+
+    @Test
     fun `changes are reported once each and only when something changed`() {
         tracker.homePagePositioned(0, page0, 4, 3)
         tracker.homePagePositioned(0, page0, 4, 3)
