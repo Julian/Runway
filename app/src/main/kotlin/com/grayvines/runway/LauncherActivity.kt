@@ -39,6 +39,7 @@ class LauncherActivity : ComponentActivity() {
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
                 val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
+                val itemMenu by viewModel.itemMenu.collectAsStateWithLifecycle()
                 var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
                 val reports = AreaReports(viewModel.dragging.areas) { state.settings }
@@ -48,6 +49,9 @@ class LauncherActivity : ComponentActivity() {
                     flipHomePage = viewModel.dragging.flipHomePage,
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
+                    itemMenu = itemMenu,
+                    itemMenuActions = viewModel.itemMenuActions,
+                    onDismissItemMenu = viewModel::dismissItemMenu,
                     drawerOpen = drawerOpen,
                     onOpenDrawer = viewModel::openDrawer,
                     onCloseDrawer = viewModel::closeDrawer,
@@ -59,6 +63,7 @@ class LauncherActivity : ComponentActivity() {
                             settleTarget = settleTarget,
                             onSettleTargetPositioned = { settleTarget = it },
                             onSettled = viewModel.dragging::settled,
+                            onHold = viewModel::holdItem,
                             onStart = viewModel::startDrag,
                             onMove = viewModel.dragging::dragTo,
                             onEnd = viewModel.dragging::endDrag,

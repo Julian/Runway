@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 
 private const val ICON_BITMAP_SIZE = 256
@@ -50,9 +52,12 @@ private const val ICON_BITMAP_SIZE = 256
 private const val LIFT_HOLD_MS = 550L
 
 /**
- * Drag callbacks; positions are root pixels. [onStart] also gets the grab point within the cell.
+ * Long-press callbacks; positions are root pixels. [onHold] fires when the finger has rested long
+ * enough, with the cell's bounds; [onStart] when it then moves, with the grab point within the
+ * cell.
  */
 class DragHandlers(
+    val onHold: (cell: Bounds) -> Unit,
     val onStart: (pointer: Point, grab: Point) -> Unit,
     val onMove: (pointer: Point) -> Unit,
     val onEnd: () -> Unit,
@@ -143,7 +148,10 @@ private fun Placeholder(kind: ItemKind) {
     Text(kind.name, color = Color.White, style = MaterialTheme.typography.labelSmall)
 }
 
-/** Long-press starts a drag; positions are converted to root pixels for the handlers. */
+/**
+ * A long press holds (the menu appears); moving past touch slop after that starts a drag from where
+ * the finger first rested. Positions are converted to root pixels for the handlers.
+ */
 private fun Modifier.dragAfterLongPress(
     key: Any,
     coords: () -> LayoutCoordinates?,
@@ -153,19 +161,47 @@ private fun Modifier.dragAfterLongPress(
         this
     } else {
         pointerInput(key) {
+            val hold = HoldThenDrag(viewConfiguration.touchSlop, coords, handlers)
             detectDragGesturesAfterLongPress(
-                onDragStart = { local ->
-                    val root = coords()?.localToRoot(local) ?: local
-                    handlers()?.onStart(root.toPoint(), local.toPoint())
-                },
-                onDrag = { change, _ ->
-                    val root = coords()?.localToRoot(change.position) ?: change.position
-                    handlers()?.onMove(root.toPoint())
-                },
-                onDragEnd = { handlers()?.onEnd() },
-                onDragCancel = { handlers()?.onCancel() },
+                onDragStart = hold::held,
+                onDrag = { change, _ -> hold.moved(change.position) },
+                onDragEnd = hold::ended,
+                onDragCancel = hold::cancelled,
             )
         }
     }
+
+/** One long press: held, then possibly dragged once the finger has moved past [slop]. */
+private class HoldThenDrag(
+    private val slop: Float,
+    private val coords: () -> LayoutCoordinates?,
+    private val handlers: () -> DragHandlers?,
+) {
+    private var grab = Offset.Zero
+    private var dragging = false
+
+    fun held(local: Offset) {
+        grab = local
+        dragging = false
+        coords()?.let { handlers()?.onHold(it.boundsInRoot().toBounds()) }
+    }
+
+    fun moved(local: Offset) {
+        val root = coords()?.localToRoot(local) ?: local
+        if (!dragging && (local - grab).getDistance() > slop) {
+            dragging = true
+            handlers()?.onStart(root.toPoint(), grab.toPoint())
+        }
+        if (dragging) handlers()?.onMove(root.toPoint())
+    }
+
+    fun ended() {
+        if (dragging) handlers()?.onEnd()
+    }
+
+    fun cancelled() {
+        if (dragging) handlers()?.onCancel()
+    }
+}
 
 private fun Offset.toPoint() = Point(x, y)

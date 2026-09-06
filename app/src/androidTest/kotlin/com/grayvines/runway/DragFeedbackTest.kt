@@ -80,8 +80,10 @@ class DragFeedbackTest : LauncherFixture() {
         compose.mainClock.autoAdvance = false
         try {
             compose.onRoot().performTouchInput { down(start) }
-            // Run the hold, then watch frame by frame from the moment the icon lifts.
-            compose.mainClock.advanceTimeBy(LIFT_HOLD_MS - FRAME_MS)
+            // Run the hold (the menu appears), then a nudge starts the drag; watch frame by frame
+            // from the moment the icon lifts.
+            compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+            compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
             val icons = mutableListOf<Float>()
             val areas = mutableListOf<Float>()
             repeat(LIFT_FRAMES) {

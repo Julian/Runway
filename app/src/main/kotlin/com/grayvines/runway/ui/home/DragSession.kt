@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.DropPlan
 import com.grayvines.runway.ui.drag.Point
@@ -15,6 +16,7 @@ class DragSession(
     val settleTarget: Point? = null,
     val onSettleTargetPositioned: (Point) -> Unit = {},
     val onSettled: (itemId: Long) -> Unit = {},
+    private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
     private val onEnd: () -> Unit,
@@ -28,6 +30,7 @@ class DragSession(
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         DragHandlers(
+            onHold = { cell -> onHold(item, container, page, cell) },
             onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
             onMove = onMove,
             onEnd = onEnd,

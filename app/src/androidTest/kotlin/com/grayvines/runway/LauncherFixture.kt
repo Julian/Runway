@@ -304,6 +304,9 @@ const val FLIP_SAMPLE_MS = 30L
 const val FLIP_WATCH_MS = 2_500L
 const val MIN_REST_MS = 100L // the dwell is 450 ms and the scroll 250 ms
 const val LIFT_HOLD_MS = 550L
+
+/** Past touch slop: enough movement after a hold to turn it into a drag. */
+const val LIFT_NUDGE_PX = 60f
 const val FRAME_MS = 16L
 const val LIFT_FRAMES = 60
 const val DRAG_STEPS = 10

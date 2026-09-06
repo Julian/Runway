@@ -57,6 +57,7 @@ compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
+compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

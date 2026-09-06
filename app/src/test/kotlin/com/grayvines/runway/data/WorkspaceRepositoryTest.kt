@@ -128,6 +128,19 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `removeItem drops that placement only, and a page it leaves empty`() = runTest {
+        repo.autoFill(apps(4), columns = 3, pageRows = 1, dockSlots = 1)
+        // Dock: app 1. Home page 0: apps 2, 3, 4 fill the row... move 4 to a page of its own.
+        repo.addPage(Container.HOME, 1)
+        repo.moveItem(4, Container.HOME, 1, 0, 0, emptyMap())
+        repo.removeItem(4)
+        val home = repo.observe(Container.HOME).first()
+        assertEquals(listOf(0), home.pages.map { it.index })
+        assertEquals(listOf(2L, 3L), home.pages.single().items.map { it.id })
+        assertEquals(1, repo.observe(Container.DOCK).first().pages.single().items.size)
+    }
+
+    @Test
     fun `clear leaves an empty first page in each container`() = runTest {
         repo.autoFill(apps(10), columns = 7, pageRows = 1, dockSlots = 6)
         repo.clear()

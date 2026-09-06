@@ -55,6 +55,13 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         dao.place(id, container, page, x, y)
     }
 
+    /** Takes one placement off its page; a page left empty at the end goes with it. */
+    suspend fun removeItem(id: Long) {
+        write { dao.deleteItem(id) }
+        pruneTrailingEmptyPages(Container.HOME)
+        pruneTrailingEmptyPages(Container.DOCK)
+    }
+
     /** An app was uninstalled: its icons go, leaving holes. */
     suspend fun removePackage(packageName: String, profile: Long) = write {
         dao.deleteItemsOfPackage(packageName, profile)

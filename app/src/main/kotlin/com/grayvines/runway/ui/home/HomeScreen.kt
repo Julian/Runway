@@ -38,6 +38,9 @@ import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerMotion
+import com.grayvines.runway.ui.menu.ItemMenu
+import com.grayvines.runway.ui.menu.ItemMenuActions
+import com.grayvines.runway.ui.menu.ItemMenuState
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -61,6 +64,9 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
     drag: DragSession,
+    itemMenu: ItemMenuState?,
+    itemMenuActions: ItemMenuActions,
+    onDismissItemMenu: () -> Unit,
     drawerOpen: Boolean,
     onOpenDrawer: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -113,6 +119,9 @@ fun HomeScreen(
             iconSize = iconSize,
             lift = lift,
         )
+        if (itemMenu != null) {
+            ItemMenu(itemMenu, itemMenuActions, onDismiss = onDismissItemMenu)
+        }
         AppDrawer(
             revealed = drawer.revealed.value,
             open = drawerOpen,

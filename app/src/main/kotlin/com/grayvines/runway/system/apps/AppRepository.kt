@@ -2,6 +2,7 @@ package com.grayvines.runway.system.apps
 
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.os.Handler
@@ -9,6 +10,7 @@ import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
+import androidx.core.net.toUri
 import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.launch
 
 /** Launchable activities across all profiles, kept current via [LauncherApps.Callback]. */
 class AppRepository(context: Context, private val scope: CoroutineScope) {
+    private val context = context.applicationContext
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
 
@@ -78,6 +81,26 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
             failedLaunch(entry, e)
         } catch (e: SecurityException) {
             failedLaunch(entry, e)
+        }
+    }
+
+    /** The system's settings page for the app. */
+    fun showAppInfo(entry: AppEntry) {
+        launcherApps.startAppDetailsActivity(entry.component, entry.user, null, null)
+    }
+
+    /**
+     * The system's uninstall confirmation; the layout updates through [removed] if it goes ahead.
+     */
+    fun uninstall(entry: AppEntry) {
+        val intent =
+            Intent(Intent.ACTION_DELETE, "package:${entry.component.packageName}".toUri())
+                .putExtra(Intent.EXTRA_USER, entry.user)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no uninstaller for ${entry.component}", e)
         }
     }
 
