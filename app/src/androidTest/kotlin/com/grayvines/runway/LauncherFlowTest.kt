@@ -1,12 +1,14 @@
 package com.grayvines.runway
 
 import android.content.Intent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -16,7 +18,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
@@ -121,6 +126,142 @@ class LauncherFlowTest {
         assertTrue(grid.width > 0)
     }
 
+    @Test
+    fun longPressDragMovesAnIconToAnEmptyCellAndBack() {
+        // 5×5 page cells hold 25; the seed puts far fewer on page 1, so the last cell is free.
+        val grid = useGrid(columns = 5, rows = 7)
+        drag(from = firstHomeApp, to = grid.homeCell(4, 4))
+        compose.waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 4 to 4 }
+        assertStillOnLauncher()
+
+        // And back: the handler must see the item's new position, not its original one.
+        drag(from = firstHomeApp, to = grid.homeCell(0, 0))
+        compose.waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 0 to 0 }
+    }
+
+    @Test
+    fun droppingOnAnOccupiedCellDisplacesItsOccupant() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val neighbour = labelAtHomeCell(1, 0)
+        drag(from = firstHomeApp, to = grid.homeCell(1, 0))
+        compose.waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 1 to 0 }
+        assertEquals(0 to 0, homeCellOf(neighbour)) // into the cell the mover vacated
+    }
+
+    @Test
+    fun droppingIntoAnEmptyDockSlotMovesToTheDock() {
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        drag(from = firstHomeApp, to = grid.dockSlot(settings.dockSlots))
+        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.container == Container.DOCK }
+        assertEquals(settings.dockSlots, placementOf(firstHomeApp)?.x)
+    }
+
+    @Test
+    fun droppingOnAnOccupiedDockSlotSnapsBack() {
+        val grid = useGrid(columns = 5, rows = 7)
+        drag(from = firstHomeApp, to = grid.dockSlot(0))
+        assertUnmoved(firstHomeApp)
+        assertEquals(0, placementOf(firstDockApp)?.x)
+    }
+
+    @Test
+    fun droppingOutsideAnyAreaSnapsBack() {
+        val grid = useGrid(columns = 5, rows = 7)
+        drag(from = firstHomeApp, to = grid.searchBar())
+        assertUnmoved(firstHomeApp)
+    }
+
+    @Test
+    fun dockIconsCanBeDraggedOntoAHomePage() {
+        val grid = useGrid(columns = 5, rows = 7)
+        drag(from = firstDockApp, to = grid.homeCell(4, 4))
+        compose.waitUntil(TIMEOUT_MS) {
+            placementOf(firstDockApp)?.let { it.container == Container.HOME && it.x == 4 } ?: false
+        }
+    }
+
+    // ---- drag helpers ----
+
+    /** Screen geometry after switching to a grid, in root pixels. */
+    private inner class Grid(val columns: Int, val pageRows: Int, val dockSlots: Int) {
+        private val page = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        private val dock = compose.onNodeWithTag(DOCK_TAG).fetchSemanticsNode().boundsInRoot
+
+        fun homeCell(x: Int, y: Int) =
+            Offset(
+                page.left + (x + 0.5f) * page.width / columns,
+                page.top + (y + 0.5f) * page.height / pageRows,
+            )
+
+        fun dockSlot(slot: Int) =
+            Offset(dock.left + (slot + 0.5f) * dock.width / dockSlots, dock.center.y)
+
+        fun searchBar() = Offset(page.center.x, page.top / 2)
+    }
+
+    private fun useGrid(columns: Int, rows: Int, dockSlots: Int = settings.dockSlots): Grid {
+        val before = icon(firstHomeApp).fetchSemanticsNode().size
+        runBlocking {
+            graph.settings.update { it.copy(columns = columns, rows = rows, dockSlots = dockSlots) }
+        }
+        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
+        return Grid(columns, rows - Settings.RESERVED_ROWS, dockSlots)
+    }
+
+    /** A long press on [from]'s icon, then a drag to [to], all in root coordinates. */
+    private fun drag(from: String, to: Offset) {
+        val start = icon(from).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(start)
+            advanceEventTime(LONG_PRESS_MS)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += (to - start) / DRAG_STEPS.toFloat()
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+            up()
+        }
+    }
+
+    private fun assertUnmoved(label: String) {
+        compose.waitForIdle()
+        assertEquals(0 to 0, homeCellOf(label))
+        assertEquals(Container.HOME, placementOf(label)?.container)
+    }
+
+    /** The lifted icon is our settings app; a stray click would open its "Grid" section. */
+    private fun assertStillOnLauncher() {
+        compose.waitForIdle()
+        assertTrue("a drag must not also launch the app", !device.hasObject(By.text("Grid")))
+    }
+
+    private fun placementOf(label: String): ItemEntity? = runBlocking {
+        val component = labelToComponent(label)
+        listOf(Container.HOME, Container.DOCK)
+            .flatMap { graph.workspace.observe(it).first().pages }
+            .flatMap { it.items }
+            .firstOrNull { it.component == component }
+    }
+
+    private fun labelAtHomeCell(x: Int, y: Int): String = runBlocking {
+        val item =
+            graph.workspace.observe(Container.HOME).first().pages.first().items.first {
+                it.x == x && it.y == y
+            }
+        graph.appRepository.apps
+            .first { it.isNotEmpty() }
+            .first { it.ref.component == item.component }
+            .label
+    }
+
+    private fun homeCellOf(label: String): Pair<Int?, Int?>? =
+        placementOf(label)?.takeIf { it.container == Container.HOME }?.let { it.x to it.y }
+
+    private fun labelToComponent(label: String): String = runBlocking {
+        graph.appRepository.apps.first { it.isNotEmpty() }.first { it.label == label }.ref.component
+    }
+
     /** Icons live inside clickable cells, whose semantics merge; look at the unmerged tree. */
     private fun icon(label: String) =
         compose.onNodeWithContentDescription(label, useUnmergedTree = true)
@@ -133,5 +274,8 @@ class LauncherFlowTest {
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+        const val LONG_PRESS_MS = 1_000L
+        const val DRAG_STEPS = 10
+        const val DRAG_STEP_MS = 30L
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.theme.RunwayTheme
@@ -26,7 +27,37 @@ class LauncherActivity : ComponentActivity() {
         setContent {
             RunwayTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
-                HomeScreen(state = state, goHome = viewModel.goHome, onLaunch = viewModel::launch)
+                val drag by viewModel.drag.collectAsStateWithLifecycle()
+                HomeScreen(
+                    state = state,
+                    goHome = viewModel.goHome,
+                    onLaunch = viewModel::launch,
+                    drag =
+                        DragSession(
+                            state = drag,
+                            onStart = viewModel::startDrag,
+                            onMove = viewModel::dragTo,
+                            onEnd = viewModel::endDrag,
+                            onCancel = viewModel::cancelDrag,
+                        ),
+                    onHomePagePositioned = { page, bounds ->
+                        viewModel.dropAreas =
+                            viewModel.dropAreas.copy(
+                                home = bounds,
+                                homePage = page,
+                                columns = state.settings.columns,
+                                rows = state.settings.pageRows,
+                            )
+                    },
+                    onDockPagePositioned = { page, bounds ->
+                        viewModel.dropAreas =
+                            viewModel.dropAreas.copy(
+                                dock = bounds,
+                                dockPage = page,
+                                dockSlots = state.settings.dockSlots,
+                            )
+                    },
+                )
             }
         }
     }

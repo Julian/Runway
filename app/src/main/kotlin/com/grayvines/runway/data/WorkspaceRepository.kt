@@ -2,6 +2,7 @@ package com.grayvines.runway.data
 
 import androidx.room3.immediateTransaction
 import androidx.room3.useWriterConnection
+import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -26,6 +27,19 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     suspend fun ensureInitialised() = write {
         dao.insertPage(PageEntity(Container.HOME, 0))
         dao.insertPage(PageEntity(Container.DOCK, 0))
+    }
+
+    /** Moves one item and, in the same transaction, the items it displaces on the target page. */
+    suspend fun moveItem(
+        id: Long,
+        container: Container,
+        page: Int,
+        x: Int,
+        y: Int,
+        displaced: Map<Long, Footprint>,
+    ) = write {
+        displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
+        dao.place(id, container, page, x, y)
     }
 
     /** An app was uninstalled: its icons go, leaving holes. */

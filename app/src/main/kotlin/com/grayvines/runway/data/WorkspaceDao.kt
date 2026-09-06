@@ -27,6 +27,11 @@ interface WorkspaceDao {
 
     @Update suspend fun updateItem(item: ItemEntity)
 
+    @Query(
+        "UPDATE items SET container = :container, page_index = :page, x = :x, y = :y WHERE id = :id"
+    )
+    suspend fun place(id: Long, container: Container, page: Int, x: Int, y: Int)
+
     @Query("DELETE FROM items WHERE id = :id") suspend fun deleteItem(id: Long)
 
     // An exact prefix match: LIKE would treat the underscores in package names as wildcards.

@@ -41,3 +41,5 @@ complexity:
   # A DAO is a list of queries.
   ComplexInterface:
     ignoreAnnotated: ['Dao']
+  TooManyFunctions:
+    ignoreAnnotated: ['Dao']

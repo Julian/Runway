@@ -9,8 +9,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import com.grayvines.runway.data.Container
+import com.grayvines.runway.ui.drag.Bounds
 
 const val DOCK_TAG = "dock"
 
@@ -24,17 +28,32 @@ fun Dock(
     iconSize: Dp,
     labels: Boolean,
     onLaunch: (HomeItem) -> Unit,
+    drag: DragSession?,
+    onPagePositioned: (page: Int, Bounds) -> Unit,
 ) {
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxWidth().height(rowHeight).testTag(DOCK_TAG),
     ) { page ->
         val bySlot = pages[page].items.associateBy { it.x }
-        Row(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxSize().onGloballyPositioned { coords ->
+                if (page == pagerState.currentPage) {
+                    onPagePositioned(page, coords.boundsInRoot().toBounds())
+                }
+            }
+        ) {
             repeat(slots) { slot ->
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     bySlot[slot]?.let { item ->
-                        ItemCell(item, iconSize = iconSize, labels = labels) { onLaunch(item) }
+                        ItemCell(
+                            item,
+                            iconSize = iconSize,
+                            labels = labels,
+                            onClick = { onLaunch(item) },
+                            drag = drag?.handlersFor(item, page, Container.DOCK),
+                            lifted = item.id == drag?.draggedId,
+                        )
                     }
                 }
             }

@@ -2,6 +2,7 @@ package com.grayvines.runway.data
 
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -72,6 +73,24 @@ class WorkspaceRepositoryTest {
             ),
             left,
         )
+    }
+
+    @Test
+    fun `moveItem relocates the item and its displaced neighbours together`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val page = repo.observe(Container.HOME).first().pages.single()
+        val (a, b) = page.items.sortedBy { it.x } // a at (0,0), b at (1,0)
+
+        repo.moveItem(a.id, Container.HOME, 0, 1, 0, displaced = mapOf(b.id to Footprint(2, 0)))
+
+        val after = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+        assertEquals(1 to 0, after.getValue(a.id).let { it.x to it.y })
+        assertEquals(2 to 0, after.getValue(b.id).let { it.x to it.y })
+
+        repo.moveItem(a.id, Container.DOCK, 0, 1, 0, displaced = emptyMap())
+        val dock = repo.observe(Container.DOCK).first().pages.single().items
+        assertEquals(1 to 0, dock.single { it.id == a.id }.let { it.x to it.y })
+        assertEquals(2, dock.size)
     }
 
     @Test
