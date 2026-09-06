@@ -46,7 +46,7 @@ class SearchTargetResolver(private val context: Context) {
      */
     fun search(target: SearchTarget?) {
         val packageName = target?.packageName ?: return
-        val search = Intent(Intent.ACTION_WEB_SEARCH).setPackage(packageName)
+        val search = searchIntent(packageName) ?: return
         try {
             context.startActivity(search.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
@@ -55,6 +55,19 @@ class SearchTargetResolver(private val context: Context) {
             openInstead(packageName, e)
         }
     }
+
+    /**
+     * Firefox opens plain web-search intents on its home page; its search widget's entry point is
+     * what opens the address bar with the keyboard up. Everyone else gets the web-search intent.
+     */
+    private fun searchIntent(packageName: String): Intent? =
+        if (packageName in FIREFOXES) {
+            context.packageManager
+                .getLaunchIntentForPackage(packageName)
+                ?.putExtra("open_to_search", "search_widget")
+        } else {
+            Intent(Intent.ACTION_WEB_SEARCH).setPackage(packageName)
+        }
 
     /** The target no longer handles the search, or refuses it (not exported after all). */
     private fun openInstead(packageName: String, why: Exception) {
@@ -66,6 +79,13 @@ class SearchTargetResolver(private val context: Context) {
 
     private companion object {
         const val FIREFOX = "org.mozilla.firefox"
+        val FIREFOXES =
+            setOf(
+                FIREFOX,
+                "org.mozilla.firefox_beta",
+                "org.mozilla.fenix",
+                "org.mozilla.fennec_fdroid",
+            )
         const val TAG = "Runway"
     }
 }
