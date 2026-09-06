@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.settings
 
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,21 +11,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -36,12 +43,17 @@ fun SettingsScreen(
     settings: Settings,
     searchTargets: List<SearchTarget>,
     onChange: ((Settings) -> Settings) -> Unit,
+    onOpenHome: (() -> Unit)?,
     debugActions: DebugActions?,
 ) {
     Scaffold { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text("Runway", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.padding(8.dp))
+            if (onOpenHome != null) {
+                // Runway is not the home app yet: a way to try it without switching.
+                Button(onClick = onOpenHome) { Text("Open home screen") }
+            }
 
             Section("Grid")
             Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { v ->
@@ -68,24 +80,8 @@ fun SettingsScreen(
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->
                 onChange { it.copy(searchBarAtTop = v) }
             }
-            Section("Search with")
-            Choice(
-                label = "Automatic",
-                detail = "Firefox if installed, otherwise the first app that can",
-                selected = settings.searchTarget == null,
-                icon = null,
-            ) {
-                onChange { it.copy(searchTarget = null) }
-            }
-            searchTargets.forEach { target ->
-                Choice(
-                    label = target.label,
-                    detail = null,
-                    selected = settings.searchTarget == target.packageName,
-                    icon = target.icon,
-                ) {
-                    onChange { it.copy(searchTarget = target.packageName) }
-                }
+            SearchTargetPicker(settings.searchTarget, searchTargets) { packageName ->
+                onChange { it.copy(searchTarget = packageName) }
             }
 
             if (debugActions != null) {
@@ -121,43 +117,65 @@ private fun Stepper(label: String, value: Int, min: Int, max: Int, onValue: (Int
     }
 }
 
-/** One radio row: an optional app icon, a label, an optional second line. */
+/** "Search with": a dropdown of Automatic plus every app that can take a web search. */
 @Composable
-private fun Choice(
-    label: String,
-    detail: String?,
-    selected: Boolean,
-    icon: Drawable?,
-    onSelect: () -> Unit,
+private fun SearchTargetPicker(
+    chosen: String?,
+    targets: List<SearchTarget>,
+    onChoose: (packageName: String?) -> Unit,
 ) {
+    var open by remember { mutableStateOf(false) }
+    val current = targets.firstOrNull { it.packageName == chosen }
     Row(
-        Modifier.fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
-            .padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = null)
-        if (icon != null) {
-            val bitmap =
-                remember(icon) {
-                    icon.toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap()
+        Text("Search with", Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { open = true }) {
+                current?.let {
+                    TargetIcon(it.icon)
+                    Spacer(Modifier.width(8.dp))
                 }
-            Image(bitmap, contentDescription = null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(label)
-            if (detail != null) {
-                Text(
-                    detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(current?.label ?: AUTOMATIC)
+                Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text(AUTOMATIC) },
+                    onClick = {
+                        open = false
+                        onChoose(null)
+                    },
                 )
+                targets.forEach { target ->
+                    DropdownMenuItem(
+                        text = { Text(target.label) },
+                        leadingIcon = { TargetIcon(target.icon) },
+                        onClick = {
+                            open = false
+                            onChoose(target.packageName)
+                        },
+                    )
+                }
             }
         }
     }
+    Text(
+        "Automatic is Firefox if installed, otherwise the first app that can.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
 }
 
+@Composable
+private fun TargetIcon(icon: Drawable) {
+    val bitmap = remember(icon) { icon.toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap() }
+    Image(bitmap, contentDescription = null, modifier = Modifier.size(24.dp))
+}
+
+private const val AUTOMATIC = "Automatic"
 private const val CHOICE_ICON_PX = 96
 
 @Composable

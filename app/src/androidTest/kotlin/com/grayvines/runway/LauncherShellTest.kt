@@ -85,11 +85,21 @@ class LauncherShellTest : LauncherFixture() {
         val current = graph.searchTargets.resolve(null)!!
         val other = handlers.first { it.packageName != current.packageName }
         icon(firstHomeApp).performClick()
+        // Nothing picked yet, so the dropdown button reads Automatic.
         assertTrue(
             "settings did not open",
-            device.wait(Until.hasObject(By.text("Search with")), TIMEOUT_MS),
+            device.wait(Until.hasObject(By.text("Automatic")), TIMEOUT_MS),
+        )
+        device.findObject(By.text("Automatic")).click()
+        // The Compose rule owns the frame clock for every composition in the process, including
+        // the settings screen: nothing there recomposes after a UiAutomator tap until it idles.
+        compose.waitForIdle()
+        assertTrue(
+            "dropdown did not open",
+            device.wait(Until.hasObject(By.text(other.label)), TIMEOUT_MS),
         )
         device.findObject(By.text(other.label)).click()
+        compose.waitForIdle()
         compose.waitUntil(TIMEOUT_MS) {
             runBlocking { graph.settings.settings.first().searchTarget } == other.packageName
         }

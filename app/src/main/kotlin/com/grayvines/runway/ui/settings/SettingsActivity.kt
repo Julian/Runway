@@ -1,12 +1,15 @@
 package com.grayvines.runway.ui.settings
 
+import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.grayvines.runway.LauncherActivity
 import com.grayvines.runway.appGraph
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.clear
@@ -22,12 +25,26 @@ class SettingsActivity : ComponentActivity() {
         val graph = appGraph
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         val searchTargets = graph.searchTargets.handlers()
+        val isHome =
+            packageManager
+                .resolveActivity(
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()),
+                )
+                ?.activityInfo
+                ?.packageName == packageName
         setContent {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
                 SettingsScreen(
                     settings = settings,
                     searchTargets = searchTargets,
+                    onOpenHome =
+                        if (isHome) {
+                            null
+                        } else {
+                            { startActivity(Intent(this, LauncherActivity::class.java)) }
+                        },
                     onChange = { transform ->
                         graph.appScope.launch { graph.settings.update(transform) }
                     },
