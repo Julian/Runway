@@ -22,6 +22,7 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.home.DOCK_TAG
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
@@ -154,6 +155,41 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun aTouchedIconShrinksUntilReleased() {
+        val resting = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { down(resting.center) }
+        // Shorter than the long-press timeout, so this is a touch and not a lift.
+        compose.mainClock.advanceTimeBy(PRESS_SETTLE_MS)
+        val pressed = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "pressed ${pressed.width} vs resting ${resting.width}",
+            pressed.width < resting.width,
+        )
+        // Cancel rather than lift: lifting would complete a tap and launch the app.
+        compose.onRoot().performTouchInput { cancel() }
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        assertEquals(resting.width, icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.width, 1f)
+    }
+
+    @Test
+    fun theLiftedIconIsDrawnLargerThanItsCellIcon() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val resting = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot
+        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val lifted =
+            compose
+                .onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(
+            "lifted ${lifted.width} vs resting ${resting.width}",
+            lifted.width > resting.width * 1.1f,
+        )
+        release()
+    }
+
+    @Test
     fun droppingOnAnOccupiedCellDisplacesItsOccupant() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
@@ -229,6 +265,12 @@ class LauncherFlowTest {
 
     /** A long press on [from]'s icon, then a drag to [to], all in root coordinates. */
     private fun drag(from: String, to: Offset) {
+        holdDrag(from, to)
+        release()
+    }
+
+    /** Like [drag] but leaves the finger down at [to]. */
+    private fun holdDrag(from: String, to: Offset) {
         val start = icon(from).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput {
             down(start)
@@ -239,8 +281,11 @@ class LauncherFlowTest {
                 moveTo(p)
                 advanceEventTime(DRAG_STEP_MS)
             }
-            up()
         }
+    }
+
+    private fun release() {
+        compose.onRoot().performTouchInput { up() }
     }
 
     private fun assertUnmoved(label: String) {
@@ -296,5 +341,7 @@ class LauncherFlowTest {
         const val LONG_PRESS_MS = 1_000L
         const val DRAG_STEPS = 10
         const val DRAG_STEP_MS = 30L
+        const val LIFT_ANIMATION_MS = 1_000L
+        const val PRESS_SETTLE_MS = 250L
     }
 }
