@@ -140,6 +140,20 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun aDroppedIconIsDrawnAtItsTargetBeforeTheDatabaseCatchesUp() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val neighbour = labelAtHomeCell(1, 0)
+        drag(from = firstHomeApp, to = grid.homeCell(1, 0))
+        // No waiting on the database: what is on screen right after the finger lifts.
+        compose.waitForIdle()
+        assertEquals(
+            grid.cellAt(icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center),
+            1 to 0,
+        )
+        assertEquals(grid.cellAt(icon(neighbour).fetchSemanticsNode().boundsInRoot.center), 0 to 0)
+    }
+
+    @Test
     fun droppingOnAnOccupiedCellDisplacesItsOccupant() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
@@ -197,6 +211,11 @@ class LauncherFlowTest {
             Offset(dock.left + (slot + 0.5f) * dock.width / dockSlots, dock.center.y)
 
         fun searchBar() = Offset(page.center.x, page.top / 2)
+
+        /** The home cell a root-pixel point falls in. */
+        fun cellAt(p: Offset) =
+            ((p.x - page.left) / (page.width / columns)).toInt() to
+                ((p.y - page.top) / (page.height / pageRows)).toInt()
     }
 
     private fun useGrid(columns: Int, rows: Int, dockSlots: Int = settings.dockSlots): Grid {

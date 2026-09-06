@@ -23,10 +23,12 @@ import com.grayvines.runway.ui.drag.WorkspaceLookup
 import com.grayvines.runway.ui.drag.targetFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -58,6 +60,7 @@ data class HomeState(
 
 class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _goHome = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val pending = MutableStateFlow<PendingMove?>(null)
 
     /** Fires when the HOME intent arrives while already showing. */
     val goHome: SharedFlow<Unit> = _goHome
@@ -68,12 +71,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.workspace.observe(Container.HOME),
                 graph.workspace.observe(Container.DOCK),
                 graph.appRepository.apps,
-            ) { settings, home, dock, apps ->
+                pending,
+            ) { settings, home, dock, apps, pendingMove ->
                 val byKey = apps.associateBy { it.key }
+                val plain = home.toPages(byKey) to dock.toPages(byKey)
+                val (homePages, dockPages) =
+                    pendingMove?.applyTo(plain.first, plain.second) ?: plain
                 HomeState(
                     settings = settings,
-                    homePages = home.toPages(byKey),
-                    dockPages = dock.toPages(byKey),
+                    homePages = homePages,
+                    dockPages = dockPages,
                     searchTarget = graph.searchTargets.resolve(settings.searchTarget),
                     loaded = true,
                 )
@@ -126,10 +133,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     fun endDrag() {
         val source = drag.value?.source ?: return
         val move = dragController.drop() ?: return
-        viewModelScope.launch {
+        val pendingMove =
             when (val target = move.target) {
                 is DropTarget.HomeCell ->
-                    graph.workspace.moveItem(
+                    PendingMove(
                         source.itemId,
                         Container.HOME,
                         target.page,
@@ -138,7 +145,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                         move.displaced,
                     )
                 is DropTarget.DockSlot ->
-                    graph.workspace.moveItem(
+                    PendingMove(
                         source.itemId,
                         Container.DOCK,
                         target.page,
@@ -147,6 +154,21 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                         emptyMap(),
                     )
             }
+        // Shown immediately; the database catches up, then the override is dropped.
+        pending.value = pendingMove
+        viewModelScope.launch {
+            with(pendingMove) { graph.workspace.moveItem(itemId, container, page, x, y, displaced) }
+            graph.workspace.observe(pendingMove.container).first { content ->
+                content.pages.any { p ->
+                    p.index == pendingMove.page &&
+                        p.items.any {
+                            it.id == pendingMove.itemId &&
+                                it.x == pendingMove.x &&
+                                it.y == pendingMove.y
+                        }
+                }
+            }
+            if (pending.value == pendingMove) pending.value = null
         }
     }
 
