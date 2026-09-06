@@ -17,8 +17,8 @@ class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions)
 
         fun flip(delta: Int)
 
-        /** Adds a page beyond the last and returns once it can be flipped to. */
-        suspend fun addPage()
+        /** Adds a page beyond the last and returns once it can be flipped to; false on failure. */
+        suspend fun addPage(): Boolean
     }
 
     private var job: Job? = null
@@ -45,9 +45,8 @@ class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions)
             } else {
                 heldAtEnd += FLIP_MS
                 if (!addedPage && heldAtEnd >= ADD_PAGE_MS) {
-                    addedPage = true
-                    actions.addPage()
-                    actions.flip(edge.pageDelta)
+                    addedPage = true // one attempt per hold, whether or not it worked
+                    if (actions.addPage()) actions.flip(edge.pageDelta)
                 }
             }
         }

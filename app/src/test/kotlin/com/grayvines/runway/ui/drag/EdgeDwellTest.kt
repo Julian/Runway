@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class EdgeDwellTest {
     /** A workspace of [pages] pages; the finger is "on" [page]. */
-    private class Fake(var pages: Int, var page: Int) : EdgeDwell.Actions {
+    private class Fake(var pages: Int, var page: Int, val addFails: Boolean = false) :
+        EdgeDwell.Actions {
         val events = mutableListOf<String>()
 
         override fun isPastTheEnd(edge: Edge) = edge == Edge.RIGHT && page >= pages - 1
@@ -19,10 +20,20 @@ class EdgeDwellTest {
             events += "flip$delta"
         }
 
-        override suspend fun addPage() {
-            pages++
+        override suspend fun addPage(): Boolean {
             events += "add"
+            if (addFails) return false
+            pages++
+            return true
         }
+    }
+
+    @Test
+    fun `a failed page add is not retried and does not flip`() = runTest {
+        val fake = Fake(pages = 1, page = 0, addFails = true)
+        EdgeDwell(backgroundScope, fake).hover(Edge.RIGHT)
+        advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 3)
+        assertEquals(listOf("add"), fake.events)
     }
 
     @Test

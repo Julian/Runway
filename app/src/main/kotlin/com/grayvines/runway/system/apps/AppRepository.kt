@@ -1,5 +1,6 @@
 package com.grayvines.runway.system.apps
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
@@ -7,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
+import android.util.Log
 import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,8 +70,20 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /** Launches [entry]; if it can't be (uninstalled or suspended since), refreshes the list. */
     fun launch(entry: AppEntry) {
-        launcherApps.startMainActivity(entry.component, entry.user, null, null)
+        try {
+            launcherApps.startMainActivity(entry.component, entry.user, null, null)
+        } catch (e: ActivityNotFoundException) {
+            failedLaunch(entry, e)
+        } catch (e: SecurityException) {
+            failedLaunch(entry, e)
+        }
+    }
+
+    private fun failedLaunch(entry: AppEntry, e: Exception) {
+        Log.w(TAG, "could not launch ${entry.component}", e)
+        refresh()
     }
 
     private fun LauncherActivityInfo.toEntry() =
@@ -84,5 +98,6 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
 
     private companion object {
         const val REMOVAL_BUFFER = 16
+        const val TAG = "Runway"
     }
 }

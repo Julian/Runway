@@ -1,7 +1,9 @@
 package com.grayvines.runway.ui.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ContainerContent
@@ -140,10 +142,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     _flipPage.tryEmit(delta)
                 }
 
-                override suspend fun addPage() {
+                override suspend fun addPage(): Boolean {
                     val count = state.value.homePages.size
-                    graph.workspace.addPage(Container.HOME, count)
-                    state.first { it.homePages.size > count }
+                    return runCatching {
+                        graph.workspace.addPage(Container.HOME, count)
+                        state.first { it.homePages.size > count }
+                    }
+                        .onFailure { Log.e(TAG, "could not add a page", it) }
+                        .isSuccess
                 }
             },
         )
@@ -191,19 +197,22 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         // Shown immediately; the database catches up, then the override is dropped.
         pending.value = pendingMove
         viewModelScope.launch {
-            with(pendingMove) { graph.workspace.moveItem(itemId, container, page, x, y, displaced) }
-            graph.workspace.observe(pendingMove.container).first { content ->
-                content.pages.any { p ->
-                    p.index == pendingMove.page &&
-                        p.items.any {
-                            it.id == pendingMove.itemId &&
-                                it.x == pendingMove.x &&
-                                it.y == pendingMove.y
-                        }
+            try {
+                with(pendingMove) {
+                    graph.workspace.moveItem(itemId, container, page, x, y, displaced)
                 }
+                graph.workspace.observe(pendingMove.container).first { it.reflects(pendingMove) }
+            } catch (e: SQLiteException) {
+                Log.e(TAG, "could not save the move; the item snaps back", e)
+            } finally {
+                if (pending.value == pendingMove) pending.value = null
             }
-            if (pending.value == pendingMove) pending.value = null
         }
+    }
+
+    private fun ContainerContent.reflects(move: PendingMove) = pages.any { p ->
+        p.index == move.page &&
+            p.items.any { it.id == move.itemId && it.x == move.x && it.y == move.y }
     }
 
     fun cancelDrag() {
@@ -245,5 +254,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+        const val TAG = "Runway"
     }
 }
