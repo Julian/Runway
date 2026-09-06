@@ -7,7 +7,6 @@ import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ContainerContent
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.model.Footprint
@@ -49,7 +48,15 @@ data class HomeItem(
         get() = Footprint(x, y, spanX, spanY)
 }
 
-data class HomePage(val index: Int, val items: List<HomeItem>)
+/**
+ * One page: [items] are drawn; [occupied] is every cell taken, including by items that are not
+ * drawn right now (their app is unavailable), which the drag planner must respect.
+ */
+data class HomePage(
+    val index: Int,
+    val items: List<HomeItem>,
+    val occupied: List<Placed> = items.map { Placed(it.id, it.footprint) },
+)
 
 data class HomeState(
     val settings: Settings = Settings(),
@@ -91,8 +98,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             override fun dockItems(page: Int) = state.value.dockPages.placed(page)
 
             private fun List<HomePage>.placed(page: Int) =
-                firstOrNull { it.index == page }?.items?.map { Placed(it.id, it.footprint) }
-                    ?: emptyList()
+                firstOrNull { it.index == page }?.occupied ?: emptyList()
         }
 
     /** Persistence for drags; failures are logged and reported, never thrown. */
@@ -146,11 +152,13 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 val byKey = apps.associateBy { it.key }
                 HomeState(
                     settings = settings,
-                    homePages = home.toPages(byKey),
-                    dockPages = dock.toPages(byKey),
+                    homePages = home.toHomePages(byKey),
+                    dockPages = dock.toHomePages(byKey),
                     searchTarget = graph.searchTargets.resolve(settings.searchTarget),
                     apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
-                    loaded = true,
+                    // Not before the app list: with it empty every icon would be hidden and
+                    // every cell would look free.
+                    loaded = apps.isNotEmpty(),
                 )
             }
             .flowOn(Dispatchers.Default)
@@ -197,30 +205,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             _drawerOpen.value -> _drawerOpen.value = false
             else -> _goHome.tryEmit(Unit)
         }
-    }
-
-    private fun ContainerContent.toPages(apps: Map<String, AppEntry>): List<HomePage> =
-        pages.map { page ->
-            HomePage(page.index, page.items.mapNotNull { it.toHomeItem(apps) })
-        }
-
-    /** Null when the item has no cell or its app is gone; those are not drawn. */
-    private fun ItemEntity.toHomeItem(apps: Map<String, AppEntry>): HomeItem? {
-        val cellX = x
-        val cellY = y
-        if (cellX == null || cellY == null) return null
-        val app = apps["$profile/$component"]
-        if (kind == ItemKind.APP && app == null) return null
-        return HomeItem(
-            id = id,
-            kind = kind,
-            x = cellX,
-            y = cellY,
-            spanX = spanX,
-            spanY = spanY,
-            label = labelOverride ?: app?.label ?: "",
-            app = app,
-        )
     }
 
     private companion object {

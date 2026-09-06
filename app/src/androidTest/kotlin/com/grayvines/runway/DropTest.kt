@@ -1,7 +1,11 @@
 package com.grayvines.runway
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.autoFill
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,6 +71,29 @@ class DropTest : LauncherFixture() {
         assertEquals(1, placementOf(neighbour)?.x)
         assertEquals(settings.dockSlots - 1, placementOf(last)?.x)
         assertEquals(1, grid.dockSlotAt(icon(neighbour).fetchSemanticsNode().boundsInRoot.center))
+    }
+
+    @Test
+    fun aCellHeldByAnItemThatIsNotDrawnRefusesADrop() {
+        // A placement from a profile that is off: nothing to draw, but the slot is taken.
+        val hidden = AppRef("com.example.work/.Main", 99)
+        runBlocking {
+            val all = graph.appRepository.apps.first { it.isNotEmpty() }
+            val ours = all.first { it.component.packageName == app.packageName }
+            val others = (all - ours).map { it.ref }
+            // As the seed lays it out, with the hidden placement in dock slot 1.
+            val dock = listOf(others[0], hidden) + others.drop(1).take(settings.dockSlots - 2)
+            graph.workspace.autoFill(
+                dock + ours.ref + others.drop(settings.dockSlots - 1),
+                settings.columns,
+                settings.pageRows,
+                settings.dockSlots,
+            )
+        }
+        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        drag(from = firstHomeApp, to = grid.dockSlot(1))
+        assertUnmoved(firstHomeApp)
     }
 
     @Test
