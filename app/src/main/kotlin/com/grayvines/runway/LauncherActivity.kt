@@ -13,6 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeScreen
@@ -35,14 +38,20 @@ class LauncherActivity : ComponentActivity() {
                 val drag by viewModel.dragging.drag.collectAsStateWithLifecycle()
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
                 val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
+                val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
                 var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
+                val reports = AreaReports(viewModel.dragging.areas) { state.settings }
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
                     flipHomePage = viewModel.dragging.flipHomePage,
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
+                    drawerOpen = drawerOpen,
+                    onOpenDrawer = viewModel::openDrawer,
+                    onCloseDrawer = viewModel::closeDrawer,
+                    onLaunchApp = viewModel::launch,
                     drag =
                         DragSession(
                             state = drag,
@@ -55,29 +64,10 @@ class LauncherActivity : ComponentActivity() {
                             onEnd = viewModel.dragging::endDrag,
                             onCancel = viewModel.dragging::cancelDrag,
                         ),
-                    onHomePagePositioned = { page, bounds ->
-                        val s = state.settings
-                        viewModel.dragging.areas.homePagePositioned(
-                            page,
-                            bounds,
-                            s.columns,
-                            s.pageRows,
-                        )
-                    },
-                    onHomePageShown = { page ->
-                        val s = state.settings
-                        viewModel.dragging.areas.homePageShown(page, s.columns, s.pageRows)
-                    },
-                    onDockPagePositioned = { page, bounds ->
-                        viewModel.dragging.areas.dockPagePositioned(
-                            page,
-                            bounds,
-                            state.settings.dockSlots,
-                        )
-                    },
-                    onDockPageShown = { page ->
-                        viewModel.dragging.areas.dockPageShown(page, state.settings.dockSlots)
-                    },
+                    onHomePagePositioned = reports::homePagePositioned,
+                    onHomePageShown = reports::homePageShown,
+                    onDockPagePositioned = reports::dockPagePositioned,
+                    onDockPageShown = reports::dockPageShown,
                 )
             }
         }
@@ -87,4 +77,21 @@ class LauncherActivity : ComponentActivity() {
         super.onNewIntent(intent)
         viewModel.onHomeIntent()
     }
+}
+
+/** Forwards where the UI laid out its pages, with the grid dimensions of the moment. */
+private class AreaReports(
+    private val areas: DropAreaTracker,
+    private val settings: () -> Settings,
+) {
+    fun homePagePositioned(page: Int, bounds: Bounds) =
+        settings().let { areas.homePagePositioned(page, bounds, it.columns, it.pageRows) }
+
+    fun homePageShown(page: Int) =
+        settings().let { areas.homePageShown(page, it.columns, it.pageRows) }
+
+    fun dockPagePositioned(page: Int, bounds: Bounds) =
+        areas.dockPagePositioned(page, bounds, settings().dockSlots)
+
+    fun dockPageShown(page: Int) = areas.dockPageShown(page, settings().dockSlots)
 }

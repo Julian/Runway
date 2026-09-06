@@ -1,0 +1,157 @@
+package com.grayvines.runway
+
+import android.content.Intent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
+import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
+import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import kotlin.math.abs
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** The app drawer: opening, what it lists, launching, and every way of closing it. */
+@RunWith(AndroidJUnit4::class)
+class DrawerTest : LauncherFixture() {
+    @Test
+    fun swipingUpOnThePagesOpensTheDrawerListingEveryAppAlphabetically() {
+        val labels = runBlocking {
+            graph.appRepository.apps
+                .first { it.isNotEmpty() }
+                .map { it.label }
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+        }
+        openDrawer()
+        compose
+            .onAllNodesWithTag(DRAWER_ITEM_TAG)
+            .onFirst()
+            .assertContentDescriptionEquals(labels.first())
+        compose.onNodeWithTag(DRAWER_TAG).performScrollToNode(hasContentDescription(labels.last()))
+        drawerApp(labels.last()).assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingAnAppInTheDrawerLaunchesItAndClosesTheDrawer() {
+        openDrawer()
+        compose.onNodeWithTag(DRAWER_TAG).performScrollToNode(hasContentDescription(firstHomeApp))
+        drawerApp(firstHomeApp).performClick()
+        assertTrue(
+            "settings did not open",
+            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
+        )
+        device.pressBack()
+        awaitDrawerClosed()
+    }
+
+    @Test
+    fun backClosesTheDrawer() {
+        openDrawer()
+        device.pressBack()
+        awaitDrawerClosed()
+    }
+
+    @Test
+    fun pullingTheListDownPastTheTopClosesTheDrawer() {
+        openDrawer()
+        compose.onNodeWithTag(DRAWER_TAG).performTouchInput { swipeDown() }
+        awaitDrawerClosed()
+    }
+
+    @Test
+    fun theHomeIntentClosesTheDrawerAndStaysOnTheCurrentPage() {
+        compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
+        compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
+        openDrawer()
+        app.startActivity(
+            Intent(Intent.ACTION_MAIN, null, app, LauncherActivity::class.java)
+                .addCategory(Intent.CATEGORY_HOME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        awaitDrawerClosed()
+        assertTrue(
+            "HOME with the drawer open must not also change page",
+            !icon(firstHomeApp).isDisplayedOrFalse(),
+        )
+    }
+
+    @Test
+    fun aPartialSwipeUpRevealsTheDrawerAndLettingGoHidesItAgain() {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, -root.height * PARTIAL_PULL / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+        }
+        // Part way: present, but not yet settled onto the screen.
+        val drawer = compose.onNodeWithTag(DRAWER_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue("drawer at ${drawer.top} should still be arriving", drawer.top > root.top + 1f)
+        compose.onRoot().performTouchInput { up() }
+        awaitDrawerClosed()
+    }
+
+    @Test
+    fun lettingGoPastAThirdOfTheScreenOpensTheDrawerTheRestOfTheWay() {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, -root.height * OPENING_PULL / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            up()
+        }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
+                abs(it.boundsInRoot.top - root.top) < 1f
+            } ?: false
+        }
+        device.pressBack()
+        awaitDrawerClosed()
+    }
+
+    private fun openDrawer() {
+        compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun awaitDrawerClosed() {
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    private fun drawerApp(label: String) =
+        compose.onNode(hasTestTag(DRAWER_ITEM_TAG) and hasContentDescription(label))
+
+    private companion object {
+        const val PULL_STEPS = 10
+        const val PULL_STEP_MS = 40L // slow enough not to count as a flick
+        const val PARTIAL_PULL = 0.1f // a 0.6-screen pull reveals fully; this is a sixth of it
+        const val OPENING_PULL = 0.35f // well past a third of the pull distance
+    }
+}

@@ -3,6 +3,7 @@ package com.grayvines.runway.ui.home
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,16 +18,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drawer.AppDrawer
+import com.grayvines.runway.ui.drawer.DrawerMotion
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -50,6 +61,10 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
     drag: DragSession,
+    drawerOpen: Boolean,
+    onOpenDrawer: () -> Unit,
+    onCloseDrawer: () -> Unit,
+    onLaunchApp: (AppEntry) -> Unit,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onHomePageShown: (page: Int) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
@@ -68,47 +83,118 @@ fun HomeScreen(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
-        val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        val lift = liftProgress(lifting = drag.state != null)
-        Column(Modifier.fillMaxSize().pulledBack(lift).padding(insets)) {
-            if (settings.searchBarAtTop) {
-                SearchBar(rowHeight = cell.height, target = state.searchTarget)
-            }
-            Workspace(
-                pages = state.homePages,
-                pagerState = homePager,
-                columns = settings.columns,
-                rows = settings.pageRows,
-                cell = cell,
-                iconSize = iconSize,
-                labels = settings.homeLabels,
-                onLaunch = onLaunch,
-                drag = drag,
-                onPagePositioned = onHomePagePositioned,
-                modifier = Modifier.weight(1f),
-            )
-            if (!settings.searchBarAtTop) {
-                SearchBar(rowHeight = cell.height, target = state.searchTarget)
-            }
-            Dock(
-                pages = state.dockPages,
-                pagerState = dockPager,
-                slots = settings.dockSlots,
-                slot = dockSlot,
-                iconSize = iconSize,
-                labels = settings.dockLabels,
-                onLaunch = onLaunch,
-                drag = drag,
-                onPagePositioned = onDockPagePositioned,
-            )
+        val scope = rememberCoroutineScope()
+        val drawer = remember { DrawerMotion(scope) }
+        // The home area steps back for a lifted icon and for the drawer alike.
+        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.revealed.value)
+        drawer.laidOut(with(LocalDensity.current) { maxHeight.toPx() })
+        LaunchedEffect(drawerOpen) { drawer.settle(drawerOpen) }
+        val releaseDrawer = { velocity: Float ->
+            drawer.release(velocity, drawerOpen, onOpenDrawer, onCloseDrawer)
         }
+        HomeColumn(
+            state = state,
+            homePager = homePager,
+            dockPager = dockPager,
+            cell = cell,
+            iconSize = iconSize,
+            onLaunch = onLaunch,
+            drag = drag,
+            pagesModifier = Modifier.pullsDrawer(drawer, releaseDrawer),
+            onHomePagePositioned = onHomePagePositioned,
+            onDockPagePositioned = onDockPagePositioned,
+            modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
+        )
         DragOverlay(
             drag = drag,
             item = state.item(drag.draggedId ?: drag.settling?.itemId),
             cell = cell,
             iconSize = iconSize,
             lift = lift,
+        )
+        AppDrawer(
+            revealed = drawer.revealed.value,
+            open = drawerOpen,
+            apps = state.apps,
+            columns = settings.columns,
+            iconSize = iconSize,
+            labels = settings.drawerLabels,
+            insets = insets,
+            onPull = drawer::dragBy,
+            onPullEnd = releaseDrawer,
+            onLaunch = onLaunchApp,
+            onClose = onCloseDrawer,
+        )
+    }
+}
+
+/** A vertical drag on the pages pulls the drawer with it; the pager keeps horizontal swipes. */
+private fun Modifier.pullsDrawer(motion: DrawerMotion, onRelease: (velocity: Float) -> Unit) =
+    composed {
+        val release = rememberUpdatedState(onRelease)
+        pointerInput(motion) {
+            val tracker = VelocityTracker()
+            detectVerticalDragGestures(
+                onDragStart = { tracker.resetTracking() },
+                onDragEnd = { release.value(tracker.calculateVelocity().y) },
+                onDragCancel = { release.value(0f) },
+                onVerticalDrag = { change, dy ->
+                    tracker.addPosition(change.uptimeMillis, change.position)
+                    motion.dragBy(dy)
+                },
+            )
+        }
+    }
+
+/** Search bar, pages and dock, stacked; every page shares [cell]. */
+@Composable
+private fun HomeColumn(
+    state: HomeState,
+    homePager: PagerState,
+    dockPager: PagerState,
+    cell: DpSize,
+    iconSize: Dp,
+    onLaunch: (HomeItem) -> Unit,
+    drag: DragSession,
+    onHomePagePositioned: (page: Int, Bounds) -> Unit,
+    onDockPagePositioned: (page: Int, Bounds) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Applied to the pages alone: the dock and search bar do not pull the drawer. */
+    pagesModifier: Modifier = Modifier,
+) {
+    val settings = state.settings
+    val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
+    Column(modifier) {
+        if (settings.searchBarAtTop) {
+            SearchBar(rowHeight = cell.height, target = state.searchTarget)
+        }
+        Workspace(
+            pages = state.homePages,
+            pagerState = homePager,
+            columns = settings.columns,
+            rows = settings.pageRows,
+            cell = cell,
+            iconSize = iconSize,
+            labels = settings.homeLabels,
+            onLaunch = onLaunch,
+            drag = drag,
+            onPagePositioned = onHomePagePositioned,
+            modifier = Modifier.weight(1f).then(pagesModifier),
+        )
+        if (!settings.searchBarAtTop) {
+            SearchBar(rowHeight = cell.height, target = state.searchTarget)
+        }
+        Dock(
+            pages = state.dockPages,
+            pagerState = dockPager,
+            slots = settings.dockSlots,
+            slot = dockSlot,
+            iconSize = iconSize,
+            labels = settings.dockLabels,
+            onLaunch = onLaunch,
+            drag = drag,
+            onPagePositioned = onDockPagePositioned,
         )
     }
 }

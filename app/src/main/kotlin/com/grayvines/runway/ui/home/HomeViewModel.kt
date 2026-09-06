@@ -23,6 +23,7 @@ import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +55,8 @@ data class HomeState(
     val homePages: List<HomePage> = emptyList(),
     val dockPages: List<HomePage> = emptyList(),
     val searchTarget: SearchTarget? = null,
+    /** Every launchable app, alphabetically: what the drawer shows. */
+    val apps: List<AppEntry> = emptyList(),
     val loaded: Boolean = false,
 )
 
@@ -63,8 +66,13 @@ fun HomeState.pages(container: Container) =
 class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _goHome = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** Fires when the HOME intent arrives while already showing. */
+    /**
+     * Fires when the HOME intent arrives while already showing and nothing is open over the pages.
+     */
     val goHome: SharedFlow<Unit> = _goHome
+
+    private val _drawerOpen = MutableStateFlow(false)
+    val drawerOpen: StateFlow<Boolean> = _drawerOpen
 
     private val lookup =
         object : WorkspaceLookup {
@@ -137,6 +145,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     homePages = home.toPages(byKey),
                     dockPages = dock.toPages(byKey),
                     searchTarget = graph.searchTargets.resolve(settings.searchTarget),
+                    apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
                     loaded = true,
                 )
             }
@@ -157,8 +166,27 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         item.app?.let(graph.appRepository::launch)
     }
 
+    /** Launches from the drawer; the drawer closes behind the app. */
+    fun launch(app: AppEntry) {
+        graph.appRepository.launch(app)
+        _drawerOpen.value = false
+    }
+
+    fun openDrawer() {
+        _drawerOpen.value = true
+    }
+
+    fun closeDrawer() {
+        _drawerOpen.value = false
+    }
+
+    /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */
     fun onHomeIntent() {
-        _goHome.tryEmit(Unit)
+        if (_drawerOpen.value) {
+            _drawerOpen.value = false
+        } else {
+            _goHome.tryEmit(Unit)
+        }
     }
 
     private fun ContainerContent.toPages(apps: Map<String, AppEntry>): List<HomePage> =
