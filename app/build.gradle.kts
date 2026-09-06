@@ -5,6 +5,28 @@ plugins {
     alias(libs.plugins.room3)
 }
 
+// Release signing. The key is a PKCS#12 file kept with application data (Application Support on
+// macOS, XDG data on Linux) and its password lives in the macOS Keychain under
+// "runway-release-signing". Either can be overridden with a project property, which is how CI
+// would supply them from secrets. With no key file the release build is unsigned.
+val home: String = System.getProperty("user.home")
+val defaultStore =
+    if (System.getProperty("os.name").startsWith("Mac")) {
+        "$home/Library/Application Support/Runway/release.p12"
+    } else {
+        "${System.getenv("XDG_DATA_HOME") ?: "$home/.local/share"}/runway/release.p12"
+    }
+val releaseStore = providers.gradleProperty("runwayStoreFile").orElse(defaultStore).map(::file)
+val keychainPassword =
+    providers
+        .exec {
+            commandLine("security", "find-generic-password", "-s", "runway-release-signing", "-w")
+        }
+        .standardOutput
+        .asText
+        .map { it.trim() }
+val releasePassword = providers.gradleProperty("runwayStorePassword").orElse(keychainPassword)
+
 android {
     namespace = "com.grayvines.runway"
     compileSdk = 37
@@ -18,6 +40,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseStore.get().exists()) {
+            create("release") {
+                storeFile = releaseStore.get()
+                storePassword = releasePassword.get()
+                keyAlias = "runway"
+                keyPassword = releasePassword.get()
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Coexists with an installed release build.
@@ -28,6 +61,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
@@ -66,38 +100,43 @@ kotlin {
     }
 }
 
-// `./gradlew installAsHome`: install the debug build, make it the home app, go home.
+// `./gradlew installAsHome` (debug) and `installReleaseAsHome`: install, make it the home app, go
+// home.
 val adb = androidComponents.sdkComponents.adb.map { it.asFile.absolutePath }
 
-tasks.register<Exec>("setDefaultHome") {
-    mustRunAfter("installDebug")
-    commandLine(
-        adb.get(),
-        "shell",
-        "cmd",
-        "package",
-        "set-home-activity",
-        "com.grayvines.runway.debug/com.grayvines.runway.LauncherActivity",
-    )
+fun registerInstallAsHome(name: String, installTask: String, applicationId: String) {
+    val setHome =
+        tasks.register<Exec>("${name}SetDefaultHome") {
+            mustRunAfter(installTask)
+            commandLine(
+                adb.get(),
+                "shell",
+                "cmd",
+                "package",
+                "set-home-activity",
+                "$applicationId/com.grayvines.runway.LauncherActivity",
+            )
+        }
+    val goHome =
+        tasks.register<Exec>("${name}GoHome") {
+            mustRunAfter(setHome)
+            commandLine(
+                adb.get(),
+                "shell",
+                "am",
+                "start",
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.HOME",
+            )
+        }
+    tasks.register(name) { dependsOn(installTask, setHome, goHome) }
 }
 
-tasks.register<Exec>("goHome") {
-    mustRunAfter("setDefaultHome")
-    commandLine(
-        adb.get(),
-        "shell",
-        "am",
-        "start",
-        "-a",
-        "android.intent.action.MAIN",
-        "-c",
-        "android.intent.category.HOME",
-    )
-}
+registerInstallAsHome("installAsHome", "installDebug", "com.grayvines.runway.debug")
 
-tasks.register("installAsHome") {
-    dependsOn("installDebug", "setDefaultHome", "goHome")
-}
+registerInstallAsHome("installReleaseAsHome", "installRelease", "com.grayvines.runway")
 
 // The connected test task only says "there were failing tests"; name them, with messages.
 val printConnectedTestFailures by tasks.registering {
