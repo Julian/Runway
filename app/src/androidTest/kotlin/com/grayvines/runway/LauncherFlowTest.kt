@@ -31,6 +31,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -481,6 +482,27 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun hoveringTheCentreOfAnOuterCellOrSlotNeverFlips() {
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        val onPageTwo = labelOnPage(1)
+        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 3))
+        Thread.sleep(EDGE_FLIP_MS)
+        compose.waitForIdle()
+        assertFalse(icon(onPageTwo).isDisplayedOrFalse()) // still on the first page
+        // On to the dock's empty outer slot, and hold there too.
+        dragOn(to = grid.dockSlot(settings.dockSlots))
+        Thread.sleep(EDGE_FLIP_MS)
+        compose.waitForIdle()
+        assertEquals(1, dockPageCount())
+        release()
+        compose.waitUntil(TIMEOUT_MS) {
+            placementOf(firstHomeApp)?.let {
+                it.container == Container.DOCK && it.pageIndex == 0 && it.x == settings.dockSlots
+            } ?: false
+        }
+    }
+
+    @Test
     fun dockIconsCanBeDraggedOntoAHomePage() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstDockApp, to = grid.homeCell(4, 4))
@@ -712,6 +734,8 @@ class LauncherFlowTest {
         const val LONG_PRESS_MS = 1_000L
         /** Longer than the dwell that adds a page, in real time. */
         const val EDGE_ADD_MS = 2_500L
+        /** Longer than the dwell that flips a page, in real time. */
+        const val EDGE_FLIP_MS = 1_200L
         const val LIFT_HOLD_MS = 550L
         const val FRAME_MS = 16L
         const val LIFT_FRAMES = 60

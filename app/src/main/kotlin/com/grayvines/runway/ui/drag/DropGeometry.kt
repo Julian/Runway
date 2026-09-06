@@ -66,8 +66,11 @@ enum class Edge(val pageDelta: Int) {
 /** An edge of the home pages or of the dock, being hovered. */
 data class EdgeHover(val container: Container, val edge: Edge)
 
-/** Fraction of an area's width, at each side, that counts as its edge. */
-const val EDGE_FRACTION = 0.08f
+/**
+ * The edge zone is the outer quarter of the outer column or slot, so the centre of an outer cell is
+ * always a safe drop, however many columns there are.
+ */
+const val EDGE_CELL_FRACTION = 0.25f
 
 /**
  * The home or dock edge under [pointer], for page flipping. Points beyond a side still count: under
@@ -75,12 +78,12 @@ const val EDGE_FRACTION = 0.08f
  * edge.
  */
 fun DropAreas.edgeAt(pointer: Point): EdgeHover? =
-    home?.edgeAt(pointer)?.let { EdgeHover(Container.HOME, it) }
-        ?: dock?.edgeAt(pointer)?.let { EdgeHover(Container.DOCK, it) }
+    home?.edgeAt(pointer, columns)?.let { EdgeHover(Container.HOME, it) }
+        ?: dock?.edgeAt(pointer, dockSlots)?.let { EdgeHover(Container.DOCK, it) }
 
-private fun Bounds.edgeAt(pointer: Point): Edge? {
+private fun Bounds.edgeAt(pointer: Point, cellsAcross: Int): Edge? {
     if (pointer.y !in top..bottom) return null
-    val zone = width * EDGE_FRACTION
+    val zone = width / cellsAcross * EDGE_CELL_FRACTION
     return when {
         pointer.x < left + zone -> Edge.LEFT
         pointer.x > right - zone -> Edge.RIGHT

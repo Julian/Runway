@@ -43,12 +43,16 @@ class DropGeometryTest {
     }
 
     @Test
-    fun `edges are the outer 8 percent of the home area and of the dock`() {
+    fun `edges are the outer quarter of the outer cell, on home and on the dock`() {
         val home = { edge: Edge -> EdgeHover(Container.HOME, edge) }
         val dock = { edge: Edge -> EdgeHover(Container.DOCK, edge) }
         assertEquals(home(Edge.LEFT), areas.edgeAt(Point(10f, 100f)))
         assertEquals(home(Edge.RIGHT), areas.edgeAt(Point(290f, 100f)))
         assertNull(areas.edgeAt(Point(150f, 100f)))
+        assertNull(areas.edgeAt(Point(30f, 100f))) // inside the outer cell, past its outer quarter
+        assertNull(areas.edgeAt(Point(250f, 100f))) // the outer cell's centre is a safe drop
+        assertEquals(dock(Edge.RIGHT), areas.edgeAt(Point(280f, 225f)))
+        assertNull(areas.edgeAt(Point(250f, 225f)))
         assertEquals(dock(Edge.LEFT), areas.edgeAt(Point(10f, 225f)))
         assertEquals(dock(Edge.RIGHT), areas.edgeAt(Point(340f, 225f)))
         assertNull(areas.edgeAt(Point(150f, 225f)))
