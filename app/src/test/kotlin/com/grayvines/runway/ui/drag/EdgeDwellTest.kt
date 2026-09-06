@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.Container
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
@@ -13,14 +14,14 @@ class EdgeDwellTest {
         EdgeDwell.Actions {
         val events = mutableListOf<String>()
 
-        override fun isPastTheEnd(edge: Edge) = edge == Edge.RIGHT && page >= pages - 1
+        override fun isPastTheEnd(hover: EdgeHover) = hover.edge == Edge.RIGHT && page >= pages - 1
 
-        override fun flip(delta: Int) {
+        override fun flip(container: Container, delta: Int) {
             page = (page + delta).coerceIn(0, pages - 1)
             events += "flip$delta"
         }
 
-        override suspend fun addPage(): Boolean {
+        override suspend fun addPage(container: Container): Boolean {
             events += "add"
             if (addFails) return false
             pages++
@@ -31,7 +32,7 @@ class EdgeDwellTest {
     @Test
     fun `a failed page add is not retried and does not flip`() = runTest {
         val fake = Fake(pages = 1, page = 0, addFails = true)
-        EdgeDwell(backgroundScope, fake).hover(Edge.RIGHT)
+        EdgeDwell(backgroundScope, fake).hover(EdgeHover(Container.HOME, Edge.RIGHT))
         advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 3)
         assertEquals(listOf("add"), fake.events)
     }
@@ -40,7 +41,7 @@ class EdgeDwellTest {
     fun `flips once per dwell while held at an edge`() = runTest {
         val fake = Fake(pages = 4, page = 0)
         val dwell = EdgeDwell(backgroundScope, fake)
-        dwell.hover(Edge.RIGHT)
+        dwell.hover(EdgeHover(Container.HOME, Edge.RIGHT))
         advanceTimeBy(EdgeDwell.FLIP_MS * 3 + 1)
         assertEquals(listOf("flip1", "flip1", "flip1"), fake.events)
         dwell.stop()
@@ -51,7 +52,7 @@ class EdgeDwellTest {
     @Test
     fun `at the end, a long hold adds one page and flips to it, once`() = runTest {
         val fake = Fake(pages = 2, page = 1)
-        EdgeDwell(backgroundScope, fake).hover(Edge.RIGHT)
+        EdgeDwell(backgroundScope, fake).hover(EdgeHover(Container.HOME, Edge.RIGHT))
         advanceTimeBy(EdgeDwell.ADD_PAGE_MS) // one tick short
         assertEquals(emptyList<String>(), fake.events)
         advanceTimeBy(EdgeDwell.FLIP_MS)
@@ -64,7 +65,7 @@ class EdgeDwellTest {
     fun `the long hold is counted from arriving at the end, not from the start of the drag`() =
         runTest {
             val fake = Fake(pages = 4, page = 0)
-            EdgeDwell(backgroundScope, fake).hover(Edge.RIGHT)
+            EdgeDwell(backgroundScope, fake).hover(EdgeHover(Container.HOME, Edge.RIGHT))
             advanceTimeBy(EdgeDwell.FLIP_MS * 3 + 1) // flips 0 → 3, the last page
             assertEquals(3, fake.events.count { it == "flip1" })
             advanceTimeBy(EdgeDwell.FLIP_MS * 2) // 900 ms at the end: not yet
@@ -77,10 +78,10 @@ class EdgeDwellTest {
     fun `leaving and returning to the edge restarts the hold`() = runTest {
         val fake = Fake(pages = 1, page = 0)
         val dwell = EdgeDwell(backgroundScope, fake)
-        dwell.hover(Edge.RIGHT)
+        dwell.hover(EdgeHover(Container.HOME, Edge.RIGHT))
         advanceTimeBy(EdgeDwell.FLIP_MS * 2 + 1)
         dwell.hover(null)
-        dwell.hover(Edge.RIGHT)
+        dwell.hover(EdgeHover(Container.HOME, Edge.RIGHT))
         advanceTimeBy(EdgeDwell.FLIP_MS * 2 + 1)
         assertEquals(emptyList<String>(), fake.events)
         advanceTimeBy(EdgeDwell.FLIP_MS)
@@ -90,7 +91,7 @@ class EdgeDwellTest {
     @Test
     fun `the left edge on the first page does nothing harmful`() = runTest {
         val fake = Fake(pages = 3, page = 0)
-        EdgeDwell(backgroundScope, fake).hover(Edge.LEFT)
+        EdgeDwell(backgroundScope, fake).hover(EdgeHover(Container.HOME, Edge.LEFT))
         advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
         assertEquals(0, fake.events.count { it == "add" })
         assertEquals(0, fake.page)

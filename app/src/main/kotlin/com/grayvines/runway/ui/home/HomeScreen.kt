@@ -42,7 +42,8 @@ private val DRAG_CORNER = 28.dp
 fun HomeScreen(
     state: HomeState,
     goHome: Flow<Unit>,
-    flipPage: Flow<Int>,
+    flipHomePage: Flow<Int>,
+    flipDockPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
@@ -54,7 +55,8 @@ fun HomeScreen(
     val settings = state.settings
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
-    PagerCommands(homePager, goHome, flipPage)
+    PagerCommands(homePager, goHome, flipHomePage)
+    PageFlips(dockPager, flipDockPage)
     LaunchedEffect(homePager) { snapshotFlow { homePager.currentPage }.collect(onHomePageShown) }
     LaunchedEffect(dockPager) { snapshotFlow { dockPager.currentPage }.collect(onDockPageShown) }
 
@@ -111,6 +113,12 @@ fun HomeScreen(
 @Composable
 private fun PagerCommands(pager: PagerState, goHome: Flow<Unit>, flipPage: Flow<Int>) {
     LaunchedEffect(goHome) { goHome.collect { pager.animateScrollToPage(0) } }
+    PageFlips(pager, flipPage)
+}
+
+/** Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. */
+@Composable
+private fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
     LaunchedEffect(flipPage) {
         flipPage.collect { delta ->
             val next = pager.currentPage + delta

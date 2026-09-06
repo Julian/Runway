@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.Container
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -42,12 +43,20 @@ class DropGeometryTest {
     }
 
     @Test
-    fun `edges are the outer 8 percent of the home area`() {
-        assertEquals(Edge.LEFT, areas.edgeAt(Point(10f, 100f)))
-        assertEquals(Edge.RIGHT, areas.edgeAt(Point(290f, 100f)))
+    fun `edges are the outer 8 percent of the home area and of the dock`() {
+        val home = { edge: Edge -> EdgeHover(Container.HOME, edge) }
+        val dock = { edge: Edge -> EdgeHover(Container.DOCK, edge) }
+        assertEquals(home(Edge.LEFT), areas.edgeAt(Point(10f, 100f)))
+        assertEquals(home(Edge.RIGHT), areas.edgeAt(Point(290f, 100f)))
         assertNull(areas.edgeAt(Point(150f, 100f)))
-        assertNull(areas.edgeAt(Point(10f, 225f))) // in the dock, not the home area
-        assertEquals(Edge.RIGHT, areas.edgeAt(Point(340f, 100f))) // past the side still counts
+        assertEquals(dock(Edge.LEFT), areas.edgeAt(Point(10f, 225f)))
+        assertEquals(dock(Edge.RIGHT), areas.edgeAt(Point(340f, 225f)))
+        assertNull(areas.edgeAt(Point(150f, 225f)))
+        assertNull(areas.edgeAt(Point(10f, 300f))) // below everything
+        assertEquals(
+            home(Edge.RIGHT),
+            areas.edgeAt(Point(340f, 100f)),
+        ) // past the side still counts
         assertNull(DropAreas().edgeAt(Point(10f, 100f)))
     }
 

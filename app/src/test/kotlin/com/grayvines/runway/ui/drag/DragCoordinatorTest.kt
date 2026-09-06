@@ -33,12 +33,16 @@ class DragCoordinatorTest {
             override fun dockItems(page: Int) = emptyList<Placed>()
         }
 
-    private class FakeWorkspace(var pages: Int = 2, val moveSucceeds: Boolean = true) :
-        DragWorkspace {
+    private class FakeWorkspace(
+        var pages: Int = 2,
+        var dockPages: Int = 1,
+        val moveSucceeds: Boolean = true,
+    ) : DragWorkspace {
         val moves = mutableListOf<PendingMove>()
         val reflected = CompletableDeferred<Unit>()
-        override val homePageCount
-            get() = pages
+
+        override fun pageCount(container: Container) =
+            if (container == Container.DOCK) dockPages else pages
 
         override suspend fun move(move: PendingMove): Boolean {
             moves += move
@@ -47,8 +51,12 @@ class DragCoordinatorTest {
 
         override suspend fun awaitReflected(move: PendingMove) = reflected.await()
 
-        override suspend fun addHomePage(index: Int): Boolean {
-            pages = maxOf(pages, index + 1)
+        override suspend fun addPage(container: Container, index: Int): Boolean {
+            if (container == Container.DOCK) {
+                dockPages = maxOf(dockPages, index + 1)
+            } else {
+                pages = maxOf(pages, index + 1)
+            }
             return true
         }
     }
@@ -193,9 +201,10 @@ class DragCoordinatorTest {
         val workspace = FakeWorkspace(pages = 2)
         val c = DragCoordinator(backgroundScope, lookup, workspace)
         val flips = mutableListOf<Int>()
-        backgroundScope.launch { c.flipPage.collect { flips += it } }
+        backgroundScope.launch { c.flipHomePage.collect { flips += it } }
         c.layOut()
         c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(150f, 50f))
         c.dragTo(Point(299f, 50f)) // right edge of page 0
         advanceTimeBy(EdgeDwell.FLIP_MS + 1)
         assertEquals(listOf(1), flips)
@@ -214,4 +223,53 @@ class DragCoordinatorTest {
         advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
         assertEquals(3, workspace.pages) // nothing after cancel
     }
+
+    @Test
+    fun `dwelling at the dock's edge flips dock pages, and past the end adds a dock page`() =
+        runTest {
+            val workspace = FakeWorkspace(pages = 2, dockPages = 1)
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            val homeFlips = mutableListOf<Int>()
+            val dockFlips = mutableListOf<Int>()
+            backgroundScope.launch { c.flipHomePage.collect { homeFlips += it } }
+            backgroundScope.launch { c.flipDockPage.collect { dockFlips += it } }
+            c.layOut()
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.dragTo(Point(150f, 225f))
+            c.dragTo(Point(299f, 225f)) // right edge of the only dock page
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS + EdgeDwell.FLIP_MS)
+            assertEquals(2, workspace.dockPages)
+            assertEquals(listOf(1), dockFlips)
+            assertEquals(emptyList<Int>(), homeFlips)
+            assertEquals(2, workspace.pages) // the home pages are untouched
+            c.areas.dockPagePositioned(1, Bounds(0f, 200f, 300f, 250f), 1)
+            c.areas.dockPageShown(1, 1)
+            c.dragTo(Point(1f, 225f)) // over to the left edge: flips back, never adds
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
+            assertEquals(2, workspace.dockPages)
+            assertEquals(-1, dockFlips[1])
+            c.cancelDrag()
+        }
+
+    @Test
+    fun `an item lifted inside an edge zone flips nothing until the finger has left the zone`() =
+        runTest {
+            val workspace = FakeWorkspace(pages = 1, dockPages = 1)
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            val flips = mutableListOf<Int>()
+            backgroundScope.launch { c.flipDockPage.collect { flips += it } }
+            c.layOut()
+            val inTheZone = Point(295f, 225f) // the last dock slot's icon sits here
+            c.startDrag(source.copy(container = Container.DOCK, x = 2), inTheZone, grab)
+            c.dragTo(inTheZone)
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 3)
+            assertEquals(1, workspace.dockPages)
+            assertEquals(emptyList<Int>(), flips)
+            c.dragTo(Point(150f, 225f)) // away, then back to the edge: now it counts
+            c.dragTo(inTheZone)
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS + EdgeDwell.FLIP_MS)
+            assertEquals(2, workspace.dockPages)
+            assertEquals(listOf(1), flips)
+            c.cancelDrag()
+        }
 }

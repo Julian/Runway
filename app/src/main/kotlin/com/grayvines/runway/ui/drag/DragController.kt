@@ -45,8 +45,8 @@ data class DragState(
     val grab: Point,
     val target: DropTarget? = null,
     val plan: DropPlan? = null,
-    /** The home edge being hovered, which flips pages after a dwell. */
-    val edge: Edge? = null,
+    /** The edge being hovered, which flips pages after a dwell. */
+    val edge: EdgeHover? = null,
 )
 
 /** What the controller needs to know about the workspace to plan a drop. */
@@ -68,7 +68,7 @@ class DragController(private val lookup: WorkspaceLookup) {
         _state.value = DragState(source, pointer, grab)
     }
 
-    fun move(pointer: Point, target: DropTarget?, edge: Edge? = null) {
+    fun move(pointer: Point, target: DropTarget?, edge: EdgeHover? = null) {
         val current = _state.value ?: return
         val plan = target?.let { plan(current.source, it) }
         _state.value = current.copy(pointer = pointer, target = target, plan = plan, edge = edge)

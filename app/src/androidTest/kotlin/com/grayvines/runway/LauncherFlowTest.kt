@@ -415,6 +415,60 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun aLongHoldAtTheDocksEdgeAddsADockPageAndDropsThere() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
+        compose.waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
+        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
+        compose.waitForIdle()
+        release()
+        compose.waitUntil(TIMEOUT_MS) {
+            placementOf(firstHomeApp)?.let { it.container == Container.DOCK && it.pageIndex == 1 }
+                ?: false
+        }
+        assertEquals(settings.dockSlots - 1, placementOf(firstHomeApp)?.x)
+    }
+
+    @Test
+    fun holdingAtTheDocksLeftEdgeFlipsBackAndTheIconCanBeDroppedThere() {
+        // One spare slot on the first dock page, to come back to.
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        runBlocking { graph.workspace.addPage(Container.DOCK, 1) }
+        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 2 }
+        // Put an icon on the second dock page, then lift it and hold at the dock's left edge.
+        holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
+        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
+        compose.waitForIdle()
+        release()
+        compose.waitUntil(LONG_TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+        holdDrag(from = firstHomeApp, to = grid.dockLeftEdge())
+        compose.waitUntil(LONG_TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
+        // Back on the first page: carry it to the spare slot, entering from inside the edge zone.
+        dragOn(to = grid.dockSlot(settings.dockSlots) - Offset(grid.dockSlotWidth() / 3, 0f))
+        release()
+        compose.waitUntil(TIMEOUT_MS) {
+            placementOf(firstHomeApp)?.let { it.pageIndex == 0 && it.x == settings.dockSlots }
+                ?: false
+        }
+        assertEquals(2, dockPageCount()) // no third page from holding at the left
+    }
+
+    @Test
+    fun liftingTheLastDockIconAndHoldingStillAddsNoPage() {
+        // The last slot's icon sits inside the edge zone; merely lifting it must not flip.
+        val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
+        val start = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+        holdDrag(from = lastDockApp, to = start)
+        Thread.sleep(EDGE_ADD_MS)
+        compose.waitForIdle()
+        assertEquals(1, dockPageCount())
+        assertTrue(icon(firstDockApp).isDisplayedOrFalse()) // still on the first dock page
+        release()
+        compose.waitForIdle()
+        assertEquals(settings.dockSlots - 1, placementOf(lastDockApp)?.x)
+    }
+
+    @Test
     fun dockIconsCanBeDraggedOntoAHomePage() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstDockApp, to = grid.homeCell(4, 4))
@@ -447,6 +501,11 @@ class LauncherFlowTest {
                 page.right - page.width * 0.02f,
                 page.top + (row + 0.5f) * page.height / pageRows,
             )
+
+        /** Just inside the dock's right or left edge zone. */
+        fun dockRightEdge() = Offset(dock.right - dock.width * 0.02f, dock.center.y)
+
+        fun dockLeftEdge() = Offset(dock.left + dock.width * 0.02f, dock.center.y)
 
         fun dockSlotWidth() = dock.width / dockSlots
 
@@ -493,6 +552,19 @@ class LauncherFlowTest {
 
     private fun release() {
         compose.onRoot().performTouchInput { up() }
+    }
+
+    /** Moves the held finger on to [to] in steps. */
+    private fun dragOn(to: Offset) {
+        compose.onRoot().performTouchInput {
+            val start = currentPosition()!!
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += (to - start) / DRAG_STEPS.toFloat()
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+        }
     }
 
     /**
@@ -565,6 +637,10 @@ class LauncherFlowTest {
             .firstOrNull { it.component == component }
     }
 
+    private fun dockPageCount() = runBlocking {
+        graph.workspace.observe(Container.DOCK).first().pages.size
+    }
+
     private fun labelOnPage(page: Int): String = runBlocking {
         val item =
             graph.workspace
@@ -622,6 +698,8 @@ class LauncherFlowTest {
     private companion object {
         const val TIMEOUT_MS = 5_000L
         const val LONG_PRESS_MS = 1_000L
+        /** Longer than the dwell that adds a page, in real time. */
+        const val EDGE_ADD_MS = 2_500L
         const val LIFT_HOLD_MS = 550L
         const val FRAME_MS = 16L
         const val LIFT_FRAMES = 60

@@ -14,7 +14,7 @@ data class Settling(val itemId: Long, val from: Point)
 
 /** What the coordinator needs from persistence. Implementations report failure, never throw. */
 interface DragWorkspace {
-    val homePageCount: Int
+    fun pageCount(container: Container): Int
 
     /** Writes the move; false if it could not be saved. */
     suspend fun move(move: PendingMove): Boolean
@@ -22,8 +22,10 @@ interface DragWorkspace {
     /** Returns once the observed layout shows [move] applied. */
     suspend fun awaitReflected(move: PendingMove)
 
-    /** Adds a home page at [index] and returns once it is observable; false on failure. */
-    suspend fun addHomePage(index: Int): Boolean
+    /**
+     * Adds a page at [index] to [container] and returns once it is observable; false on failure.
+     */
+    suspend fun addPage(container: Container, index: Int): Boolean
 }
 
 /**
@@ -54,10 +56,12 @@ class DragCoordinator(
      */
     val settling: StateFlow<Settling?> = _settling
 
-    private val _flipPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val _flipHomePage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val _flipDockPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
-    /** Page delta requested by dwelling at an edge. */
-    val flipPage: SharedFlow<Int> = _flipPage
+    /** Page deltas requested by dwelling at a home or dock edge. */
+    val flipHomePage: SharedFlow<Int> = _flipHomePage
+    val flipDockPage: SharedFlow<Int> = _flipDockPage
 
     /** Where home and dock are on screen; a still finger is re-evaluated when that changes. */
     val areas = DropAreaTracker { drag.value?.let { dragTo(it.pointer) } }
@@ -66,27 +70,50 @@ class DragCoordinator(
         EdgeDwell(
             scope,
             object : EdgeDwell.Actions {
-                override fun isPastTheEnd(edge: Edge) =
-                    edge == Edge.RIGHT && areas.areas.homePage >= workspace.homePageCount - 1
-
-                override fun flip(delta: Int) {
-                    _flipPage.tryEmit(delta)
+                override fun isPastTheEnd(hover: EdgeHover): Boolean {
+                    if (hover.edge != Edge.RIGHT) return false
+                    val shown =
+                        if (hover.container == Container.DOCK) {
+                            areas.areas.dockPage
+                        } else {
+                            areas.areas.homePage
+                        }
+                    return shown >= workspace.pageCount(hover.container) - 1
                 }
 
-                override suspend fun addPage() = workspace.addHomePage(workspace.homePageCount)
+                override fun flip(container: Container, delta: Int) {
+                    if (container == Container.DOCK) {
+                        _flipDockPage.tryEmit(delta)
+                    } else {
+                        _flipHomePage.tryEmit(delta)
+                    }
+                }
+
+                override suspend fun addPage(container: Container) =
+                    workspace.addPage(container, workspace.pageCount(container))
             },
         )
 
-    fun startDrag(source: DragSource, pointer: Point, grab: Point) =
+    /**
+     * Edges count only once the finger has been away from them during this drag: an item lifted
+     * from an outer cell starts inside the edge zone, and must not flip pages by just being held.
+     */
+    private var edgesArmed = false
+
+    fun startDrag(source: DragSource, pointer: Point, grab: Point) {
+        edgesArmed = false
         controller.start(source, pointer, grab)
+    }
 
     fun dragTo(pointer: Point) {
         val current = drag.value ?: return
         val target =
             areas.areas.targetFor(pointer, current.grab, current.source.spanX, current.source.spanY)
         val edge = areas.areas.edgeAt(pointer)
-        edgeDwell.hover(edge)
-        controller.move(pointer, target, edge)
+        if (edge == null) edgesArmed = true
+        val hovered = edge.takeIf { edgesArmed }
+        edgeDwell.hover(hovered)
+        controller.move(pointer, target, hovered)
     }
 
     /** Commits the planned drop, if any; the override shows it until the database catches up. */

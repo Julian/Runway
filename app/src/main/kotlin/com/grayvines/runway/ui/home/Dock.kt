@@ -32,6 +32,9 @@ fun Dock(
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxWidth().height(slot.height).testTag(DOCK_TAG),
+        // As on home: the dragged cell owns the gesture, so its page must stay composed while
+        // the dock flips away from it.
+        beyondViewportPageCount = if (drag?.state != null) pages.size else 1,
     ) { page ->
         GridPage(
             items = pages[page].items.filter { it.x < slots },

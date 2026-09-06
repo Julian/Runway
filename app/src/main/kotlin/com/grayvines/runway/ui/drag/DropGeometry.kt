@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.Container
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -56,26 +57,33 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
     }
 }
 
-/** Which side of the home area a drag is hovering at, if any. */
+/** Which side of an area a drag is hovering at. */
 enum class Edge(val pageDelta: Int) {
     LEFT(-1),
     RIGHT(1),
 }
 
-/** Fraction of the home area's width, at each side, that counts as its edge. */
+/** An edge of the home pages or of the dock, being hovered. */
+data class EdgeHover(val container: Container, val edge: Edge)
+
+/** Fraction of an area's width, at each side, that counts as its edge. */
 const val EDGE_FRACTION = 0.08f
 
 /**
- * The home edge under [pointer], for page flipping. Points beyond a side still count: under the
- * drag zoom the area's visual edge sits inside the screen edge, and fingers go to the screen edge.
+ * The home or dock edge under [pointer], for page flipping. Points beyond a side still count: under
+ * the drag zoom the area's visual edge sits inside the screen edge, and fingers go to the screen
+ * edge.
  */
-fun DropAreas.edgeAt(pointer: Point): Edge? {
-    val area = home ?: return null
-    if (pointer.y !in area.top..area.bottom) return null
-    val zone = area.width * EDGE_FRACTION
+fun DropAreas.edgeAt(pointer: Point): EdgeHover? =
+    home?.edgeAt(pointer)?.let { EdgeHover(Container.HOME, it) }
+        ?: dock?.edgeAt(pointer)?.let { EdgeHover(Container.DOCK, it) }
+
+private fun Bounds.edgeAt(pointer: Point): Edge? {
+    if (pointer.y !in top..bottom) return null
+    val zone = width * EDGE_FRACTION
     return when {
-        pointer.x < area.left + zone -> Edge.LEFT
-        pointer.x > area.right - zone -> Edge.RIGHT
+        pointer.x < left + zone -> Edge.LEFT
+        pointer.x > right - zone -> Edge.RIGHT
         else -> null
     }
 }

@@ -57,6 +57,9 @@ data class HomeState(
     val loaded: Boolean = false,
 )
 
+fun HomeState.pages(container: Container) =
+    if (container == Container.DOCK) dockPages else homePages
+
 class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _goHome = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -83,8 +86,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** Persistence for drags; failures are logged and reported, never thrown. */
     private val dragWorkspace =
         object : DragWorkspace {
-            override val homePageCount: Int
-                get() = state.value.homePages.size
+            override fun pageCount(container: Container) = state.value.pages(container).size
 
             override suspend fun move(move: PendingMove): Boolean =
                 logged("could not save the move; the item snaps back") {
@@ -97,10 +99,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.workspace.observe(move.container).first { it.reflects(move) }
             }
 
-            override suspend fun addHomePage(index: Int): Boolean =
+            override suspend fun addPage(container: Container, index: Int): Boolean =
                 logged("could not add a page") {
-                    graph.workspace.addPage(Container.HOME, index)
-                    state.first { it.homePages.size > index }
+                    graph.workspace.addPage(container, index)
+                    state.first { it.pages(container).size > index }
                 }
 
             private suspend fun logged(what: String, block: suspend () -> Unit): Boolean =

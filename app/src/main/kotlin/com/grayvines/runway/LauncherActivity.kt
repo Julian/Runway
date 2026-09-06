@@ -40,7 +40,8 @@ class LauncherActivity : ComponentActivity() {
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
-                    flipPage = viewModel.dragging.flipPage,
+                    flipHomePage = viewModel.dragging.flipHomePage,
+                    flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     drag =
                         DragSession(
