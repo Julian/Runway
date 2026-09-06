@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.search.SearchTarget
 
@@ -75,6 +76,17 @@ fun SettingsScreen(
             Toggle("Home", settings.homeLabels) { v -> onChange { it.copy(homeLabels = v) } }
             Toggle("Dock", settings.dockLabels) { v -> onChange { it.copy(dockLabels = v) } }
             Toggle("Drawer", settings.drawerLabels) { v -> onChange { it.copy(drawerLabels = v) } }
+
+            Section("Drawer")
+            OptionRow(
+                label = "Swipe sensitivity",
+                current = settings.drawerSwipe.label,
+                options = DrawerSwipe.entries.map { it.label },
+            ) { picked ->
+                onChange {
+                    it.copy(drawerSwipe = DrawerSwipe.entries.first { e -> e.label == picked })
+                }
+            }
 
             Section("Search bar")
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->
@@ -167,6 +179,40 @@ private fun SearchTargetPicker(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp),
     )
+}
+
+/** A row with a dropdown button of plain text options. */
+@Composable
+private fun OptionRow(
+    label: String,
+    current: String,
+    options: List<String>,
+    onPick: (String) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { open = true }) {
+                Text(current)
+                Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            open = false
+                            onPick(option)
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

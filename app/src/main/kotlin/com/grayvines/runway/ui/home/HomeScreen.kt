@@ -95,7 +95,7 @@ fun HomeScreen(
         val drawer = remember { DrawerMotion(scope) }
         // The home area steps back for a lifted icon and for the drawer alike.
         val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.revealed.value)
-        drawer.laidOut(with(LocalDensity.current) { maxHeight.toPx() })
+        drawer.laidOut(with(LocalDensity.current) { maxHeight.toPx() }, settings.drawerSwipe)
         LaunchedEffect(drawerOpen) { drawer.settle(drawerOpen) }
         val releaseDrawer = { velocity: Float ->
             drawer.release(velocity, drawerOpen, onOpenDrawer, onCloseDrawer)

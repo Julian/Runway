@@ -3,14 +3,9 @@ package com.grayvines.runway.ui.drawer
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import com.grayvines.runway.data.settings.DrawerSwipe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-
-/** Past this much showing, a released drawer opens; below it, it falls back. */
-private const val OPEN_FRACTION = 0.3f
-
-/** A flick faster than this, in pull distances per second, decides regardless of position. */
-private const val FLICK = 1.5f
 
 /** A pull of this much of the screen height brings the drawer all the way up. */
 private const val PULL_FRACTION = 0.6f
@@ -23,9 +18,14 @@ private const val PULL_FRACTION = 0.6f
 class DrawerMotion(private val scope: CoroutineScope) {
     val revealed = Animatable(0f)
     private var travel = 1f
+    private var openAt = 0f
+    private var flick = 0f
 
-    fun laidOut(heightPx: Float) {
+    /** [swipe] sets the pull and the flick that open; both are given as shares of the screen. */
+    fun laidOut(heightPx: Float, swipe: DrawerSwipe) {
         travel = heightPx * PULL_FRACTION
+        openAt = swipe.openAt / PULL_FRACTION
+        flick = swipe.flick / PULL_FRACTION
     }
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
@@ -38,7 +38,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * drawer should end up other than it is; otherwise animates back to where it belongs.
      */
     fun release(velocity: Float, open: Boolean, onOpen: () -> Unit, onClose: () -> Unit) {
-        val wantOpen = shouldOpen(revealed.value, -velocity / travel)
+        val wantOpen = shouldOpen(revealed.value, -velocity / travel, openAt, flick)
         when {
             wantOpen && !open -> onOpen()
             !wantOpen && open -> onClose()
@@ -52,10 +52,14 @@ class DrawerMotion(private val scope: CoroutineScope) {
     }
 }
 
-/** [upwardsPerSecond] is in pull distances per second, positive when the finger moves up. */
-internal fun shouldOpen(revealed: Float, upwardsPerSecond: Float): Boolean =
+/**
+ * [upwardsPerSecond] is in pull distances per second, positive when the finger moves up. A flick
+ * faster than [flick] decides on its own; otherwise past [openAt] (a share of the pull distance) a
+ * released drawer opens, below it it falls back.
+ */
+internal fun shouldOpen(revealed: Float, upwardsPerSecond: Float, openAt: Float, flick: Float) =
     when {
-        upwardsPerSecond > FLICK -> true
-        upwardsPerSecond < -FLICK -> false
-        else -> revealed >= OPEN_FRACTION
+        upwardsPerSecond > flick -> true
+        upwardsPerSecond < -flick -> false
+        else -> revealed >= openAt
     }

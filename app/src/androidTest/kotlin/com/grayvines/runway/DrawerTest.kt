@@ -18,6 +18,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
@@ -127,6 +128,33 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed()
     }
 
+    @Test
+    fun theSwipeSensitivitySettingDecidesWhatAModestPullDoes() {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        fun pull() =
+            compose.onRoot().performTouchInput {
+                down(pages.center)
+                repeat(PULL_STEPS) {
+                    moveBy(Offset(0f, -root.height * MODEST_PULL / PULL_STEPS))
+                    advanceEventTime(PULL_STEP_MS)
+                }
+                up()
+            }
+        runBlocking { graph.settings.update { it.copy(drawerSwipe = DrawerSwipe.LOW) } }
+        compose.waitForIdle()
+        pull()
+        awaitDrawerClosed() // a tenth of the screen is not enough on Low
+        runBlocking { graph.settings.update { it.copy(drawerSwipe = DrawerSwipe.HIGH) } }
+        compose.waitForIdle()
+        pull()
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
+                abs(it.boundsInRoot.top - root.top) < 1f
+            } ?: false
+        }
+    }
+
     private fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
         compose.waitUntil(TIMEOUT_MS) {
@@ -148,5 +176,6 @@ class DrawerTest : LauncherFixture() {
         const val PULL_STEP_MS = 40L // slow enough not to count as a flick
         const val PARTIAL_PULL = 0.1f // a 0.6-screen pull reveals fully; this is a sixth of it
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
+        const val MODEST_PULL = 0.1f // between the High and Low thresholds
     }
 }

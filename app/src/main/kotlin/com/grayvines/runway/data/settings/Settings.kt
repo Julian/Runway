@@ -1,5 +1,16 @@
 package com.grayvines.runway.data.settings
 
+/**
+ * What it takes to open the drawer: a pull of [openAt] of the screen height, or a flick faster than
+ * [flick] screen heights per second at any distance.
+ */
+@Suppress("MagicNumber") // the settings are the numbers
+enum class DrawerSwipe(val label: String, val openAt: Float, val flick: Float) {
+    LOW("Low", openAt = 0.2f, flick = 1.2f),
+    MEDIUM("Medium", openAt = 0.12f, flick = 0.9f),
+    HIGH("High", openAt = 0.06f, flick = 0.6f),
+}
+
 /** User configuration. The defaults are the product. */
 data class Settings(
     val columns: Int = DEFAULT_COLUMNS,
@@ -11,6 +22,7 @@ data class Settings(
     val searchBarAtTop: Boolean = true,
     /** Package that receives the web-search intent; null picks Firefox, else the first handler. */
     val searchTarget: String? = null,
+    val drawerSwipe: DrawerSwipe = DrawerSwipe.MEDIUM,
 ) {
     /** Rows left for items: the dock and the search bar each take one full row. */
     val pageRows: Int
