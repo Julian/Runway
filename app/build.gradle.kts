@@ -142,32 +142,40 @@ registerInstallAsHome("installAsHome", "installDebug", "com.grayvines.runway.deb
 registerInstallAsHome("installReleaseAsHome", "installRelease", "com.grayvines.runway")
 
 // The connected test task only says "there were failing tests"; name them, with messages.
-val printConnectedTestFailures by tasks.registering {
-    val results = layout.buildDirectory.dir("outputs/androidTest-results/connected")
-    doLast {
-        val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
-        results
-            .get()
-            .asFile
-            .walkTopDown()
-            .filter { it.extension == "xml" }
-            .flatMap { file ->
-                val cases = parser.parse(file).getElementsByTagName("testcase")
-                (0 until cases.length).asSequence().map { cases.item(it) as org.w3c.dom.Element }
-            }
-            .filter { it.getElementsByTagName("failure").length > 0 }
-            .forEach { case ->
-                val failure = case.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
-                val message = failure.getAttribute("message").ifEmpty { failure.textContent }
-                logger.error(
-                    "FAILED {}.{}\n    {}",
-                    case.getAttribute("classname"),
-                    case.getAttribute("name"),
-                    message.lineSequence().first(),
-                )
-            }
+val printConnectedTestFailures =
+    tasks.register("printConnectedTestFailures") {
+        val results = layout.buildDirectory.dir("outputs/androidTest-results/connected")
+        doLast {
+            val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            results
+                .get()
+                .asFile
+                .walkTopDown()
+                .filter { it.extension == "xml" }
+                .flatMap { file ->
+                    val cases = parser.parse(file).getElementsByTagName("testcase")
+                    (0 until cases.length).asSequence().map {
+                        cases.item(it) as org.w3c.dom.Element
+                    }
+                }
+                .filter { it.getElementsByTagName("failure").length > 0 }
+                .forEach { case ->
+                    val failure =
+                        case.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
+                    val message = failure.getAttribute("message").ifEmpty { failure.textContent }
+                    // A failed assumption is a skip, which the XML records as a failure anyway.
+                    val verdict =
+                        if ("AssumptionViolatedException" in message) "SKIPPED" else "FAILED"
+                    logger.error(
+                        "{} {}.{}\n    {}",
+                        verdict,
+                        case.getAttribute("classname"),
+                        case.getAttribute("name"),
+                        message.lineSequence().first(),
+                    )
+                }
+        }
     }
-}
 
 // Instrumented tests uninstall the app afterwards; put the debug build back as home.
 tasks
