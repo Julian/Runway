@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,9 @@ import kotlinx.coroutines.flow.Flow
 private const val ICON_INSET = 0.3f
 
 private val DRAG_CORNER = 28.dp
+
+/** A dwell flips every 450 ms; the scroll must be over well before the next tick. */
+private const val FLIP_SCROLL_MS = 250
 
 /**
  * The launcher surface. The grid is [Settings.columns] × [Settings.rows]; the search bar and the
@@ -116,13 +120,18 @@ private fun PagerCommands(pager: PagerState, goHome: Flow<Unit>, flipPage: Flow<
     PageFlips(pager, flipPage)
 }
 
-/** Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. */
+/**
+ * Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. The scroll
+ * is shorter than the dwell between ticks, so each page settles before the next flip.
+ */
 @Composable
 private fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
     LaunchedEffect(flipPage) {
         flipPage.collect { delta ->
             val next = pager.currentPage + delta
-            if (next in 0 until pager.pageCount) pager.animateScrollToPage(next)
+            if (next in 0 until pager.pageCount) {
+                pager.animateScrollToPage(next, animationSpec = tween(FLIP_SCROLL_MS))
+            }
         }
     }
 }

@@ -1,11 +1,13 @@
 package com.grayvines.runway
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -44,6 +46,7 @@ import org.junit.runner.RunWith
  * whatever layout the debug build had.
  */
 @RunWith(AndroidJUnit4::class)
+@Suppress("LargeClass") // being split into a fixture and per-feature suites
 class LauncherFlowTest {
     @get:Rule val compose = createAndroidComposeRule<LauncherActivity>()
 
@@ -503,6 +506,65 @@ class LauncherFlowTest {
     }
 
     @Test
+    fun edgeFlippingVisitsEveryPageAndLetsEachSettle() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        // Three pages, each with an icon to recognise it by.
+        val onPageTwo = labelOnPage(1)
+        runBlocking {
+            graph.workspace.addPage(Container.HOME, 2)
+            graph.workspace.moveItem(
+                placementOf(onPageTwo)!!.id,
+                Container.HOME,
+                2,
+                0,
+                0,
+                emptyMap(),
+            )
+        }
+        compose.waitUntil(TIMEOUT_MS) { placementOf(onPageTwo)?.pageIndex == 2 }
+        val onPageOne = labelOnPage(1)
+        val pages = listOf(firstHomeApp, onPageOne, onPageTwo)
+        holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
+        // Which page is settled, sampled in real time until the last page shows. Fetching a node
+        // blocks while the pager animates, so a sample is (started, finished, page): -1 while
+        // scrolling. The home area is zoomed out during a drag, so cells are measured from the
+        // workspace as it is drawn.
+        val cells = pages.map { label -> placementOf(label)!!.let { it.x!! to it.y!! } }
+        val samples = mutableListOf<Triple<Long, Long, Int>>()
+        val deadline = SystemClock.uptimeMillis() + FLIP_WATCH_MS
+        while (SystemClock.uptimeMillis() < deadline && samples.lastOrNull()?.third != 2) {
+            Thread.sleep(FLIP_SAMPLE_MS)
+            val started = SystemClock.uptimeMillis()
+            val area = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+            val page = pages.indexOfFirst { label ->
+                val (x, y) = cells[pages.indexOf(label)]
+                val expected =
+                    Offset(
+                        area.left + (x + 0.5f) * area.width / settings.columns,
+                        area.top + (y + 0.5f) * area.height / settings.pageRows,
+                    )
+                val centre = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
+                (centre - expected).getDistance() < SETTLE_TOLERANCE_PX
+            }
+            samples += Triple(started, SystemClock.uptimeMillis(), page)
+        }
+        release()
+        val t0 = samples.first().first
+        val trace = samples.joinToString { "${it.first - t0}..${it.second - t0}:${it.third}" }
+        android.util.Log.d("RunwayFlip", trace)
+        val visited = samples.map { it.third }.filter { it >= 0 }.distinct()
+        assertEquals("pages in order, none skipped: $trace", listOf(0, 1, 2), visited)
+        // Page 1 rests before the next flip: from when it was first seen settled until the sample
+        // that blocked on the scroll to page 2 began. A queued flip would scroll on almost at once.
+        val settledOnOne = samples.first { it.third == 1 }.second
+        val leftOne = samples.first { it.third == 2 }.first
+        assertTrue(
+            "page 1 rested only ${leftOne - settledOnOne} ms: $trace",
+            leftOne - settledOnOne >= MIN_REST_MS,
+        )
+    }
+
+    @Test
     fun dockIconsCanBeDraggedOntoAHomePage() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstDockApp, to = grid.homeCell(4, 4))
@@ -723,6 +785,13 @@ class LauncherFlowTest {
     private fun icon(label: String) =
         compose.onNodeWithContentDescription(label, useUnmergedTree = true)
 
+    /** The icon in its cell, even while a copy of it is being dragged in the overlay. */
+    private fun cellIcon(label: String) =
+        compose.onNode(
+            hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG),
+            useUnmergedTree = true,
+        )
+
     private fun SemanticsNodeInteraction.isDisplayedOrFalse() = runCatching {
         assertIsDisplayed()
         true
@@ -736,6 +805,9 @@ class LauncherFlowTest {
         const val EDGE_ADD_MS = 2_500L
         /** Longer than the dwell that flips a page, in real time. */
         const val EDGE_FLIP_MS = 1_200L
+        const val FLIP_SAMPLE_MS = 30L
+        const val FLIP_WATCH_MS = 2_500L
+        const val MIN_REST_MS = 100L // the dwell is 450 ms and the scroll 250 ms
         const val LIFT_HOLD_MS = 550L
         const val FRAME_MS = 16L
         const val LIFT_FRAMES = 60
