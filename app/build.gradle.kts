@@ -17,6 +17,18 @@ val defaultStore =
         "${System.getenv("XDG_DATA_HOME") ?: "$home/.local/share"}/runway/release.p12"
     }
 val releaseStore = providers.gradleProperty("runwayStoreFile").orElse(defaultStore).map(::file)
+
+// Versioning: the name is the release tag (runwayVersionName, "v0.1.0" -> "0.1.0"), locally a
+// dev marker; the code is the commit count, which only ever grows, so every build can update
+// the one before it.
+val versionNameFromTag =
+    providers.gradleProperty("runwayVersionName").map { it.removePrefix("v") }.orElse("0.0-dev")
+val commitCount =
+    providers
+        .exec { commandLine("git", "rev-list", "--count", "HEAD") }
+        .standardOutput
+        .asText
+        .map { it.trim().toInt() }
 val keychainPassword =
     providers
         .exec {
@@ -35,8 +47,8 @@ android {
         applicationId = "com.grayvines.runway"
         minSdk = 36
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = commitCount.get()
+        versionName = versionNameFromTag.get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
