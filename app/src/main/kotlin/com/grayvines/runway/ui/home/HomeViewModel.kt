@@ -105,6 +105,13 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     state.first { it.pages(container).size > index }
                 }
 
+            override suspend fun pruneEmptyPages() {
+                logged("could not remove empty pages") {
+                    graph.workspace.pruneTrailingEmptyPages(Container.HOME)
+                    graph.workspace.pruneTrailingEmptyPages(Container.DOCK)
+                }
+            }
+
             private suspend fun logged(what: String, block: suspend () -> Unit): Boolean =
                 try {
                     block()

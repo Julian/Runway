@@ -40,6 +40,7 @@ class DragCoordinatorTest {
     ) : DragWorkspace {
         val moves = mutableListOf<PendingMove>()
         val reflected = CompletableDeferred<Unit>()
+        var prunes = 0
 
         override fun pageCount(container: Container) =
             if (container == Container.DOCK) dockPages else pages
@@ -50,6 +51,10 @@ class DragCoordinatorTest {
         }
 
         override suspend fun awaitReflected(move: PendingMove) = reflected.await()
+
+        override suspend fun pruneEmptyPages() {
+            prunes++
+        }
 
         override suspend fun addPage(container: Container, index: Int): Boolean {
             if (container == Container.DOCK) {
@@ -271,5 +276,32 @@ class DragCoordinatorTest {
             assertEquals(2, workspace.dockPages)
             assertEquals(listOf(1), flips)
             c.cancelDrag()
+        }
+
+    @Test
+    fun `empty pages are pruned once the drop is written, and after refused or cancelled drags`() =
+        runTest {
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            c.layOut()
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.dragTo(Point(250f, 150f))
+            c.endDrag()
+            runCurrent()
+            assertEquals(0, workspace.prunes) // not before the move is reflected
+            workspace.reflected.complete(Unit)
+            runCurrent()
+            assertEquals(1, workspace.prunes)
+
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.dragTo(Point(50f, 50f)) // its own cell: nothing to do
+            c.endDrag()
+            runCurrent()
+            assertEquals(2, workspace.prunes)
+
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.cancelDrag()
+            runCurrent()
+            assertEquals(3, workspace.prunes)
         }
 }

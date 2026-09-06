@@ -450,7 +450,7 @@ class LauncherFlowTest {
             placementOf(firstHomeApp)?.let { it.pageIndex == 0 && it.x == settings.dockSlots }
                 ?: false
         }
-        assertEquals(2, dockPageCount()) // no third page from holding at the left
+        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 1 } // the emptied page is pruned
     }
 
     @Test
@@ -466,6 +466,18 @@ class LauncherFlowTest {
         release()
         compose.waitForIdle()
         assertEquals(settings.dockSlots - 1, placementOf(lastDockApp)?.x)
+    }
+
+    @Test
+    fun aPageAddedDuringADragGoesAwayIfNothingLandsOnIt() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
+        compose.waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
+        // Change of mind: back to where it came from.
+        dragOn(to = grid.homeCell(0, 0))
+        release()
+        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 1 }
+        assertUnmoved(firstHomeApp)
     }
 
     @Test

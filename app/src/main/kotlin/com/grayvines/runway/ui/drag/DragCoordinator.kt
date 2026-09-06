@@ -26,6 +26,9 @@ interface DragWorkspace {
      * Adds a page at [index] to [container] and returns once it is observable; false on failure.
      */
     suspend fun addPage(container: Container, index: Int): Boolean
+
+    /** Removes trailing empty pages everywhere, so a page added by a dwell does not outlive it. */
+    suspend fun pruneEmptyPages()
 }
 
 /**
@@ -129,7 +132,10 @@ class DragCoordinator(
             delay(SETTLE_TIMEOUT_MS) // safety net if the item never draws (e.g. off-screen page)
             if (_settling.value == settling) _settling.value = null
         }
-        if (move == null) return
+        if (move == null) {
+            scope.launch { workspace.pruneEmptyPages() }
+            return
+        }
         val pendingMove = move.asPendingMove(state.source.itemId).copy(from = from)
         _pending.value = pendingMove
         scope.launch {
@@ -138,6 +144,7 @@ class DragCoordinator(
             } finally {
                 if (_pending.value == pendingMove) _pending.value = null
             }
+            workspace.pruneEmptyPages()
         }
     }
 
@@ -149,6 +156,7 @@ class DragCoordinator(
     fun cancelDrag() {
         edgeDwell.stop()
         controller.cancel()
+        scope.launch { workspace.pruneEmptyPages() }
     }
 
     private fun DropPlan.Move.asPendingMove(itemId: Long) =

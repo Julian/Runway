@@ -3,6 +3,7 @@ package com.grayvines.runway.data
 import androidx.room3.immediateTransaction
 import androidx.room3.useWriterConnection
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.model.LayoutEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -26,6 +27,13 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     /** Adds a page at [index] if it does not exist yet. */
     suspend fun addPage(container: Container, index: Int) = write {
         dao.insertPage(PageEntity(container, index))
+    }
+
+    /** Drops empty pages after the last used one; the first page always stays. */
+    suspend fun pruneTrailingEmptyPages(container: Container) = write {
+        val pages = dao.pages(container)
+        val keep = LayoutEngine.pageCountAfterPrune(pages.size, dao.usedPages(container).toSet())
+        pages.drop(keep).forEach { dao.deletePage(container, it.index) }
     }
 
     /** Guarantees the first home and dock page exist. */

@@ -18,6 +18,9 @@ interface WorkspaceDao {
     @Query("SELECT * FROM pages WHERE container = :container ORDER BY page_index")
     suspend fun pages(container: Container): List<PageEntity>
 
+    @Query("SELECT DISTINCT page_index FROM items WHERE container = :container")
+    suspend fun usedPages(container: Container): List<Int>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPage(page: PageEntity)
 
     @Query("DELETE FROM pages WHERE container = :container AND page_index = :index")
