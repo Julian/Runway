@@ -54,14 +54,11 @@ private const val LIFT_HOLD_MS = 550L
 /**
  * Long-press callbacks; positions are root pixels. [onHold] fires when the finger has rested long
  * enough, with the cell's bounds; [onStart] when it then moves, with the grab point within the
- * cell.
+ * cell. Everything after the start is tracked from the root, not by the cell.
  */
 class DragHandlers(
     val onHold: (cell: Bounds) -> Unit,
     val onStart: (pointer: Point, grab: Point) -> Unit,
-    val onMove: (pointer: Point) -> Unit,
-    val onEnd: () -> Unit,
-    val onCancel: () -> Unit,
 )
 
 /** One cell's content: an app icon of [iconSize] (optionally labelled), or a placeholder. */
@@ -165,8 +162,6 @@ private fun Modifier.dragAfterLongPress(
             detectDragGesturesAfterLongPress(
                 onDragStart = hold::held,
                 onDrag = { change, _ -> hold.moved(change.position) },
-                onDragEnd = hold::ended,
-                onDragCancel = hold::cancelled,
             )
         }
     }
@@ -187,20 +182,10 @@ private class HoldThenDrag(
     }
 
     fun moved(local: Offset) {
+        if (dragging || (local - grab).getDistance() <= slop) return
+        dragging = true
         val root = coords()?.localToRoot(local) ?: local
-        if (!dragging && (local - grab).getDistance() > slop) {
-            dragging = true
-            handlers()?.onStart(root.toPoint(), grab.toPoint())
-        }
-        if (dragging) handlers()?.onMove(root.toPoint())
-    }
-
-    fun ended() {
-        if (dragging) handlers()?.onEnd()
-    }
-
-    fun cancelled() {
-        if (dragging) handlers()?.onCancel()
+        handlers()?.onStart(root.toPoint(), grab.toPoint())
     }
 }
 

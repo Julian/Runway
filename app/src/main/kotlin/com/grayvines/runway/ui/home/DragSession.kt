@@ -22,18 +22,23 @@ class DragSession(
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
 ) {
+
     val draggedId: Long?
         get() = state?.source?.itemId
 
     /** Where a displaced item is previewed while the drag hovers. */
     fun previewFor(id: Long): Footprint? = (state?.plan as? DropPlan.Move)?.displaced?.get(id)
 
+    /** Pointer tracking after a start comes from the root ([tracksDrag]), not the cell. */
+    fun move(pointer: Point) = onMove(pointer)
+
+    fun end() = onEnd()
+
+    fun cancel() = onCancel()
+
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         DragHandlers(
             onHold = { cell -> onHold(item, container, page, cell) },
             onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
-            onMove = onMove,
-            onEnd = onEnd,
-            onCancel = onCancel,
         )
 }

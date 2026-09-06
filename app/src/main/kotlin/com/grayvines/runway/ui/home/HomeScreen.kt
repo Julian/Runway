@@ -87,7 +87,7 @@ fun HomeScreen(
     LaunchedEffect(dockPager) { snapshotFlow { dockPager.currentPage }.collect(onDockPageShown) }
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().dragTracking(drag)) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
@@ -209,6 +209,15 @@ private fun HomeColumn(
             onPagePositioned = onDockPagePositioned,
         )
     }
+}
+
+/**
+ * The root drag tracker, built once: rebuilding a pointer-input modifier restarts it mid-gesture.
+ */
+@Composable
+private fun Modifier.dragTracking(drag: DragSession): Modifier {
+    val current = rememberUpdatedState(drag)
+    return this.then(remember { Modifier.tracksDrag { current.value } })
 }
 
 /** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */

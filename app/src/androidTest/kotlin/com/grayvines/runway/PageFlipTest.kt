@@ -2,9 +2,12 @@ package com.grayvines.runway
 
 import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -180,7 +183,8 @@ class PageFlipTest : LauncherFixture() {
         }
         compose.waitUntil(TIMEOUT_MS) { placementOf(onPageTwo)?.pageIndex == 2 }
         val onPageOne = labelOnPage(1)
-        val pages = listOf(firstHomeApp, onPageOne, onPageTwo)
+        // Page 0's marker is a neighbour, not the dragged icon: its cell goes when the page does.
+        val pages = listOf(labelAtHomeCell(1, 0), onPageOne, onPageTwo)
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
         // Which page is settled, sampled in real time until the last page shows. Fetching a node
         // blocks while the pager animates, so a sample is (started, finished, page): -1 while
@@ -200,8 +204,17 @@ class PageFlipTest : LauncherFixture() {
                         area.left + (x + 0.5f) * area.width / settings.columns,
                         area.top + (y + 0.5f) * area.height / settings.pageRows,
                     )
-                val centre = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
-                (centre - expected).getDistance() < SETTLE_TOLERANCE_PX
+                // A page flipped away from may be disposed, and with it the marker's cell.
+                val cell =
+                    compose
+                        .onAllNodes(
+                            hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG),
+                            useUnmergedTree = true,
+                        )
+                        .fetchSemanticsNodes()
+                        .firstOrNull()
+                cell != null &&
+                    (cell.boundsInRoot.center - expected).getDistance() < SETTLE_TOLERANCE_PX
             }
             samples += Triple(started, SystemClock.uptimeMillis(), page)
         }

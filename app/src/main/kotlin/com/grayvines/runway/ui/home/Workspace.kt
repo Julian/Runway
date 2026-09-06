@@ -32,9 +32,6 @@ fun Workspace(
     HorizontalPager(
         state = pagerState,
         modifier = modifier.fillMaxSize().testTag(WORKSPACE_TAG),
-        // While dragging, every page stays composed: the dragged cell owns the gesture, and
-        // disposing its page (after flipping away from it) would cancel the drag.
-        beyondViewportPageCount = if (drag?.state != null) pages.size else 1,
     ) { page ->
         GridPage(
             items =

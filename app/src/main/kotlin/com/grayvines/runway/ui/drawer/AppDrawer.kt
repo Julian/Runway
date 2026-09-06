@@ -68,7 +68,9 @@ fun AppDrawer(
     onClose: () -> Unit,
 ) {
     BackHandler(enabled = open, onBack = onClose)
-    if (revealed <= 0f) return
+    // Stays composed while open even when pulled fully down, so the gesture that pulled it can
+    // finish and decide; only a closed drawer with nothing showing is gone.
+    if (!open && revealed <= 0f) return
     val pull = rememberUpdatedState(onPull)
     val pullEnd = rememberUpdatedState(onPullEnd)
     val shown = rememberUpdatedState(revealed)
@@ -81,6 +83,9 @@ fun AppDrawer(
     }
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
+        // Insets pad the content, not the grid: its scrollable then covers the whole screen, so
+        // a pull that starts under the status bar still pulls.
+        contentPadding = insets,
         modifier =
             Modifier.fillMaxSize()
                 .graphicsLayer {
@@ -92,8 +97,7 @@ fun AppDrawer(
                 }
                 .background(SURFACE)
                 .testTag(DRAWER_TAG)
-                .nestedScroll(pullToClose)
-                .padding(insets),
+                .nestedScroll(pullToClose),
     ) {
         items(apps, key = { it.key }) { app ->
             DrawerApp(app, iconSize, labels, onClick = { onLaunch(app) })
