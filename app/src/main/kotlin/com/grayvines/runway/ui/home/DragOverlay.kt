@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -34,19 +35,28 @@ const val DRAG_OVERLAY_TAG = "drag-overlay"
 @Composable
 fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: () -> Float) {
     if (item == null) return
-    val state = drag.state
+    // Which phase, and whether a fold is on: derived, so the finger's moves change nothing here.
+    val dragging by remember(drag) { derivedStateOf { drag.state != null } }
+    val folds by remember(drag) { derivedStateOf { drag.foldTargetId != null } }
     val settling = drag.settling
     when {
-        state != null -> {
+        dragging -> {
             val folding by
                 animateFloatAsState(
-                    if (drag.foldTargetId != null) DragMotion.FOLDING_SCALE else 1f,
+                    if (folds) DragMotion.FOLDING_SCALE else 1f,
                     tween(DragMotion.FOLDING_MS),
                     label = "folding",
                 )
             OverlayCell(
                 item,
-                Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y),
+                at = {
+                    val s = drag.state
+                    if (s == null) {
+                        Point(0f, 0f)
+                    } else {
+                        Point(s.pointer.x - s.grab.x, s.pointer.y - s.grab.y)
+                    }
+                },
                 cell,
                 iconSize,
                 {
@@ -97,19 +107,24 @@ private fun Settle(
         }
     val at = Point(centre.x - half.x, centre.y - half.y)
     val scale = DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t)
-    OverlayCell(item, at, cell, iconSize) { scale }
+    OverlayCell(item, { at }, cell, iconSize) { scale }
 }
 
 @Composable
 private fun OverlayCell(
     item: HomeItem,
-    at: Point,
+    at: () -> Point,
     cell: DpSize,
     iconSize: Dp,
     scale: () -> Float,
 ) {
     Box(
-        modifier = Modifier.offset { IntOffset(at.x.toInt(), at.y.toInt()) }.size(cell),
+        modifier =
+            Modifier.offset {
+                    val p = at()
+                    IntOffset(p.x.toInt(), p.y.toInt())
+                }
+                .size(cell),
         contentAlignment = Alignment.Center,
     ) {
         ItemIcon(

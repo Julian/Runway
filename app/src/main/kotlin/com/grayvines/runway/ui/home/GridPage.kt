@@ -7,7 +7,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
@@ -17,6 +20,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 
@@ -46,8 +50,9 @@ internal fun GridPage(
         content = {
             items.forEach { item ->
                 key(item.id) {
-                    val f = drag?.previewFor(item.id) ?: item.footprint
-                    val settlingHere = drag?.takeIf { it.settling?.itemId == item.id }
+                    val cellDrag = rememberCellDrag(item, drag)
+                    val settlingHere = cellDrag.settlingHere
+                    val f = cellDrag.footprint
                     positions +=
                         animateIntOffsetAsState(
                             IntOffset(f.x * cellW, f.y * cellH),
@@ -66,8 +71,8 @@ internal fun GridPage(
                         labels = labels,
                         onClick = { cell -> onLaunch(item, cell) },
                         drag = handlersFor(item),
-                        lifted = item.id == drag?.draggedId || settlingHere != null,
-                        receiving = item.id == drag?.foldTargetId,
+                        lifted = cellDrag.lifted || settlingHere != null,
+                        receiving = cellDrag.receiving,
                         modifier =
                             if (settlingHere != null) {
                                 Modifier.onGloballyPositioned {
@@ -92,3 +97,30 @@ internal fun GridPage(
         }
     }
 }
+
+/**
+ * What the drag means for one cell, derived: a finger's every move changes the drag state, but only
+ * a cell whose own answer changes needs to recompose.
+ */
+private class CellDrag(
+    footprint: State<Footprint>,
+    settlingHere: State<DragSession?>,
+    lifted: State<Boolean>,
+    receiving: State<Boolean>,
+) {
+    val footprint by footprint
+    val settlingHere by settlingHere
+    val lifted by lifted
+    val receiving by receiving
+}
+
+@Composable
+private fun rememberCellDrag(item: HomeItem, drag: DragSession?): CellDrag =
+    remember(item, drag) {
+        CellDrag(
+            footprint = derivedStateOf { drag?.previewFor(item.id) ?: item.footprint },
+            settlingHere = derivedStateOf { drag?.takeIf { it.settling?.itemId == item.id } },
+            lifted = derivedStateOf { item.id == drag?.draggedId },
+            receiving = derivedStateOf { item.id == drag?.foldTargetId },
+        )
+    }

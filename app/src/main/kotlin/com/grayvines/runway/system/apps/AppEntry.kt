@@ -4,12 +4,7 @@ import android.content.ComponentName
 import android.graphics.drawable.Drawable
 import android.os.UserHandle
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.AppRef
-
-/** Icons are rasterised at this size once and drawn scaled everywhere. */
-private const val ICON_BITMAP_SIZE = 256
 
 /**
  * One launchable activity in one user profile. Two entries are the same app when they name the same
@@ -22,6 +17,8 @@ class AppEntry(
     val profileSerial: Long,
     val label: String,
     val icon: Drawable,
+    /** The icon as drawn everywhere, rasterised once as the list loads, off the main thread. */
+    val bitmap: ImageBitmap,
 ) {
     /** How the app is referred to in the database. */
     val ref: AppRef
@@ -29,11 +26,6 @@ class AppEntry(
 
     /** Stable identity across processes. */
     val key: String = "$profileSerial/${component.flattenToString()}"
-
-    /** The icon as drawn, made once on first use rather than by every cell that shows it. */
-    val bitmap: ImageBitmap by lazy {
-        icon.toBitmap(ICON_BITMAP_SIZE, ICON_BITMAP_SIZE).asImageBitmap()
-    }
 
     override fun equals(other: Any?) = other is AppEntry && other.key == key && other.label == label
 

@@ -10,6 +10,8 @@ import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,9 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val context = context.applicationContext
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
+
+    /** Icons are drawn at most about this big; rasterising bigger is wasted memory and time. */
+    private val iconPx = (ICON_DP * context.resources.displayMetrics.density).toInt()
 
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps
@@ -126,10 +131,14 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                 userManager.getSerialNumberForUser(user), // persistable, unlike UserHandle
             label = label.toString(),
             icon = getIcon(0), // device density
+            bitmap = getIcon(0).toBitmap(iconPx, iconPx).asImageBitmap(),
         )
 
     private companion object {
         const val REMOVAL_BUFFER = 16
+
+        /** The largest an icon gets on screen (dp): a lifted icon on a wide, few-column grid. */
+        const val ICON_DP = 72
         const val TAG = "Runway"
     }
 }

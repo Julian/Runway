@@ -14,6 +14,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -94,7 +96,7 @@ fun HomeScreen(
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
         PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
         // The home area steps back for a lifted icon and for the drawer alike.
-        val lifting = liftProgress(lifting = drag.state != null)
+        val lifting = liftProgress(drag)
         // Read inside layers and draws, never here: every frame of a lift or a pull would
         // otherwise recompose every cell on screen.
         val lift = { maxOf(lifting.value, drawer.motion.shown.value) }
@@ -136,7 +138,7 @@ fun HomeScreen(
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
-            item = state.draggedItem(drag),
+            item = draggedItem(state, drag),
             cell = cell,
             iconSize = iconSize,
             lift = lift,
@@ -144,14 +146,27 @@ fun HomeScreen(
     }
 }
 
-/** What is being dragged or settling: a placed item, or an app pulled out of the drawer. */
-private fun HomeState.draggedItem(drag: DragSession): HomeItem? {
-    val newApp = drag.state?.source?.newApp
-    if (newApp != null) {
-        val app = apps.firstOrNull { it.ref == newApp } ?: return null
-        return HomeItem(0, ItemKind.APP, 0, 0, 1, 1, app.label, app)
+/**
+ * What is being dragged or settling: a placed item, or an app pulled out of the drawer. Derived
+ * from which item it is, not from where the finger is, so moves do not recompose the screen.
+ */
+@Composable
+private fun draggedItem(state: HomeState, drag: DragSession): HomeItem? {
+    val which by
+        remember(drag) {
+            derivedStateOf {
+                val source = drag.state?.source
+                Triple(source?.itemId, source?.newApp, drag.settling?.itemId)
+            }
+        }
+    val (draggedId, newApp, settlingId) = which
+    return if (newApp != null) {
+        state.apps
+            .firstOrNull { it.ref == newApp }
+            ?.let { HomeItem(0, ItemKind.APP, 0, 0, 1, 1, it.label, it) }
+    } else {
+        state.item(draggedId ?: settlingId)
     }
-    return item(drag.draggedId ?: drag.settling?.itemId)
 }
 
 /** A vertical drag on the pages pulls the drawer with it; the pager keeps horizontal swipes. */
@@ -261,7 +276,9 @@ private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings):
  * home area steps back, and on release both return on the settle spring.
  */
 @Composable
-private fun liftProgress(lifting: Boolean): State<Float> {
+private fun liftProgress(drag: DragSession): State<Float> {
+    // Whether anything is lifted, not where it is: the finger's moves must not restart this.
+    val lifting by remember(drag) { derivedStateOf { drag.state != null } }
     val lift = remember { Animatable(0f) }
     LaunchedEffect(lifting) {
         if (lifting) {

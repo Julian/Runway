@@ -1,5 +1,7 @@
 package com.grayvines.runway.ui.home
 
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
@@ -9,12 +11,18 @@ import com.grayvines.runway.ui.drag.DropPlan
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 
-/** The UI's view of dragging: what is lifted, where things would land, and how to report input. */
+/**
+ * The UI's view of dragging: what is lifted, where things would land, and how to report input.
+ * Built once and kept: it reads the live drag through [State] objects, so a composable that reads
+ * only what it needs (this cell lifted? this cell displaced?) recomposes only when that changes,
+ * not on every move of the finger.
+ */
+@Stable
 class DragSession(
-    val state: DragState?,
-    val settling: Settling? = null,
+    private val stateOf: State<DragState?>,
+    private val settlingOf: State<Settling?>,
     /** Root-pixel centre of the cell a settling item belongs to, once that cell reports it. */
-    val settleTarget: Point? = null,
+    private val settleTargetOf: State<Point?>,
     val onSettleTargetPositioned: (Point) -> Unit = {},
     val onSettled: (itemId: Long) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
@@ -24,6 +32,14 @@ class DragSession(
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
 ) {
+    val state: DragState?
+        get() = stateOf.value
+
+    val settling: Settling?
+        get() = settlingOf.value
+
+    val settleTarget: Point?
+        get() = settleTargetOf.value
 
     val draggedId: Long?
         get() = state?.source?.itemId

@@ -48,13 +48,10 @@ class LauncherActivity : ComponentActivity() {
         setContent {
             RunwayTheme {
                 val base by viewModel.state.collectAsStateWithLifecycle()
-                val drag by viewModel.dragging.drag.collectAsStateWithLifecycle()
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
-                val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
                 val itemMenu by viewModel.itemMenu.state.collectAsStateWithLifecycle()
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
-                var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
                 // The live settings, not this composition's: page-shown callbacks are kept by
                 // effects that outlive it, and a changed grid must reach them.
@@ -78,20 +75,7 @@ class LauncherActivity : ComponentActivity() {
                     drawerActions = drawerActions,
                     drawerQuery = drawerQuery(),
                     onLaunchApp = viewModel::launch,
-                    drag =
-                        DragSession(
-                            state = drag,
-                            settling = settling,
-                            settleTarget = settleTarget,
-                            onSettleTargetPositioned = { settleTarget = it },
-                            onSettled = viewModel.dragging::settled,
-                            onHold = viewModel.itemMenu::hold,
-                            onStart = viewModel::startDrag,
-                            onStartFromDrawer = viewModel::startDragFromDrawer,
-                            onMove = viewModel.dragging::dragTo,
-                            onEnd = viewModel.dragging::endDrag,
-                            onCancel = viewModel.dragging::cancelDrag,
-                        ),
+                    drag = rememberDragSession(),
                     onHomePagePositioned = reports::homePagePositioned,
                     onHomePageShown = reports::homePageShown,
                     onDockPagePositioned = reports::dockPagePositioned,
@@ -110,6 +94,30 @@ class LauncherActivity : ComponentActivity() {
     private fun drawerQuery(): DrawerQuery {
         val text by viewModel.drawerQuery.collectAsStateWithLifecycle()
         return DrawerQuery(text, viewModel::setDrawerQuery, viewModel::launchDrawerMatch)
+    }
+
+    /** The one drag session, reading the live drag; nothing here changes while a finger moves. */
+    @Composable
+    private fun rememberDragSession(): DragSession {
+        val drag = viewModel.dragging.drag.collectAsStateWithLifecycle()
+        val settling = viewModel.dragging.settling.collectAsStateWithLifecycle()
+        // A settle target is per drop: it forgets itself when the settling item changes.
+        val settleTarget = remember(settling.value) { mutableStateOf<Point?>(null) }
+        return remember(settleTarget) {
+            DragSession(
+                stateOf = drag,
+                settlingOf = settling,
+                settleTargetOf = settleTarget,
+                onSettleTargetPositioned = { settleTarget.value = it },
+                onSettled = viewModel.dragging::settled,
+                onHold = viewModel.itemMenu::hold,
+                onStart = viewModel::startDrag,
+                onStartFromDrawer = viewModel::startDragFromDrawer,
+                onMove = viewModel.dragging::dragTo,
+                onEnd = viewModel.dragging::endDrag,
+                onCancel = viewModel.dragging::cancelDrag,
+            )
+        }
     }
 
     /** A swipe down on the home screen. Some Androids refuse; then the user hears why. */
