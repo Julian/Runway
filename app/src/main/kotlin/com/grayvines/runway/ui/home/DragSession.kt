@@ -32,8 +32,9 @@ class DragSession(
     val foldTargetId: Long?
         get() = (state?.plan as? DropPlan.Fold)?.into
 
-    /** Where a displaced item is previewed while the drag hovers. */
-    fun previewFor(id: Long): Footprint? = (state?.plan as? DropPlan.Move)?.displaced?.get(id)
+    /** Where a displaced item is previewed, once the finger has rested on its target. */
+    fun previewFor(id: Long): Footprint? =
+        state?.takeIf { it.rested }?.let { (it.plan as? DropPlan.Move)?.displaced?.get(id) }
 
     /** Pointer tracking after a start comes from the root ([tracksDrag]), not the cell. */
     fun move(pointer: Point) = onMove(pointer)

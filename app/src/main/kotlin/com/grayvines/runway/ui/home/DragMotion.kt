@@ -15,6 +15,13 @@ internal object DragMotion {
     /** The lifted icon grows: a finger covers it, and the growth says "picked up". */
     const val LIFTED_SCALE = 1.2f
 
+    /**
+     * Over an icon it would fold into, the lifted icon shrinks to this, so the tile forming under
+     * it and the icon it would join both stay in view.
+     */
+    const val FOLDING_SCALE = 0.6f
+    const val FOLDING_MS = 150
+
     /** While dragging the home area pulls back, as if seen from a step further away. */
     const val ZOOM = 0.94f
     const val BORDER_ALPHA = 0.35f

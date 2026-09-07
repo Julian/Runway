@@ -1,11 +1,14 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,15 +37,22 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
     val state = drag.state
     val settling = drag.settling
     when {
-        state != null ->
+        state != null -> {
+            val folding by
+                animateFloatAsState(
+                    if (drag.foldTargetId != null) DragMotion.FOLDING_SCALE else 1f,
+                    tween(DragMotion.FOLDING_MS),
+                    label = "folding",
+                )
             OverlayCell(
                 item,
                 Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y),
                 cell,
                 iconSize,
-                DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift),
+                DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift) * folding,
             )
-        settling != null ->
+        }
+        settling != null -> {
             Settle(
                 item,
                 settling,
@@ -51,6 +61,7 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
                 iconSize,
                 onDone = { drag.onSettled(settling.itemId) },
             )
+        }
     }
 }
 

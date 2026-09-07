@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.drag
 
 import com.grayvines.runway.data.Container
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,6 +104,9 @@ class DragCoordinator(
      */
     private var edgesArmed = false
 
+    /** Counts down while the finger stays on one target; done, neighbours slide aside. */
+    private var resting: Job? = null
+
     fun startDrag(source: DragSource, pointer: Point, grab: Point) {
         edgesArmed = false
         controller.start(source, pointer, grab)
@@ -116,12 +120,27 @@ class DragCoordinator(
         if (edge == null) edgesArmed = true
         val hovered = edge.takeIf { edgesArmed }
         edgeDwell.hover(hovered)
-        controller.move(pointer, target, hovered, over = areas.areas.cellUnder(pointer))
+        // Already folding: stay folding until the finger is nearly off the icon.
+        val zone = if (current.plan is DropPlan.Fold) FOLD_KEEP_ZONE else FOLD_ZONE
+        controller.move(pointer, target, hovered, over = areas.areas.cellUnder(pointer, zone))
+        if (target != current.target) restOn(target)
+    }
+
+    /** A new target: neighbours hold still until the finger has rested there a moment. */
+    private fun restOn(target: DropTarget?) {
+        resting?.cancel()
+        resting = target?.let {
+            scope.launch {
+                delay(REST_MS)
+                controller.rested()
+            }
+        }
     }
 
     /** Commits the planned drop, if any; the override shows it until the database catches up. */
     fun endDrag() {
         edgeDwell.stop()
+        resting?.cancel()
         val state = drag.value ?: return
         val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
@@ -162,6 +181,7 @@ class DragCoordinator(
 
     fun cancelDrag() {
         edgeDwell.stop()
+        resting?.cancel()
         controller.cancel()
         scope.launch { workspace.pruneEmptyPages() }
     }
@@ -181,7 +201,10 @@ class DragCoordinator(
         }.copy(foldInto = into)
     }
 
-    private companion object {
-        const val SETTLE_TIMEOUT_MS = 2_000L
+    companion object {
+        private const val SETTLE_TIMEOUT_MS = 2_000L
+
+        /** How long a finger rests on a cell before its neighbours slide aside. */
+        const val REST_MS = 300L
     }
 }

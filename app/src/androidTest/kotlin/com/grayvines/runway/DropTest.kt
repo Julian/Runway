@@ -49,7 +49,11 @@ class DropTest : LauncherFixture() {
     @Test
     fun droppingBesideAnOccupiedDockSlotsIconSnapsBack() {
         val grid = useGrid(columns = 5, rows = 7)
-        drag(from = firstHomeApp, to = grid.dockSlot(0) + Offset(grid.dockSlotWidth() * BESIDE, 0f))
+        // Well clear of the icon: a finger that had crossed its middle would still be folding.
+        drag(
+            from = firstHomeApp,
+            to = grid.dockSlot(0) + Offset(grid.dockSlotWidth() * WELL_BESIDE, 0f),
+        )
         assertUnmoved(firstHomeApp)
         assertEquals(0, placementOf(firstDockApp)?.x)
     }
@@ -111,5 +115,8 @@ class DropTest : LauncherFixture() {
     private companion object {
         /** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
         const val BESIDE = 0.35f
+
+        /** Outside even the wider zone a fold, once begun, keeps to. */
+        const val WELL_BESIDE = 0.45f
     }
 }

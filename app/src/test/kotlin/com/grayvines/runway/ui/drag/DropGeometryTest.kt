@@ -39,6 +39,8 @@ class DropGeometryTest {
         assertEquals(DropTarget.DockSlot(0, 2), areas.cellUnder(Point(250f, 225f)))
         assertNull(areas.cellUnder(Point(205f, 225f)))
         assertNull(areas.cellUnder(Point(150f, 300f))) // off both areas
+        // A wider zone, for staying on an icon once folding: the same edge point now counts.
+        assertEquals(DropTarget.HomeCell(1, 1, 0), areas.cellUnder(Point(110f, 50f), zone = 0.9f))
     }
 
     @Test

@@ -64,10 +64,16 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
 const val FOLD_ZONE = 0.6f
 
 /**
- * The cell the pointer itself is in, when it is well inside it (see [FOLD_ZONE]): a drop there
- * means "onto what is here" rather than "next to it".
+ * Once a drag is folding into a cell it keeps folding until the finger is nearly out of that cell:
+ * getting onto an icon takes aim, staying on it should not.
  */
-fun DropAreas.cellUnder(pointer: Point): DropTarget? {
+const val FOLD_KEEP_ZONE = 0.9f
+
+/**
+ * The cell the pointer itself is in, when it is well inside it (the middle [zone] of it): a drop
+ * there means "onto what is here" rather than "next to it".
+ */
+fun DropAreas.cellUnder(pointer: Point, zone: Float = FOLD_ZONE): DropTarget? {
     val homeArea = home?.takeIf { pointer in it }
     val dockArea = dock?.takeIf { pointer in it }
     return when {
@@ -77,7 +83,7 @@ fun DropAreas.cellUnder(pointer: Point): DropTarget? {
             val x = ((pointer.x - homeArea.left) / cellW).coerceIn(0f, columns - EPSILON)
             val y = ((pointer.y - homeArea.top) / cellH).coerceIn(0f, rows - EPSILON)
             DropTarget.HomeCell(homePage, x.toInt(), y.toInt()).takeIf {
-                x.wellInside() && y.wellInside()
+                x.wellInside(zone) && y.wellInside(zone)
             }
         }
         dockArea != null -> {
@@ -86,7 +92,7 @@ fun DropAreas.cellUnder(pointer: Point): DropTarget? {
                     0f,
                     dockSlots - EPSILON,
                 )
-            DropTarget.DockSlot(dockPage, slot.toInt()).takeIf { slot.wellInside() }
+            DropTarget.DockSlot(dockPage, slot.toInt()).takeIf { slot.wellInside(zone) }
         }
         else -> {
             null
@@ -94,10 +100,10 @@ fun DropAreas.cellUnder(pointer: Point): DropTarget? {
     }
 }
 
-/** Whether a cell coordinate's fraction lies within the middle [FOLD_ZONE] of the cell. */
-private fun Float.wellInside(): Boolean {
+/** Whether a cell coordinate's fraction lies within the middle [zone] of the cell. */
+private fun Float.wellInside(zone: Float): Boolean {
     val within = this - floor(this)
-    val margin = (1f - FOLD_ZONE) / 2
+    val margin = (1f - zone) / 2
     return within in margin..1f - margin
 }
 

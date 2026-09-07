@@ -187,6 +187,36 @@ class DragCoordinatorTest {
     }
 
     @Test
+    fun `neighbours make room only once the finger has rested on a cell`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(150f, 15f)) // corner on cell (1,0), occupied by item 2
+        assertEquals(false, c.drag.value?.rested)
+        advanceTimeBy(DragCoordinator.REST_MS + 1)
+        assertEquals(true, c.drag.value?.rested)
+        c.dragTo(Point(250f, 15f)) // on to cell (2,0)
+        assertEquals(false, c.drag.value?.rested)
+        advanceTimeBy(DragCoordinator.REST_MS / 2)
+        c.dragTo(Point(255f, 15f)) // a wobble within the same cell does not restart the wait
+        advanceTimeBy(DragCoordinator.REST_MS / 2 + 1)
+        assertEquals(true, c.drag.value?.rested)
+    }
+
+    @Test
+    fun `once folding, a drag keeps folding until the finger is nearly off the icon`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(150f, 50f)) // the middle of cell (1,0): a fold into item 2
+        assertEquals(DropPlan.Fold(DropTarget.HomeCell(0, 1, 0), 2L), c.drag.value?.plan)
+        c.dragTo(Point(110f, 50f)) // near the cell's edge, where a fold would not have begun
+        assertEquals(DropPlan.Fold(DropTarget.HomeCell(0, 1, 0), 2L), c.drag.value?.plan)
+        c.dragTo(Point(102f, 50f)) // all but off it
+        assertEquals(true, c.drag.value?.plan is DropPlan.Move)
+    }
+
+    @Test
     fun `a still finger is re-planned when the page under it changes`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)

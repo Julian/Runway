@@ -17,6 +17,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.FOLD_HINT_TAG
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -36,6 +38,30 @@ class FolderTest : LauncherFixture() {
         assertNull("the dropped icon's own placement is gone", placementOf(firstHomeApp))
         compose.onNodeWithContentDescription("Folder", useUnmergedTree = true).assertIsDisplayed()
         assertStillOnLauncher()
+    }
+
+    @Test
+    fun hoveringOverAnIconShowsItTurningIntoAFolder() {
+        val grid = useGrid(columns = 5, rows = 7)
+        holdDrag(from = firstHomeApp, to = grid.homeCell(1, 0))
+        compose.waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(FOLD_HINT_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        // And the lifted icon has shrunk, so the tile and the icon it would join stay in view.
+        compose.waitUntil(TIMEOUT_MS) { overlayWidth() < grid.cellWidth() * SHRUNK }
+        // Off to the side, over an empty cell: the hint goes and the icon is lifted large again.
+        dragOn(grid.homeCell(3, 3))
+        compose.waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(FOLD_HINT_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isEmpty()
+        }
+        compose.waitUntil(TIMEOUT_MS) { overlayWidth() > grid.cellWidth() * SHRUNK }
+        release()
     }
 
     @Test
@@ -139,6 +165,13 @@ class FolderTest : LauncherFixture() {
         awaitFolderClosed()
     }
 
+    private fun overlayWidth() =
+        compose
+            .onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .width
+
     /** Folds the first home app into its neighbour and opens the folder; returns the neighbour. */
     private fun makeFolder(): String {
         val grid = useGrid(columns = 5, rows = 7)
@@ -164,5 +197,8 @@ class FolderTest : LauncherFixture() {
 
     private companion object {
         const val SETTLE_MS = 1_000L
+
+        /** Of a cell's width: below it the lifted icon is shrunk for a fold, above it lifted. */
+        const val SHRUNK = 0.7f
     }
 }

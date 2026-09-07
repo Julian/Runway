@@ -58,6 +58,11 @@ data class DragState(
     val plan: DropPlan? = null,
     /** The edge being hovered, which flips pages after a dwell. */
     val edge: EdgeHover? = null,
+    /**
+     * The finger has rested on [target] long enough for neighbours to make room on screen. The plan
+     * applies on a drop regardless; this only holds the preview back while passing over.
+     */
+    val rested: Boolean = false,
 )
 
 /** What the controller needs to know about the workspace to plan a drop. */
@@ -92,7 +97,19 @@ class DragController(private val lookup: WorkspaceLookup) {
         val current = _state.value ?: return
         val plan =
             over?.let { planFold(current.source, it) } ?: target?.let { plan(current.source, it) }
-        _state.value = current.copy(pointer = pointer, target = target, plan = plan, edge = edge)
+        _state.value =
+            current.copy(
+                pointer = pointer,
+                target = target,
+                plan = plan,
+                edge = edge,
+                rested = current.rested && target == current.target,
+            )
+    }
+
+    /** The finger has been on its target a while: neighbours may now be shown making room. */
+    fun rested() {
+        _state.value = _state.value?.copy(rested = true)
     }
 
     /** Ends the drag; the move or fold to apply, or null if nothing changes. */

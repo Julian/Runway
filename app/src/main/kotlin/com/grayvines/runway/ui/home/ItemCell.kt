@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -61,8 +63,14 @@ private const val FOLDER_PREVIEW_COUNT = 4
 private const val FOLDER_TILE_ALPHA = 0.35f
 private const val FOLDER_TILE_INSET = 0.12f
 
-/** An icon about to take a dropped app in steps back a little, so the drop reads as "into". */
-private const val RECEIVING_SCALE = 0.8f
+/**
+ * An icon about to take a dropped app in shrinks to the size it would have on a folder tile, and
+ * the tile fades in behind it: what a drop would make, shown before it is made.
+ */
+private const val RECEIVING_SCALE = 0.55f
+private const val HINT_MS = 150
+
+const val FOLD_HINT_TAG = "fold-hint"
 
 /** Icons shrink a little under a finger, whether or not a drag follows. */
 
@@ -122,6 +130,7 @@ fun ItemCell(
                 Modifier.weight(1f).fillMaxWidth().alpha(if (lifted) 0f else 1f),
                 contentAlignment = Alignment.Center,
             ) {
+                FoldHint(receiving, Modifier.size(iconSize))
                 ItemIcon(
                     item,
                     Modifier.size(iconSize).graphicsLayer {
@@ -145,6 +154,19 @@ fun ItemCell(
     }
 }
 
+/** The folder tile that a hovering app would make here, fading in and out with [shown]. */
+@Composable
+private fun FoldHint(shown: Boolean, modifier: Modifier) {
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(HINT_MS), label = "fold hint")
+    if (alpha > 0f) {
+        Box(modifier.graphicsLayer { this.alpha = alpha }.folderTile().testTag(FOLD_HINT_TAG))
+    }
+}
+
+/** The dim rounded square every folder sits on. */
+private fun Modifier.folderTile() =
+    clip(RoundedCornerShape(percent = 25)).background(Color.White.copy(alpha = FOLDER_TILE_ALPHA))
+
 /** What an item looks like anywhere it is drawn: its app's icon, a folder tile, or a stand-in. */
 @Composable
 internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
@@ -164,8 +186,7 @@ internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier =
         modifier =
             modifier
                 .semantics { contentDescription = name }
-                .clip(RoundedCornerShape(percent = 25))
-                .background(Color.White.copy(alpha = FOLDER_TILE_ALPHA))
+                .folderTile()
                 .padding(fraction = FOLDER_TILE_INSET),
     ) {
         items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->

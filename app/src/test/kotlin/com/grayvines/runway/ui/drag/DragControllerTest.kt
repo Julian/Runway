@@ -160,6 +160,18 @@ class DragControllerTest {
     }
 
     @Test
+    fun `rested holds only while the target stays the same`() {
+        lift(1)
+        controller.move(origin, DropTarget.HomeCell(0, 1, 0))
+        assertEquals(false, controller.state.value?.rested)
+        controller.rested()
+        controller.move(Point(1f, 1f), DropTarget.HomeCell(0, 1, 0))
+        assertEquals(true, controller.state.value?.rested) // same cell: still rested
+        controller.move(origin, DropTarget.HomeCell(0, 2, 0))
+        assertEquals(false, controller.state.value?.rested) // a new cell starts over
+    }
+
+    @Test
     fun `no target means no plan`() {
         lift(1)
         controller.move(Point(5f, 5f), null)
