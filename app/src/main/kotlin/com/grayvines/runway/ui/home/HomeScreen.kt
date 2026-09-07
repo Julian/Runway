@@ -40,7 +40,7 @@ import com.grayvines.runway.ui.shade.ShadeHint
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
-private const val ICON_INSET = 0.3f
+internal const val ICON_INSET = 0.3f
 
 private val DRAG_CORNER = 28.dp
 
@@ -92,7 +92,7 @@ fun HomeScreen(
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
         PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
         // The home area steps back for a lifted icon and for the drawer alike.
-        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.revealed.value)
+        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.shown.value)
         HomeColumn(
             state = state,
             homePager = homePager,
@@ -112,7 +112,7 @@ fun HomeScreen(
         openFolder?.let { OpenFolder(state, it, iconSize, onLaunchFromFolder, onCloseFolder) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
-            revealed = drawer.motion.revealed.value,
+            revealed = drawer.motion.shown.value,
             open = drawerOpen,
             apps = state.apps,
             query = drawerQuery,

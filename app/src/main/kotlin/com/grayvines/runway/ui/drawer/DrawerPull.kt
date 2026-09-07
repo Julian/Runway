@@ -2,13 +2,17 @@ package com.grayvines.runway.ui.drawer
 
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -21,7 +25,18 @@ import kotlinx.coroutines.launch
 @Composable
 fun Modifier.drawerPull(motion: DrawerMotion, onRelease: (Float) -> Unit): Modifier {
     val release = rememberUpdatedState(onRelease)
-    return this.then(remember(motion) { Modifier.pullsDrawer(motion) { release.value(it) } })
+    val coords = remember { mutableStateOf<LayoutCoordinates?>(null) }
+    return this.onGloballyPositioned { coords.value = it }
+        .then(
+            remember(motion) {
+                Modifier.pullsDrawer(
+                    motion,
+                    rootY = { local -> coords.value?.localToRoot(local)?.y },
+                ) {
+                    release.value(it)
+                }
+            }
+        )
 }
 
 /**
@@ -40,12 +55,19 @@ fun Modifier.releasesAbandonedPull(motion: DrawerMotion, onRelease: (Float) -> U
     )
 }
 
-private fun Modifier.pullsDrawer(motion: DrawerMotion, onRelease: (velocity: Float) -> Unit) =
+private fun Modifier.pullsDrawer(
+    motion: DrawerMotion,
+    rootY: (local: Offset) -> Float?,
+    onRelease: (velocity: Float) -> Unit,
+) =
     pointerInput(motion) {
         val tracker = VelocityTracker()
         try {
             detectVerticalDragGestures(
-                onDragStart = { tracker.resetTracking() },
+                onDragStart = {
+                    tracker.resetTracking()
+                    motion.startPull(rootY(it))
+                },
                 onDragEnd = { onRelease(tracker.calculateVelocity().y) },
                 onDragCancel = { onRelease(0f) },
                 onVerticalDrag = { change, dy ->

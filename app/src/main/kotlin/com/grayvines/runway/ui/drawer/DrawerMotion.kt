@@ -3,6 +3,13 @@ package com.grayvines.runway.ui.drawer
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.grayvines.runway.data.settings.DrawerSwipe
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -17,13 +24,55 @@ private const val PULL_FRACTION = 0.35f
 /** A pull this far from rest (of its full travel) has made up its mind which way it goes. */
 private const val COMMIT = 0.01f
 
+/** How long the drawer takes to catch up with the finger at the start of a pull. */
+private const val CATCH_UP_MS = 120
+
+/**
+ * A finger that comes back this far (dp) from the farthest it pulled has changed its mind: letting
+ * go then cancels, however far the pull had got.
+ */
+private const val REVERSAL_DP = 24f
+
 /**
  * How much of the drawer is showing, 0 closed to 1 open, and what a finger does to it. The finger
  * moves it directly; letting go either finishes opening or lets it fall back, so a partial pull
  * shows what a full one would do.
  */
 class DrawerMotion(private val scope: CoroutineScope) {
+    /** Where the drawer rests or is animating to; while a finger pulls, see [shown]. */
     val revealed = Animatable(0f)
+
+    /**
+     * How much of the drawer is showing, 0 to 1, for drawing. Under a finger the drawer's top edge
+     * catches up with the finger over [CATCH_UP_MS] and then moves with it, one to one; otherwise
+     * it is [revealed].
+     */
+    val shown: State<Float> = derivedStateOf {
+        if (pulling && heightPx > 0f) {
+            ((basePx + catchUpPx * caughtUp.value + pulledPx) / heightPx).coerceIn(0f, 1f)
+        } else {
+            revealed.value
+        }
+    }
+
+    private val caughtUp = Animatable(0f)
+    private var heightPx = 0f
+
+    /**
+     * Of the screen: the drawer showing when the pull began, and what it must gain to be at the
+     * finger.
+     */
+    private var basePx = 0f
+    private var catchUpPx = 0f
+
+    /** How far up the finger has pulled since the pull began (negative: down). */
+    private var pulledPx by mutableFloatStateOf(0f)
+
+    /**
+     * The farthest [pulledPx] has been in the committed direction, and what counts as coming back.
+     */
+    private var farthestPx = 0f
+    private var reversalPx = 0f
 
     /**
      * How far a pull the other way, down from a closed drawer, has gone, 0 to 1 of what would open
@@ -49,23 +98,47 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * (a long press, a page swipe) never reports letting go; whoever sees the finger lift must
      * release it, or the drawer stays wherever it was.
      */
-    var pulling = false
+    var pulling by mutableStateOf(false)
         private set
 
     /** [swipe] sets the pull (a share of the screen) and the flick (dp/s, scaled by [density]). */
     fun laidOut(heightPx: Float, density: Float, swipe: DrawerSwipe) {
+        this.heightPx = heightPx
         travel = heightPx * PULL_FRACTION
         openAt = swipe.openAt / PULL_FRACTION
         flick = swipe.flickDpPerSecond * density
+        reversalPx = REVERSAL_DP * density
+    }
+
+    /**
+     * A finger has begun a pull at [fingerY] (root px), or somewhere unknown ([fingerY] null, as
+     * when the open drawer's own list hands its scroll over). From a closed drawer, its top edge
+     * sets off to meet the finger.
+     */
+    fun startPull(fingerY: Float?) {
+        pulling = true
+        pulled = revealed.value
+        way = 0
+        pulledPx = 0f
+        farthestPx = 0f
+        basePx = revealed.value * heightPx
+        catchUpPx = fingerY?.let { (heightPx - it - basePx).coerceAtLeast(0f) } ?: 0f
+        scope.launch {
+            caughtUp.snapTo(0f)
+            caughtUp.animateTo(1f, tween(CATCH_UP_MS))
+        }
     }
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
     fun dragBy(dy: Float) {
-        if (!pulling) {
-            pulling = true
-            pulled = revealed.value
-            way = 0
-        }
+        if (!pulling) startPull(null)
+        pulledPx -= dy
+        farthestPx =
+            when (way) {
+                1 -> maxOf(farthestPx, pulledPx)
+                -1 -> minOf(farthestPx, pulledPx)
+                else -> pulledPx
+            }
         val moved = (pulled - dy / travel).coerceIn(-1f, 1f)
         // One swipe, one direction: past a little way out, it is committed to that side of
         // rest, and coming back can only undo it, never turn into the other action.
@@ -76,12 +149,8 @@ class DrawerMotion(private val scope: CoroutineScope) {
                 -1 -> moved.coerceAtMost(0f)
                 else -> moved
             }
-        val to = pulled.coerceAtLeast(0f)
         val down = (-pulled / openAt).coerceIn(0f, 1f)
-        scope.launch {
-            revealed.snapTo(to)
-            given.snapTo(down)
-        }
+        scope.launch { given.snapTo(down) }
     }
 
     /**
@@ -97,11 +166,16 @@ class DrawerMotion(private val scope: CoroutineScope) {
         onClose: () -> Unit,
         onOpenShade: () -> Unit,
     ) {
-        // A flick counts only the way the swipe committed to: flicking back is a change of mind.
-        val wantOpen =
-            way >= 0 &&
-                shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick)
-        val wantShade = pulling && !open && way < 0 && shouldOpen(-pulled, velocity, openAt, flick)
+        val wantOpen = wantsOpen(velocity)
+        val wantShade =
+            pulling &&
+                !open &&
+                way < 0 &&
+                !reversed() &&
+                shouldOpen(-pulled, velocity, openAt, flick)
+        // Whatever comes next animates from where the drawer is drawn now.
+        val at = shown.value
+        scope.launch { revealed.snapTo(at) }
         pulling = false
         when {
             wantOpen && !open -> {
@@ -116,6 +190,17 @@ class DrawerMotion(private val scope: CoroutineScope) {
             }
         }
     }
+
+    /**
+     * A flick counts only the way the swipe committed to, and a finger that came back from its
+     * farthest point has changed its mind: either way, letting go cancels.
+     */
+    private fun reversed() = pulling && abs(farthestPx - pulledPx) > reversalPx
+
+    private fun wantsOpen(velocity: Float) =
+        way >= 0 &&
+            !reversed() &&
+            shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick)
 
     /** Follows the model: open animates the rest of the way in, closed the rest of the way out. */
     suspend fun settle(open: Boolean) {

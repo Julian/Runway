@@ -145,7 +145,12 @@ class DrawerTest : LauncherFixture() {
                 advanceEventTime(PULL_STEP_MS)
             }
         }
-        // Part way: present, but not yet settled onto the screen.
+        // Part way: present, not yet settled onto the screen, and its top edge at the finger.
+        val finger = pages.center.y - partialPullPx()
+        compose.waitUntil(TIMEOUT_MS) {
+            val drawer = compose.onNodeWithTag(DRAWER_TAG).fetchSemanticsNode().boundsInRoot
+            abs(drawer.top - finger) < AT_FINGER_PX
+        }
         val drawer = compose.onNodeWithTag(DRAWER_TAG).fetchSemanticsNode().boundsInRoot
         assertTrue("drawer at ${drawer.top} should still be arriving", drawer.top > root.top + 1f)
         compose.onRoot().performTouchInput { up() }
@@ -403,6 +408,26 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun easingBackDownALittleAfterPullingUpCancelsOpening() {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, -root.height * OPENING_PULL / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            // Back down a little, slowly: not a flick, but a change of mind.
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, EASE_BACK_PX / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            up()
+        }
+        awaitDrawerClosed()
+    }
+
+    @Test
     fun aSwipeUpThatComesBackDownDoesNothingAtAll() {
         // Enough up to show the drawer, then a change of mind, flicked down past the start.
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
@@ -506,6 +531,8 @@ class DrawerTest : LauncherFixture() {
         const val DRAWER_COLUMNS = 6 // more than the fixture's 4 home columns
         const val KEYBOARD_GRACE_MS = 1_000L // a closing drawer is long gone by then
         const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
+        const val AT_FINGER_PX = 24f // the drawer's top edge is under the finger, give or take
+        const val EASE_BACK_PX = 120f // well over the 24 dp that reads as a change of mind
         val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }
 }

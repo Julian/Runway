@@ -28,8 +28,10 @@ import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.ICON_INSET
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -93,9 +95,28 @@ open class LauncherFixture {
                 settings.dockSlots,
             )
         }
-        // The layout arrives through Room flows, which Compose's idling does not track.
-        // Settings and layout go through DataStore and Room; a cold emulator can take a while.
-        compose.waitUntil(LONG_TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        // The layout arrives through Room flows and the settings through DataStore, which
+        // Compose's idling does not track; the activity was up before either, so the screen may
+        // still show the previous test's grid until they land.
+        awaitGrid(settings.columns, settings.pageRows)
+    }
+
+    /**
+     * Waits until the first home icon is the size the grid [columns] × [pageRows] gives it: the
+     * sign that settings and layout have both reached the screen.
+     */
+    private fun awaitGrid(columns: Int, pageRows: Int) {
+        compose.waitUntil(LONG_TIMEOUT_MS) {
+            val page = compose.onAllNodesWithTag(WORKSPACE_TAG).fetchSemanticsNodes().firstOrNull()
+            val icon =
+                icon(firstHomeApp).let { runCatching { it.fetchSemanticsNode() }.getOrNull() }
+            if (page == null || icon == null) {
+                false
+            } else {
+                val cell = minOf(page.size.width / columns, page.size.height / pageRows)
+                abs(icon.size.width - cell * (1f - ICON_INSET)) <= GRID_TOLERANCE_PX
+            }
+        }
     }
 
     /** Screen geometry after switching to a grid, in root pixels. */
@@ -140,13 +161,10 @@ open class LauncherFixture {
     }
 
     protected fun useGrid(columns: Int, rows: Int, dockSlots: Int = settings.dockSlots): Grid {
-        val before = icon(firstHomeApp).fetchSemanticsNode().size
         runBlocking {
             graph.settings.update { it.copy(columns = columns, rows = rows, dockSlots = dockSlots) }
         }
-        compose.waitUntil(LONG_TIMEOUT_MS) {
-            icon(firstHomeApp).fetchSemanticsNode().size != before
-        }
+        awaitGrid(columns, rows - Settings.RESERVED_ROWS)
         return Grid(columns, rows - Settings.RESERVED_ROWS, dockSlots)
     }
 
@@ -433,6 +451,9 @@ const val LIFT_HOLD_MS = 550L
 
 /** Past touch slop: enough movement after a hold to turn it into a drag. */
 const val LIFT_NUDGE_PX = 60f
+
+/** Icon sizes are rounded to pixels on the way; this much slack covers it. */
+const val GRID_TOLERANCE_PX = 2f
 
 /** How long a database write that was going to happen takes to show up. */
 const val WRITE_GRACE_MS = 500L

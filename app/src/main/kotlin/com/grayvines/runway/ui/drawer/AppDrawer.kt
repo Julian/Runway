@@ -75,9 +75,6 @@ const val DRAWER_LIST_TAG = "drawer-list"
 /** Opaque once on: icons showing through would be noise over icons. */
 private val SURFACE = Color(0xFF0E0E10)
 
-/** Arriving, it is translucent and a little larger than the screen, and settles onto it. */
-private const val FROM_SCALE = 1.08f
-
 /** Never fainter than this, and fully opaque this far in: seen from the first pixel. */
 private const val FAINTEST = 0.5f
 private const val OPAQUE_AT = 0.25f
@@ -99,10 +96,9 @@ private const val HINT_ALPHA = 0.5f
  * list as you type ([query]) and takes the keyboard as the drawer opens when [keyboard] says so.
  * Icons are the home screen's [iconSize] unless [columns] leaves less room than that. With nothing
  * typed and [index] set, an alphabet down the right edge jumps the list. Drawn [revealed] of the
- * way up from the bottom edge, following the finger, translucent and slightly larger while it
- * arrives so it reads as settling onto the screen rather than sliding across it. Closes on back,
- * and pulling the list down past its top pulls the drawer down with it; letting go decides
- * ([onPullEnd]). Launching an app closes it.
+ * way up from the bottom edge, its top edge under the finger once it has caught up with it,
+ * translucent while it arrives. Closes on back, and pulling the list down past its top pulls the
+ * drawer down with it; letting go decides ([onPullEnd]). Launching an app closes it.
  */
 @Composable
 fun AppDrawer(
@@ -199,13 +195,13 @@ private fun IndexedGrid(
     }
 }
 
-/** Drawn [revealed] of the way up from the bottom, translucent and a little large on the way. */
+/**
+ * Drawn [revealed] of the way up from the bottom, translucent on the way. Not scaled: its top edge
+ * is where the finger is, and must stay there.
+ */
 private fun Modifier.arriving(revealed: () -> Float) = graphicsLayer {
-    val away = 1f - revealed()
     alpha = (FAINTEST + (1f - FAINTEST) * revealed() / OPAQUE_AT).coerceAtMost(1f)
-    scaleX = 1f + (FROM_SCALE - 1f) * away
-    scaleY = scaleX
-    translationY = away * size.height
+    translationY = (1f - revealed()) * size.height
 }
 
 /** The home screen's icon size, unless [columns] across the room inside the margins is tighter. */

@@ -76,6 +76,32 @@ class DrawerMotionTest {
         }
 
     @Test
+    fun `the drawer catches up with the finger, then moves with it one to one`() =
+        runWithMotion { motion, release ->
+            motion.startPull(fingerY = 800f) // 200 px up a 1000 px screen
+            advanceUntilIdle() // the catch-up runs its course
+            assertEquals(0.2f, motion.shown.value, 0.01f) // its top edge is at the finger
+            motion.dragBy(-100f)
+            assertEquals(0.3f, motion.shown.value, 0.01f)
+            motion.dragBy(10f) // a wobble, not a change of mind
+            assertEquals(0.29f, motion.shown.value, 0.01f)
+            // Let go: 290 px is past the threshold, so it asks to open, and until the opening
+            // animation takes over it stays drawn where the finger left it.
+            assertEquals(Asked.OPEN, release(0f, false))
+            advanceUntilIdle()
+            assertEquals(0.29f, motion.shown.value, 0.01f)
+        }
+
+    @Test
+    fun `a pull that begins inside the open drawer moves it from where it is`() =
+        runWithMotion { motion, release ->
+            motion.revealed.snapTo(1f)
+            motion.dragBy(100f) // down, with no finger position given
+            assertEquals(0.9f, motion.shown.value, 0.01f)
+            release(0f, true)
+        }
+
+    @Test
     fun `a short pull down asks for nothing`() = runWithMotion { motion, release ->
         motion.dragBy(10f)
         assertEquals(Asked.NOTHING, release(0f, false))
@@ -126,6 +152,19 @@ class DrawerMotionTest {
             advanceUntilIdle()
             assertEquals(0f, motion.given.value, 0.01f) // never on its way to the shade
             assertEquals(Asked.NOTHING, release(2000f, false)) // even flicked down
+        }
+
+    @Test
+    fun `coming back a little from the farthest point cancels, a smaller wobble does not`() =
+        runWithMotion { motion, release ->
+            repeat(30) { motion.dragBy(-10f) } // 300 px up: well past the threshold
+            repeat(3) { motion.dragBy(10f) } // 30 px back down: a change of mind
+            assertEquals(Asked.NOTHING, release(0f, false))
+
+            motion.startPull(null)
+            repeat(30) { motion.dragBy(-10f) }
+            motion.dragBy(10f) // 10 px: a wobble
+            assertEquals(Asked.OPEN, release(0f, false))
         }
 
     @Test
