@@ -24,6 +24,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
     /**
      * Where the finger has pulled the drawer to, kept synchronously: the animatable catches up on
      * its own frames, and a quick flick lets go before it has, which used to read as "no pull".
+     * Negative is a pull the other way, down from a closed drawer, which is for the shade.
      */
     private var pulled = 0f
     private var pulling = false
@@ -41,21 +42,31 @@ class DrawerMotion(private val scope: CoroutineScope) {
             pulling = true
             pulled = revealed.value
         }
-        pulled = (pulled - dy / travel).coerceIn(0f, 1f)
-        val to = pulled
+        pulled = (pulled - dy / travel).coerceIn(-1f, 1f)
+        val to = pulled.coerceAtLeast(0f)
         scope.launch { revealed.snapTo(to) }
     }
 
     /**
      * The finger let go at [velocity] px/s (negative is up). Asks for the state change if the
-     * drawer should end up other than it is; otherwise animates back to where it belongs.
+     * drawer should end up other than it is; a pull down from a closed drawer that would have
+     * opened it the other way asks for the shade instead; otherwise animates back to where it
+     * belongs.
      */
-    fun release(velocity: Float, open: Boolean, onOpen: () -> Unit, onClose: () -> Unit) {
+    fun release(
+        velocity: Float,
+        open: Boolean,
+        onOpen: () -> Unit,
+        onClose: () -> Unit,
+        onOpenShade: () -> Unit,
+    ) {
         val wantOpen = shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick)
+        val wantShade = pulling && !open && shouldOpen(-pulled, velocity, openAt, flick)
         pulling = false
         when {
             wantOpen && !open -> onOpen()
             !wantOpen && open -> onClose()
+            wantShade -> onOpenShade()
             else -> scope.launch { settle(open) }
         }
     }

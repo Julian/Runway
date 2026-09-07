@@ -2,6 +2,7 @@ package com.grayvines.runway
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,6 +19,7 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.home.DragSession
+import com.grayvines.runway.ui.home.DrawerActions
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.home.applying
@@ -56,8 +58,12 @@ class LauncherActivity : ComponentActivity() {
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
                     drawerOpen = drawerOpen,
-                    onOpenDrawer = viewModel::openDrawer,
-                    onCloseDrawer = viewModel::closeDrawer,
+                    drawerActions =
+                        DrawerActions(
+                            open = viewModel::openDrawer,
+                            close = viewModel::closeDrawer,
+                            openShade = ::openNotifications,
+                        ),
                     onLaunchApp = viewModel::launch,
                     drag =
                         DragSession(
@@ -85,6 +91,14 @@ class LauncherActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         viewModel.onHomeIntent()
+    }
+
+    /** A swipe down on the home screen. Some Androids refuse; then the user hears why. */
+    private fun openNotifications() {
+        if (!appGraph.notificationShade.open()) {
+            Toast.makeText(this, "Android refused to open the notifications", Toast.LENGTH_SHORT)
+                .show()
+        }
     }
 }
 

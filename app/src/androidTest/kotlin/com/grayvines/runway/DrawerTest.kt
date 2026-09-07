@@ -17,6 +17,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
@@ -28,7 +29,9 @@ import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -249,6 +252,45 @@ class DrawerTest : LauncherFixture() {
         }
     }
 
+    @Test
+    fun swipingDownOnThePagesPullsDownTheNotificationShade() {
+        pullDown(OPENING_PULL)
+        assertTrue(
+            "the notification shade should have come down",
+            device.wait(Until.hasObject(SHADE), TIMEOUT_MS),
+        )
+    }
+
+    @Test
+    fun aShortSwipeDownLeavesTheHomeScreenAsItWas() {
+        pullDown(PARTIAL_PULL)
+        assertFalse("no shade for a pull this short", device.wait(Until.hasObject(SHADE), GRACE_MS))
+        assertTrue(
+            "nor any drawer",
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty(),
+        )
+    }
+
+    /** The shade outlives a test that pulled it down; the next test wants the home screen. */
+    @After
+    fun collapseShade() {
+        device.executeShellCommand("cmd statusbar collapse")
+        device.wait(Until.gone(SHADE), TIMEOUT_MS)
+    }
+
+    private fun pullDown(share: Float) {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, root.height * share / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            up()
+        }
+    }
+
     private fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
         compose.waitUntil(TIMEOUT_MS) {
@@ -273,5 +315,7 @@ class DrawerTest : LauncherFixture() {
         const val PARTIAL_PULL = 0.01f // under Medium's 2%: shows the drawer, lets it fall back
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
         const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
+        const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
+        val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }
 }

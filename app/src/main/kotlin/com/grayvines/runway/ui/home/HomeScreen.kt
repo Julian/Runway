@@ -68,8 +68,7 @@ fun HomeScreen(
     itemMenuActions: ItemMenuActions,
     onDismissItemMenu: () -> Unit,
     drawerOpen: Boolean,
-    onOpenDrawer: () -> Unit,
-    onCloseDrawer: () -> Unit,
+    drawerActions: DrawerActions,
     onLaunchApp: (AppEntry) -> Unit,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onHomePageShown: (page: Int) -> Unit,
@@ -90,8 +89,7 @@ fun HomeScreen(
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        val drawer =
-            rememberDrawer(drawerOpen, maxHeight, settings.drawerSwipe, onOpenDrawer, onCloseDrawer)
+        val drawer = rememberDrawer(drawerOpen, maxHeight, settings.drawerSwipe, drawerActions)
         // The home area steps back for a lifted icon and for the drawer alike.
         val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.revealed.value)
         HomeColumn(
@@ -121,7 +119,7 @@ fun HomeScreen(
             onPull = drawer.motion::dragBy,
             onPullEnd = drawer.release,
             onLaunch = onLaunchApp,
-            onClose = onCloseDrawer,
+            onClose = drawerActions.close,
             drag = drag,
         )
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
@@ -219,6 +217,9 @@ private fun Modifier.dragTracking(drag: DragSession): Modifier {
     return this.then(remember { Modifier.tracksDrag { current.value } })
 }
 
+/** What a vertical swipe on the home screen can ask for. */
+class DrawerActions(val open: () -> Unit, val close: () -> Unit, val openShade: () -> Unit)
+
 /** The drawer's motion, its release decision, and the pull gesture for the pages, wired once. */
 private class DrawerControls(
     val motion: DrawerMotion,
@@ -231,15 +232,16 @@ private fun rememberDrawer(
     open: Boolean,
     height: Dp,
     swipe: DrawerSwipe,
-    onOpen: () -> Unit,
-    onClose: () -> Unit,
+    actions: DrawerActions,
 ): DrawerControls {
     val scope = rememberCoroutineScope()
     val motion = remember { DrawerMotion(scope) }
     val density = LocalDensity.current
     motion.laidOut(with(density) { height.toPx() }, density.density, swipe)
     LaunchedEffect(open) { motion.settle(open) }
-    val release = { velocity: Float -> motion.release(velocity, open, onOpen, onClose) }
+    val release = { velocity: Float ->
+        motion.release(velocity, open, actions.open, actions.close, actions.openShade)
+    }
     return DrawerControls(motion, release, Modifier.drawerPull(motion, release))
 }
 

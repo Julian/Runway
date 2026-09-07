@@ -5,6 +5,8 @@
     <!-- Package visibility: launchable apps, web-search handlers, widget providers. -->
     <!-- The item menu's "Uninstall" asks the system installer to confirm. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Swiping down on the home screen pulls down the notification shade. -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 
     <queries>
         <intent>
