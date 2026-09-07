@@ -38,8 +38,25 @@ jobs:
         run: ./gradlew spotlessCheck detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease
 
   instrumented:
-    name: Instrumented tests
+    name: Instrumented tests (${{ matrix.device.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one device failing must not hide how the other did
+      matrix:
+        device:
+          # Our minSdk, on the profile CI has always used.
+          - name: API 36, Pixel 6
+            api: 36
+            image: 36
+            target: google_apis
+            profile: pixel_6
+          # The phone Runway is developed against (its image is the 37.0 line, not 16 KB pages;
+          # the 16 KB one's system server used to die during installs here).
+          - name: API 37, Pixel 10 Pro
+            api: 37
+            image: "37.0"
+            target: google_apis
+            profile: pixel_10_pro
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,12 +76,11 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          # API 36, not 37: the only API 37 x86 image this runner can name is the 16 KB
-          # page-size one, whose system server dies during installs here. 36 is our minSdk.
-          api-level: 36
-          target: google_apis
+          api-level: ${{ matrix.device.api }}
+          system-image-api-level: ${{ matrix.device.image }}
+          target: ${{ matrix.device.target }}
           arch: x86_64
-          profile: pixel_6
+          profile: ${{ matrix.device.profile }}
           disk-size: 8G # the default is too small; installs fail with ENOSPC
           ram-size: 4096M
           disable-animations: true
@@ -75,7 +91,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
-          name: instrumented-test-report
+          name: instrumented-test-report-${{ matrix.device.api }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
