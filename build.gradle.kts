@@ -8,6 +8,8 @@ buildscript {
 
 plugins {
     alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.test) apply false
+    alias(libs.plugins.baselineprofile) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.room3) apply false
@@ -29,7 +31,7 @@ spotless {
 }
 
 detekt {
-    source.setFrom("app/src")
+    source.setFrom("app/src", "baselineprofile/src")
     config.setFrom("config/detekt/detekt.yml")
     buildUponDefaultConfig = true
     allRules = true

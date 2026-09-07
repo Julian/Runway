@@ -40,6 +40,7 @@ jobs:
   instrumented:
     name: Instrumented tests (${{ matrix.device.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 45 # a hung emulator must not hold a runner for hours
     strategy:
       fail-fast: false # one device failing must not hide how the other did
       matrix:
@@ -88,6 +89,7 @@ jobs:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs: [checks, instrumented]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write # to create the GitHub release and upload the APK
     steps:
@@ -102,16 +104,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-disabled: true # a release never reads a cache another run could have poisoned
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Write the signing key
         env:
           KEY_B64: ${{ secrets.RUNWAY_RELEASE_KEY_B64 }}
         run: printf '%s' "$KEY_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
-      - name: Build the signed release
+      # -PrunwayProfile records the baseline profile on a managed AOSP emulator as part of the
+      # build, so every release ships one recorded from its own code.
+      - name: Build the signed release, with a fresh baseline profile
         env:
           ORG_GRADLE_PROJECT_runwayStoreFile: ${{ runner.temp }}/release.p12
           ORG_GRADLE_PROJECT_runwayStorePassword: ${{ secrets.RUNWAY_RELEASE_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_runwayVersionName: ${{ github.ref_name }}
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleRelease -PrunwayProfile -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -34,6 +34,15 @@ Gradle can create the emulators itself, from the devices declared in the build, 
 
 Debug builds use the application id `com.grayvines.runway.debug` so they can be installed alongside a release build without touching its layout.
 
+## Baseline profile
+
+Published releases ship a baseline profile, which has Android compile the launcher's hot paths at install time so the first frames, scrolls and drags do not run interpreted.
+The `baselineprofile` module records it by driving the launcher on a Gradle-managed emulator, and the release build records a fresh one when given the `runwayProfile` property, which is how the published builds are made.
+
+```sh
+./gradlew :app:assembleRelease -PrunwayProfile
+```
+
 ## Release builds
 
 Release builds are minified and use the application id `com.grayvines.runway`.

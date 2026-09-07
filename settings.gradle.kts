@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "Runway"
 
 include(":app")
+
+include(":baselineprofile")

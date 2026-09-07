@@ -13,3 +13,6 @@ local.properties
 FEATURES.md
 IMPLEMENTATION_PLAN.md
 TODO.md
+
+# A baseline profile recorded by hand; the published builds record their own.
+app/src/release/generated/baselineProfiles/

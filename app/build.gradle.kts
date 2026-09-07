@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room3)
+    alias(libs.plugins.baselineprofile)
 }
 
 // Release signing. The key is a PKCS#12 file kept with application data (Application Support on
@@ -227,7 +228,21 @@ tasks
     .matching { it.name.endsWith("DebugAndroidTest") && it.name != "connectedDebugAndroidTest" }
     .configureEach { finalizedBy(printConnectedTestFailures) }
 
+// The baseline profile tells ART which code to compile at install time: the startup, drawer and
+// drag paths the baselineprofile module's journey walks. A release built with -PrunwayProfile
+// (CI's, on a managed AOSP emulator) records it fresh and bakes it in, so it never goes stale
+// and nothing is checked in; a release built without one simply carries no profile.
+val recordProfile = providers.gradleProperty("runwayProfile").isPresent
+
+baselineProfile {
+    automaticGenerationDuringBuild = recordProfile
+    // The plugin insists on one of the two; a by-hand generation lands in src (ignored by git).
+    saveInSrc = !recordProfile
+}
+
 dependencies {
+    implementation(libs.androidx.profileinstaller)
+    "baselineProfile"(project(":baselineprofile"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
