@@ -35,6 +35,7 @@ import com.grayvines.runway.ui.drawer.index
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import com.grayvines.runway.ui.shade.SHADE_HINT_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -384,6 +385,47 @@ class DrawerTest : LauncherFixture() {
     private fun searchField() = compose.onNodeWithTag(DRAWER_SEARCH_TAG)
 
     private fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
+
+    @Test
+    fun aSwipeDownShowsTheShadeComingAndLetsGoIfItDoesNot() {
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, partialPullPx() / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+        }
+        compose.onNodeWithTag(SHADE_HINT_TAG, useUnmergedTree = true).assertExists()
+        compose.onRoot().performTouchInput { up() }
+        awaitGone(SHADE_HINT_TAG)
+        assertTrue("too short a pull for the shade", !device.hasObject(SHADE))
+    }
+
+    @Test
+    fun aSwipeUpThatComesBackDownDoesNothingAtAll() {
+        // Enough up to show the drawer, then a change of mind, flicked down past the start.
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, -root.height * OPENING_PULL / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            repeat(3) {
+                moveBy(Offset(0f, root.height * OPENING_PULL / 2))
+                advanceEventTime(QUICK_STEP_MS)
+            }
+            up()
+        }
+        awaitDrawerClosed()
+        assertTrue(
+            "a reversed swipe must not open the shade",
+            !device.wait(Until.hasObject(SHADE), GRACE_MS),
+        )
+        compose.onAllNodesWithTag(SHADE_HINT_TAG, useUnmergedTree = true).assertCountEquals(0)
+    }
 
     @Test
     fun swipingDownOnThePagesPullsDownTheNotificationShade() {

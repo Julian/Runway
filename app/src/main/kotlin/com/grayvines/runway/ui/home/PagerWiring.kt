@@ -12,7 +12,18 @@ private const val FLIP_SCROLL_MS = 250
 
 /** Reports the page a pager has settled on, to whichever callback is current. */
 @Composable
-internal fun PageShown(pager: PagerState, onShown: (page: Int) -> Unit) {
+internal fun PagesShown(
+    home: PagerState,
+    dock: PagerState,
+    onHomeShown: (page: Int) -> Unit,
+    onDockShown: (page: Int) -> Unit,
+) {
+    PageShown(home, onHomeShown)
+    PageShown(dock, onDockShown)
+}
+
+@Composable
+private fun PageShown(pager: PagerState, onShown: (page: Int) -> Unit) {
     val shown = rememberUpdatedState(onShown)
     LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { shown.value(it) } }
 }

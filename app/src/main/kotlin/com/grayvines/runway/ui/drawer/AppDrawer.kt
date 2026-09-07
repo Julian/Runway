@@ -78,8 +78,9 @@ private val SURFACE = Color(0xFF0E0E10)
 /** Arriving, it is translucent and a little larger than the screen, and settles onto it. */
 private const val FROM_SCALE = 1.08f
 
-/** Fully opaque this far in, well before it has settled. */
-private const val OPAQUE_AT = 0.6f
+/** Never fainter than this, and fully opaque this far in: seen from the first pixel. */
+private const val FAINTEST = 0.5f
+private const val OPAQUE_AT = 0.25f
 
 /** Room between the edges of the screen and what is on the drawer. */
 private val MARGIN = 16.dp
@@ -201,7 +202,7 @@ private fun IndexedGrid(
 /** Drawn [revealed] of the way up from the bottom, translucent and a little large on the way. */
 private fun Modifier.arriving(revealed: () -> Float) = graphicsLayer {
     val away = 1f - revealed()
-    alpha = (revealed() / OPAQUE_AT).coerceAtMost(1f)
+    alpha = (FAINTEST + (1f - FAINTEST) * revealed() / OPAQUE_AT).coerceAtMost(1f)
     scaleX = 1f + (FROM_SCALE - 1f) * away
     scaleY = scaleX
     translationY = away * size.height

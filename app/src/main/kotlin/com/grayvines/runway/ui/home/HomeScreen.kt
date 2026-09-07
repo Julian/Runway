@@ -36,6 +36,7 @@ import com.grayvines.runway.ui.folder.FolderSheet
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.shade.ShadeHint
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -81,8 +82,7 @@ fun HomeScreen(
     val dockPager = rememberPagerState { state.dockPages.size }
     PagerCommands(homePager, goHome, flipHomePage)
     PageFlips(dockPager, flipDockPage)
-    PageShown(homePager, onHomePageShown)
-    PageShown(dockPager, onDockPageShown)
+    PagesShown(homePager, dockPager, onHomePageShown, onDockPageShown)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions)
@@ -108,6 +108,7 @@ fun HomeScreen(
             onDockPagePositioned = onDockPagePositioned,
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
+        ShadeHint({ drawer.motion.given.value }, insets)
         openFolder?.let { OpenFolder(state, it, iconSize, onLaunchFromFolder, onCloseFolder) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(

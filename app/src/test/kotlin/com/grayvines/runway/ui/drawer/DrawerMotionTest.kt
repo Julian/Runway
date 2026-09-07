@@ -3,12 +3,16 @@ package com.grayvines.runway.ui.drawer
 import androidx.compose.runtime.MonotonicFrameClock
 import com.grayvines.runway.data.settings.DrawerSwipe
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DrawerMotionTest {
     /** Velocities in px/s against a 400 px/s flick. */
     private fun opens(revealed: Float, upwards: Float, openAt: Float = 0.3f, flick: Float = 400f) =
@@ -46,7 +50,7 @@ class DrawerMotionTest {
 
     /** A 1000 px tall screen at density 1 with the default sensitivity: 20 px opens either way. */
     private fun runWithMotion(
-        block: suspend (DrawerMotion, release: (Float, Boolean) -> Asked) -> Unit
+        block: suspend TestScope.(DrawerMotion, release: (Float, Boolean) -> Asked) -> Unit
     ) = runTest {
         val motion = DrawerMotion(CoroutineScope(coroutineContext + ImmediateFrames))
         motion.laidOut(heightPx = 1000f, density = 1f, swipe = DrawerSwipe.MEDIUM)
@@ -78,6 +82,20 @@ class DrawerMotionTest {
     }
 
     @Test
+    fun `a pull down gives way by how close it is to the shade, and lets go on release`() =
+        runWithMotion { motion, release ->
+            motion.dragBy(10f) // half of the 20 px that would open the shade
+            advanceUntilIdle() // the finger's moves reach the animatables on their own frames
+            assertEquals(0.5f, motion.given.value, 0.01f)
+            motion.dragBy(30f) // past it: all the way, no further
+            advanceUntilIdle()
+            assertEquals(1f, motion.given.value, 0.01f)
+            release(0f, false)
+            advanceUntilIdle()
+            assertEquals(0f, motion.given.value, 0.01f)
+        }
+
+    @Test
     fun `a quick flick down asks for the shade however short`() = runWithMotion { motion, release ->
         motion.dragBy(5f)
         assertEquals(Asked.SHADE, release(2000f, false))
@@ -98,6 +116,25 @@ class DrawerMotionTest {
         repeat(5) { motion.dragBy(10f) }
         repeat(5) { motion.dragBy(-10f) }
         assertEquals(Asked.NOTHING, release(0f, false))
+    }
+
+    @Test
+    fun `a swipe commits to its first direction, so up then back down never asks for the shade`() =
+        runWithMotion { motion, release ->
+            repeat(10) { motion.dragBy(-10f) } // up: the drawer starts to show
+            repeat(20) { motion.dragBy(10f) } // a change of mind, well past where it started
+            advanceUntilIdle()
+            assertEquals(0f, motion.given.value, 0.01f) // never on its way to the shade
+            assertEquals(Asked.NOTHING, release(2000f, false)) // even flicked down
+        }
+
+    @Test
+    fun `a swipe down then back up never asks for the drawer`() = runWithMotion { motion, release ->
+        repeat(10) { motion.dragBy(10f) }
+        repeat(20) { motion.dragBy(-10f) }
+        advanceUntilIdle()
+        assertEquals(0f, motion.revealed.value, 0.01f)
+        assertEquals(Asked.NOTHING, release(-2000f, false))
     }
 
     @Test
