@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
-import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 
@@ -30,14 +29,14 @@ const val DRAG_OVERLAY_TAG = "drag-overlay"
  * pick-up has progressed, shared with the home area's pull-back so the two move as one.
  */
 @Composable
-fun DragOverlay(drag: DragSession, app: AppEntry?, cell: DpSize, iconSize: Dp, lift: Float) {
-    if (app == null) return
+fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: Float) {
+    if (item == null) return
     val state = drag.state
     val settling = drag.settling
     when {
         state != null ->
             OverlayCell(
-                app,
+                item,
                 Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y),
                 cell,
                 iconSize,
@@ -45,7 +44,7 @@ fun DragOverlay(drag: DragSession, app: AppEntry?, cell: DpSize, iconSize: Dp, l
             )
         settling != null ->
             Settle(
-                app,
+                item,
                 settling,
                 drag.settleTarget,
                 cell,
@@ -57,7 +56,7 @@ fun DragOverlay(drag: DragSession, app: AppEntry?, cell: DpSize, iconSize: Dp, l
 
 @Composable
 private fun Settle(
-    app: AppEntry,
+    item: HomeItem,
     settling: Settling,
     target: Point?,
     cell: DpSize,
@@ -83,12 +82,12 @@ private fun Settle(
             Point(DragMotion.lerp(from.x, target.x, t), DragMotion.lerp(from.y, target.y, t))
         }
     val at = Point(centre.x - half.x, centre.y - half.y)
-    OverlayCell(app, at, cell, iconSize, DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t))
+    OverlayCell(item, at, cell, iconSize, DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t))
 }
 
 @Composable
 private fun OverlayCell(
-    app: AppEntry,
+    item: HomeItem,
     at: Point,
     cell: DpSize,
     iconSize: Dp,
@@ -98,8 +97,8 @@ private fun OverlayCell(
         modifier = Modifier.offset { IntOffset(at.x.toInt(), at.y.toInt()) }.size(cell),
         contentAlignment = Alignment.Center,
     ) {
-        AppIcon(
-            app,
+        ItemIcon(
+            item,
             Modifier.size(iconSize)
                 .graphicsLayer {
                     scaleX = scale

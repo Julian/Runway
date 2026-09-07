@@ -1,5 +1,6 @@
 package com.grayvines.runway
 
+import androidx.compose.ui.geometry.Offset
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
@@ -27,10 +28,12 @@ class DropTest : LauncherFixture() {
     }
 
     @Test
-    fun droppingOnAnOccupiedCellDisplacesItsOccupant() {
+    fun droppingBesideAnOccupiedCellsIconDisplacesItsOccupant() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
-        drag(from = firstHomeApp, to = grid.homeCell(1, 0))
+        // Short of the icon's middle (which would fold with it) but far enough for the corner to
+        // snap to that cell.
+        drag(from = firstHomeApp, to = grid.homeCell(1, 0) - Offset(grid.cellWidth() * BESIDE, 0f))
         compose.waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 1 to 0 }
         assertEquals(0 to 0, homeCellOf(neighbour)) // into the cell the mover vacated
     }
@@ -44,9 +47,9 @@ class DropTest : LauncherFixture() {
     }
 
     @Test
-    fun droppingOnAnOccupiedDockSlotSnapsBack() {
+    fun droppingBesideAnOccupiedDockSlotsIconSnapsBack() {
         val grid = useGrid(columns = 5, rows = 7)
-        drag(from = firstHomeApp, to = grid.dockSlot(0))
+        drag(from = firstHomeApp, to = grid.dockSlot(0) + Offset(grid.dockSlotWidth() * BESIDE, 0f))
         assertUnmoved(firstHomeApp)
         assertEquals(0, placementOf(firstDockApp)?.x)
     }
@@ -103,5 +106,10 @@ class DropTest : LauncherFixture() {
         compose.waitUntil(TIMEOUT_MS) {
             placementOf(firstDockApp)?.let { it.container == Container.HOME && it.x == 4 } ?: false
         }
+    }
+
+    private companion object {
+        /** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
+        const val BESIDE = 0.35f
     }
 }

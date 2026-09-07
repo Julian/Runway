@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.foldInto
+import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
@@ -43,6 +46,8 @@ data class HomeItem(
     val spanY: Int,
     val label: String,
     val app: AppEntry?,
+    /** For a folder: the apps in it that are available, in order. */
+    val folder: List<AppEntry> = emptyList(),
 ) {
     val footprint: Footprint
         get() = Footprint(x, y, spanX, spanY)
@@ -114,10 +119,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 logged("could not save the move; the item snaps back") {
                     with(move) {
                         val app = newApp
-                        if (app != null) {
-                            graph.workspace.addApp(app, container, page, x, y)
-                        } else {
-                            graph.workspace.moveItem(itemId, container, page, x, y, displaced)
+                        val into = foldInto
+                        when {
+                            into != null ->
+                                graph.workspace.foldInto(
+                                    into,
+                                    if (app != null) Dropped.App(app) else Dropped.Item(itemId),
+                                )
+                            app != null -> graph.workspace.addApp(app, container, page, x, y)
+                            else ->
+                                graph.workspace.moveItem(itemId, container, page, x, y, displaced)
                         }
                     }
                 }
@@ -160,12 +171,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.workspace.observe(Container.HOME),
                 graph.workspace.observe(Container.DOCK),
                 graph.appRepository.apps,
-            ) { settings, home, dock, apps ->
+                graph.workspace.observeFolders(),
+            ) { settings, home, dock, apps, folders ->
                 val byKey = apps.associateBy { it.key }
+                val byFolder = folders.associateBy { it.id }
                 HomeState(
                     settings = settings,
-                    homePages = home.toHomePages(byKey),
-                    dockPages = dock.toHomePages(byKey),
+                    homePages = home.toHomePages(byKey, byFolder),
+                    dockPages = dock.toHomePages(byKey, byFolder),
                     searchTarget = graph.searchTargets.resolve(settings.searchTarget),
                     apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
                     // Not before the app list: with it empty every icon would be hidden and
@@ -243,14 +256,26 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     }
 }
 
-/** True once the drawn layout shows [move] applied: the item, or the new app, is in its cell. */
-internal fun HomeState.reflects(move: PendingMove) =
-    pages(move.container).any { p ->
+/**
+ * True once the drawn layout shows [move] applied: the item, or the new app, is in its cell; for a
+ * fold, the app is in the folder there, or the placement it came from is gone.
+ */
+internal fun HomeState.reflects(move: PendingMove): Boolean {
+    val newApp = move.newApp
+    if (move.foldInto != null && newApp == null) {
+        return (homePages + dockPages).flatMap { it.items }.none { it.id == move.itemId }
+    }
+    return pages(move.container).any { p ->
         p.index == move.page &&
             p.items.any { it.x == move.x && it.y == move.y && it.isMoverOf(move) }
     }
+}
 
 private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
     val newApp = move.newApp
-    return if (newApp != null) app?.ref == newApp else id == move.itemId
+    return when {
+        newApp != null && move.foldInto != null -> folder.any { it.ref == newApp }
+        newApp != null -> app?.ref == newApp
+        else -> id == move.itemId
+    }
 }

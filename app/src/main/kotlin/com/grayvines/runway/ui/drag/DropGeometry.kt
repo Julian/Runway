@@ -57,6 +57,52 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
     }
 }
 
+/**
+ * The middle of a cell, this share of it each way, is where a dropped app folds with what is there;
+ * the ring around it still displaces, so an icon can be pushed aside without folding.
+ */
+const val FOLD_ZONE = 0.6f
+
+/**
+ * The cell the pointer itself is in, when it is well inside it (see [FOLD_ZONE]): a drop there
+ * means "onto what is here" rather than "next to it".
+ */
+fun DropAreas.cellUnder(pointer: Point): DropTarget? {
+    val homeArea = home?.takeIf { pointer in it }
+    val dockArea = dock?.takeIf { pointer in it }
+    return when {
+        homeArea != null -> {
+            val cellW = homeArea.width / columns
+            val cellH = homeArea.height / rows
+            val x = ((pointer.x - homeArea.left) / cellW).coerceIn(0f, columns - EPSILON)
+            val y = ((pointer.y - homeArea.top) / cellH).coerceIn(0f, rows - EPSILON)
+            DropTarget.HomeCell(homePage, x.toInt(), y.toInt()).takeIf {
+                x.wellInside() && y.wellInside()
+            }
+        }
+        dockArea != null -> {
+            val slot =
+                ((pointer.x - dockArea.left) / (dockArea.width / dockSlots)).coerceIn(
+                    0f,
+                    dockSlots - EPSILON,
+                )
+            DropTarget.DockSlot(dockPage, slot.toInt()).takeIf { slot.wellInside() }
+        }
+        else -> {
+            null
+        }
+    }
+}
+
+/** Whether a cell coordinate's fraction lies within the middle [FOLD_ZONE] of the cell. */
+private fun Float.wellInside(): Boolean {
+    val within = this - floor(this)
+    val margin = (1f - FOLD_ZONE) / 2
+    return within in margin..1f - margin
+}
+
+private const val EPSILON = 0.001f
+
 /** Which side of an area a drag is hovering at. */
 enum class Edge(val pageDelta: Int) {
     LEFT(-1),

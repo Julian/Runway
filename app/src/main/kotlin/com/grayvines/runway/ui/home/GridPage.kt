@@ -66,6 +66,7 @@ internal fun GridPage(
                         onClick = { onLaunch(item) },
                         drag = handlersFor(item),
                         lifted = item.id == drag?.draggedId || settlingHere != null,
+                        receiving = item.id == drag?.foldTargetId,
                         modifier =
                             if (settlingHere != null) {
                                 Modifier.onGloballyPositioned {

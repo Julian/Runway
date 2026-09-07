@@ -41,6 +41,14 @@ class PendingMoveTest {
     }
 
     @Test
+    fun `a fold takes the mover off its page and leaves the target where it is`() {
+        val fold = PendingMove(1, Container.HOME, 0, 1, 0, emptyMap(), foldInto = 2L)
+        val (h, d) = fold.applyTo(home, dock)
+        assertEquals(setOf(Triple(0, 2L, 1 to 0)), cells(h))
+        assertEquals(cells(dock), cells(d))
+    }
+
+    @Test
     fun `is a no-op once the data already reflects it`() {
         val move = PendingMove(1, Container.HOME, 0, 1, 0, displaced = mapOf(2L to Footprint(0, 0)))
         val (once, _) = move.applyTo(home, dock)

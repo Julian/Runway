@@ -116,18 +116,19 @@ class DragCoordinator(
         if (edge == null) edgesArmed = true
         val hovered = edge.takeIf { edgesArmed }
         edgeDwell.hover(hovered)
-        controller.move(pointer, target, hovered)
+        controller.move(pointer, target, hovered, over = areas.areas.cellUnder(pointer))
     }
 
     /** Commits the planned drop, if any; the override shows it until the database catches up. */
     fun endDrag() {
         edgeDwell.stop()
         val state = drag.value ?: return
-        val move = controller.drop()
+        val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
         // Whether the drop lands or is refused, the icon settles from where it was released. An
-        // app from the drawer has no cell to settle into or back to: it simply appears or does not.
-        if (state.source.newApp == null) {
+        // app from the drawer has no cell to settle into or back to, and one folded away has no
+        // cell of its own any more: those simply appear, or do not.
+        if (state.source.newApp == null && plan !is DropPlan.Fold) {
             val settling = Settling(state.source.itemId, from)
             _settling.value = settling
             scope.launch {
@@ -137,12 +138,12 @@ class DragCoordinator(
                 if (_settling.value == settling) _settling.value = null
             }
         }
-        if (move == null) {
+        if (plan == null) {
             scope.launch { workspace.pruneEmptyPages() }
             return
         }
         val pendingMove =
-            move.asPendingMove(state.source.itemId).copy(from = from, newApp = state.source.newApp)
+            plan.asPendingMove(state.source.itemId).copy(from = from, newApp = state.source.newApp)
         _pending.value = pendingMove
         scope.launch {
             try {
@@ -165,13 +166,20 @@ class DragCoordinator(
         scope.launch { workspace.pruneEmptyPages() }
     }
 
-    private fun DropPlan.Move.asPendingMove(itemId: Long) =
-        when (val t = target) {
+    private fun DropPlan.asPendingMove(itemId: Long): PendingMove {
+        val (target, displaced, into) =
+            when (this) {
+                is DropPlan.Move -> Triple(target, displaced, null)
+                is DropPlan.Fold -> Triple(target, emptyMap(), into)
+                DropPlan.Invalid -> error("an invalid plan is never dropped")
+            }
+        return when (target) {
             is DropTarget.HomeCell ->
-                PendingMove(itemId, Container.HOME, t.page, t.x, t.y, displaced)
+                PendingMove(itemId, Container.HOME, target.page, target.x, target.y, displaced)
             is DropTarget.DockSlot ->
-                PendingMove(itemId, Container.DOCK, t.page, t.slot, 0, displaced)
-        }
+                PendingMove(itemId, Container.DOCK, target.page, target.slot, 0, displaced)
+        }.copy(foldInto = into)
+    }
 
     private companion object {
         const val SETTLE_TIMEOUT_MS = 2_000L

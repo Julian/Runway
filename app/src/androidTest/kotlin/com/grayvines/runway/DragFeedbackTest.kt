@@ -126,8 +126,12 @@ class DragFeedbackTest : LauncherFixture() {
     fun aDroppedIconIsDrawnAtItsTargetBeforeTheDatabaseCatchesUp() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
-        // Released off-centre; the cell must start there and only ever approach its slot.
-        holdDrag(from = firstHomeApp, to = grid.homeCell(1, 0) + Offset(grid.cellWidth() / 3, 0f))
+        // Released off-centre (and clear of the icon's middle, which would fold with it); the
+        // cell must start there and only ever approach its slot.
+        holdDrag(
+            from = firstHomeApp,
+            to = grid.homeCell(1, 0) - Offset(grid.cellWidth() * BESIDE, 0f),
+        )
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
         release()
         assertSettlesTowards(firstHomeApp, grid.homeCell(1, 0))
@@ -185,5 +189,10 @@ class DragFeedbackTest : LauncherFixture() {
         val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
         assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
         release()
+    }
+
+    private companion object {
+        /** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
+        const val BESIDE = 0.35f
     }
 }

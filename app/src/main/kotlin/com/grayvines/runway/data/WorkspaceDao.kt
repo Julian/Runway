@@ -53,6 +53,22 @@ interface WorkspaceDao {
     @Query("UPDATE items SET page_index = NULL, x = NULL, y = NULL WHERE id IN (:ids)")
     suspend fun park(ids: List<Long>)
 
+    @Query("SELECT * FROM items WHERE id = :id") suspend fun item(id: Long): ItemEntity?
+
+    @Insert suspend fun insertFolder(folder: FolderEntity): Long
+
+    /** An app already in the folder stays where it was. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFolderApp(app: FolderAppEntity)
+
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM folder_apps WHERE folder_id = :folderId")
+    suspend fun nextFolderPosition(folderId: Long): Int
+
+    @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folder_apps ORDER BY position")
+    fun observeFolderApps(): Flow<List<FolderAppEntity>>
+
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()

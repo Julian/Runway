@@ -97,6 +97,56 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `dropping an app on another makes a folder of the two in the target's cell`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val page = repo.observe(Container.HOME).first().pages.single()
+        val (a, b) = page.items.sortedBy { it.x }
+
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+
+        val items = repo.observe(Container.HOME).first().pages.single().items
+        val folder = items.single()
+        assertEquals(ItemKind.FOLDER, folder.kind)
+        assertEquals(b.id, folder.id)
+        assertEquals(b.x to b.y, folder.x to folder.y)
+        assertEquals(null, folder.component)
+        val content = repo.observeFolders().first().single()
+        assertEquals(folder.folderId, content.id)
+        assertEquals("Folder", content.name)
+        assertEquals(listOf(b, a).map { AppRef(it.component!!, it.profile!!) }, content.apps)
+    }
+
+    @Test
+    fun `dropping on a folder adds to it, the same app only once`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val page = repo.observe(Container.HOME).first().pages.single()
+        val (a, b) = page.items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+
+        val extra = AppRef("pkg9/.Main", 0)
+        repo.foldInto(targetId = b.id, dropped = Dropped.App(extra))
+        repo.foldInto(targetId = b.id, dropped = Dropped.App(extra))
+
+        val content = repo.observeFolders().first().single()
+        assertEquals(3, content.apps.size)
+        assertEquals(extra, content.apps.last())
+        assertEquals(1, repo.observe(Container.HOME).first().pages.single().items.size)
+    }
+
+    @Test
+    fun `a page emptied by folding its last item away is pruned`() = runTest {
+        repo.autoFill(apps(3), columns = 1, pageRows = 1, dockSlots = 1)
+        val pages = repo.observe(Container.HOME).first().pages
+        assertEquals(2, pages.size)
+        val onFirst = pages[0].items.single()
+        val onSecond = pages[1].items.single()
+
+        repo.foldInto(targetId = onFirst.id, dropped = Dropped.Item(onSecond.id))
+
+        assertEquals(1, repo.observe(Container.HOME).first().pages.size)
+    }
+
+    @Test
     fun `addPage appends an empty page and is idempotent`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         repo.addPage(Container.HOME, 1)

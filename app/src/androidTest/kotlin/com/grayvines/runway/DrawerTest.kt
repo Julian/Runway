@@ -182,17 +182,19 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
-    fun anAppPulledOutOfTheDrawerOntoATakenDockSlotAddsNothing() {
+    fun anAppPulledOutOfTheDrawerOntoATakenDockSlotJoinsItInAFolder() {
         val grid = useGrid(columns = 5, rows = 7)
-        val label = firstDrawerLabel()
+        // Not the app already in that slot: an app is in a folder once, so that would add nothing.
+        val label = sortedDrawerLabels().first { it != firstDockApp }
         val before = placementsOf(label).size
         openDrawer()
         liftFromDrawer(label)
         dragOn(to = grid.dockSlot(0))
         release()
         awaitDrawerClosed()
-        compose.waitForIdle()
-        assertEquals(before, placementsOf(label).size)
+        compose.waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
+        assertEquals(listOf(firstDockApp, label), dockFolderAt(0))
+        assertEquals(before, placementsOf(label).size) // in the folder, not on a cell of its own
     }
 
     private fun firstDrawerLabel() = runBlocking {
@@ -309,17 +311,21 @@ class DrawerTest : LauncherFixture() {
         runBlocking { graph.settings.update { it.copy(drawerIndex = true, drawerColumns = 1) } }
         compose.waitForIdle()
         openDrawer()
-        val target = middleDrawerLabel()
-        val letter = target.first().uppercaseChar()
+        // The letter of an app a third of the way in, and the first app under that letter: the
+        // one a jump brings to the top.
+        val letter = drawerLabelAThirdIn().first().uppercaseChar()
+        val target = sortedDrawerLabels().first { it.first().uppercaseChar() == letter }
         compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
         compose.onNode(hasContentDescription("Jump to $letter")).performTouchInput { click() }
         compose.waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
-        // At the top of the list, not merely somewhere on the screen.
+        // At the top of the list, not merely somewhere on the screen; unless the list ran out
+        // first, on a device with few apps, in which case its end is showing.
         val list = compose.onNodeWithTag(DRAWER_LIST_TAG).fetchSemanticsNode().boundsInRoot
         val item = drawerApp(target).fetchSemanticsNode().boundsInRoot
+        val atTop = item.top - list.top < list.height * JUMP_TOLERANCE
         assertTrue(
             "$target at ${item.top} should sit at the top of the list (${list.top})",
-            item.top - list.top < list.height * JUMP_TOLERANCE,
+            atTop || drawerApp(lastDrawerLabel()).isDisplayedOrFalse(),
         )
     }
 
@@ -340,13 +346,15 @@ class DrawerTest : LauncherFixture() {
         compose.onAllNodesWithTag(DRAWER_INDEX_TAG).assertCountEquals(0)
     }
 
-    private fun middleDrawerLabel() = runBlocking {
-        val labels =
-            graph.appRepository.apps
-                .first { it.isNotEmpty() }
-                .map { it.label }
-                .sortedWith(String.CASE_INSENSITIVE_ORDER)
-        labels[labels.size / 2]
+    private fun drawerLabelAThirdIn() = sortedDrawerLabels().let { it[it.size / 3] }
+
+    private fun lastDrawerLabel() = sortedDrawerLabels().last()
+
+    private fun sortedDrawerLabels() = runBlocking {
+        graph.appRepository.apps
+            .first { it.isNotEmpty() }
+            .map { it.label }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
 
     @Test

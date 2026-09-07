@@ -7,6 +7,7 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -35,6 +36,11 @@ sealed interface DropTarget {
 /** What a drop at the hovered target would do. */
 sealed interface DropPlan {
     data class Move(val target: DropTarget, val displaced: Map<Long, Footprint>) : DropPlan
+
+    /**
+     * The dragged app goes into the item [into] at [target]: a folder, or an app that becomes one.
+     */
+    data class Fold(val target: DropTarget, val into: Long) : DropPlan
 
     data object Invalid : DropPlan
 }
@@ -73,21 +79,55 @@ class DragController(private val lookup: WorkspaceLookup) {
         _state.value = DragState(source, pointer, grab)
     }
 
-    fun move(pointer: Point, target: DropTarget?, edge: EdgeHover? = null) {
+    /**
+     * [target] is where the item's corner snaps; [over] is the cell the finger itself is well
+     * inside, if any, which is where a dropped app folds with what is there.
+     */
+    fun move(
+        pointer: Point,
+        target: DropTarget?,
+        edge: EdgeHover? = null,
+        over: DropTarget? = null,
+    ) {
         val current = _state.value ?: return
-        val plan = target?.let { plan(current.source, it) }
+        val plan =
+            over?.let { planFold(current.source, it) } ?: target?.let { plan(current.source, it) }
         _state.value = current.copy(pointer = pointer, target = target, plan = plan, edge = edge)
     }
 
-    /** Ends the drag; the move to apply, or null if nothing changes. */
-    fun drop(): DropPlan.Move? {
+    /** Ends the drag; the move or fold to apply, or null if nothing changes. */
+    fun drop(): DropPlan? {
         val plan = _state.value?.plan
         _state.value = null
-        return plan as? DropPlan.Move
+        return plan?.takeIf { it != DropPlan.Invalid }
     }
 
     fun cancel() {
         _state.value = null
+    }
+
+    /**
+     * Only a single app folds, and only into an app or folder that is not itself. Within a dock
+     * page, dropping on an icon reorders instead: that row is for reaching, not for filing.
+     */
+    private fun planFold(source: DragSource, over: DropTarget): DropPlan.Fold? {
+        val reordering =
+            over is DropTarget.DockSlot &&
+                source.container == Container.DOCK &&
+                source.page == over.page
+        if (source.kind != ItemKind.APP || reordering) return null
+        val (items, cell) =
+            when (over) {
+                is DropTarget.HomeCell -> lookup.homeItems(over.page) to Footprint(over.x, over.y)
+                is DropTarget.DockSlot -> lookup.dockItems(over.page) to Footprint(over.slot, 0)
+            }
+        val there = items.firstOrNull {
+            it.id != source.itemId &&
+                it.foldable &&
+                it.footprint.isSingleCell &&
+                it.footprint.overlaps(cell)
+        }
+        return there?.let { DropPlan.Fold(over, it.id) }
     }
 
     private fun plan(source: DragSource, target: DropTarget): DropPlan =

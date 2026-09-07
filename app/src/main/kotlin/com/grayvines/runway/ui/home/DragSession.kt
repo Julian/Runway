@@ -28,6 +28,10 @@ class DragSession(
     val draggedId: Long?
         get() = state?.source?.itemId
 
+    /** The item the dragged app would fold into if let go now. */
+    val foldTargetId: Long?
+        get() = (state?.plan as? DropPlan.Fold)?.into
+
     /** Where a displaced item is previewed while the drag hovers. */
     fun previewFor(id: Long): Footprint? = (state?.plan as? DropPlan.Move)?.displaced?.get(id)
 

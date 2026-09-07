@@ -30,6 +30,18 @@ class DropGeometryTest {
     }
 
     @Test
+    fun `the cell under the finger counts only well inside it`() {
+        // Cell (1,0) spans x 100..200, y 0..100: the middle 60% is 120..180 each way.
+        assertEquals(DropTarget.HomeCell(1, 1, 0), areas.cellUnder(Point(150f, 50f)))
+        assertEquals(DropTarget.HomeCell(1, 1, 0), areas.cellUnder(Point(121f, 21f)))
+        assertNull(areas.cellUnder(Point(110f, 50f))) // near the left edge: between icons
+        assertNull(areas.cellUnder(Point(150f, 95f))) // near the bottom edge
+        assertEquals(DropTarget.DockSlot(0, 2), areas.cellUnder(Point(250f, 225f)))
+        assertNull(areas.cellUnder(Point(205f, 225f)))
+        assertNull(areas.cellUnder(Point(150f, 300f))) // off both areas
+    }
+
+    @Test
     fun `spans are kept inside the grid`() {
         assertEquals(DropTarget.HomeCell(1, 1, 0), areas.targetFor(Point(290f, 10f), noGrab, 2, 2))
     }

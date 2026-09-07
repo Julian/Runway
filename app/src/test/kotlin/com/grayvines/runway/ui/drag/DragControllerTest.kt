@@ -96,8 +96,67 @@ class DragControllerTest {
     fun `drop returns the plan and clears the drag`() {
         lift(9, Container.DOCK)
         controller.move(origin, DropTarget.HomeCell(0, 2, 0))
-        assertEquals(DropTarget.HomeCell(0, 2, 0), controller.drop()?.target)
+        assertEquals(DropTarget.HomeCell(0, 2, 0), (controller.drop() as DropPlan.Move).target)
         assertNull(controller.state.value)
+    }
+
+    @Test
+    fun `hovering well over another app plans a fold into it`() {
+        lift(1)
+        controller.move(origin, DropTarget.HomeCell(0, 1, 0), over = DropTarget.HomeCell(0, 1, 0))
+        assertEquals(
+            DropPlan.Fold(DropTarget.HomeCell(0, 1, 0), into = 2L),
+            controller.state.value?.plan,
+        )
+        assertEquals(DropPlan.Fold(DropTarget.HomeCell(0, 1, 0), into = 2L), controller.drop())
+    }
+
+    @Test
+    fun `over an empty cell, or its own cell, a drag plans as before`() {
+        lift(1)
+        controller.move(origin, DropTarget.HomeCell(0, 2, 0), over = DropTarget.HomeCell(0, 2, 0))
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 2, 0), emptyMap()),
+            controller.state.value?.plan,
+        )
+        controller.move(origin, DropTarget.HomeCell(0, 0, 0), over = DropTarget.HomeCell(0, 0, 0))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+    }
+
+    @Test
+    fun `an app folds into a dock icon, but nothing folds into a widget and a folder never folds`() {
+        lift(1)
+        controller.move(origin, DropTarget.DockSlot(0, 0), over = DropTarget.DockSlot(0, 0))
+        assertEquals(
+            DropPlan.Fold(DropTarget.DockSlot(0, 0), into = 9L),
+            controller.state.value?.plan,
+        )
+
+        home[0] = listOf(Placed(1, Footprint(0, 0)), Placed(2, Footprint(1, 0), foldable = false))
+        controller.move(origin, DropTarget.HomeCell(0, 1, 0), over = DropTarget.HomeCell(0, 1, 0))
+        assertEquals(
+            mapOf(2L to Footprint(0, 0)),
+            (controller.state.value?.plan as DropPlan.Move).displaced,
+        )
+
+        controller.cancel()
+        controller.start(DragSource(1, ItemKind.FOLDER, Container.HOME, 0, 0, 0), origin, origin)
+        controller.move(origin, DropTarget.DockSlot(0, 0), over = DropTarget.DockSlot(0, 0))
+        assertEquals(
+            DropPlan.Invalid,
+            controller.state.value?.plan,
+        ) // an occupied slot refuses a move
+    }
+
+    @Test
+    fun `within a dock page a drop on an icon reorders rather than folds`() {
+        dock[0] = listOf(Placed(9, Footprint(0, 0)), Placed(10, Footprint(1, 0)))
+        lift(9, Container.DOCK)
+        controller.move(origin, DropTarget.DockSlot(0, 1), over = DropTarget.DockSlot(0, 1))
+        assertEquals(
+            mapOf(10L to Footprint(0, 0)),
+            (controller.state.value?.plan as DropPlan.Move).displaced,
+        )
     }
 
     @Test

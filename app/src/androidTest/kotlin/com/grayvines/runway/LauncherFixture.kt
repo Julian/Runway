@@ -19,7 +19,9 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.autoFill
+import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
@@ -295,6 +297,32 @@ open class LauncherFixture {
             .first { it.isNotEmpty() }
             .first { it.ref.component == item.component }
             .label
+    }
+
+    /**
+     * The labels of the apps in the folder at home cell ([x], [y]) on page 1; null if no folder.
+     */
+    protected fun folderAt(x: Int, y: Int): List<String>? =
+        folderLabels(Container.HOME) { it.x == x && it.y == y }
+
+    /** The labels of the apps in the folder in dock slot [slot] on dock page 1; null if none. */
+    protected fun dockFolderAt(slot: Int): List<String>? =
+        folderLabels(Container.DOCK) { it.x == slot }
+
+    private fun folderLabels(container: Container, at: (ItemEntity) -> Boolean) = runBlocking {
+        val folder =
+            graph.workspace.observe(container).first().pages.first().items.firstOrNull {
+                it.kind == ItemKind.FOLDER && at(it)
+            }
+        folder?.let { item ->
+            val apps = graph.appRepository.apps.first { it.isNotEmpty() }
+            graph.workspace
+                .observeFolders()
+                .first()
+                .first { it.id == item.folderId }
+                .apps
+                .map { ref -> apps.first { it.ref == ref }.label }
+        }
     }
 
     protected fun homeCellOf(label: String): Pair<Int?, Int?>? =

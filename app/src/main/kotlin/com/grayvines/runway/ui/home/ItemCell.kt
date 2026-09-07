@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -12,6 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -31,9 +37,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -45,6 +54,15 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 
 private const val ICON_BITMAP_SIZE = 256
+
+/** A folder shows its first few apps in a little grid on a dim tile. */
+private const val FOLDER_PREVIEW_COLUMNS = 2
+private const val FOLDER_PREVIEW_COUNT = 4
+private const val FOLDER_TILE_ALPHA = 0.35f
+private const val FOLDER_TILE_INSET = 0.12f
+
+/** An icon about to take a dropped app in steps back a little, so the drop reads as "into". */
+private const val RECEIVING_SCALE = 0.8f
 
 /** Icons shrink a little under a finger, whether or not a drag follows. */
 
@@ -71,6 +89,7 @@ fun ItemCell(
     modifier: Modifier = Modifier,
     drag: DragHandlers? = null,
     lifted: Boolean = false,
+    receiving: Boolean = false,
 ) {
     // The gesture coroutine outlives recompositions: both of these must always be current.
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -78,16 +97,15 @@ fun ItemCell(
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val pressScale by
-        animateFloatAsState(if (pressed) DragMotion.PRESSED_SCALE else 1f, label = "press")
-    val viewConfiguration = LocalViewConfiguration.current
-    val liftConfiguration =
-        remember(viewConfiguration) {
-            object : ViewConfiguration by viewConfiguration {
-                override val longPressTimeoutMillis: Long
-                    get() = LIFT_HOLD_MS
-            }
-        }
-    CompositionLocalProvider(LocalViewConfiguration provides liftConfiguration) {
+        animateFloatAsState(
+            when {
+                receiving -> RECEIVING_SCALE
+                pressed -> DragMotion.PRESSED_SCALE
+                else -> 1f
+            },
+            label = "press",
+        )
+    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
         Column(
             modifier =
                 modifier
@@ -106,17 +124,13 @@ fun ItemCell(
                 Modifier.weight(1f).fillMaxWidth().alpha(if (lifted) 0f else 1f),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.app != null) {
-                    AppIcon(
-                        item.app,
-                        Modifier.size(iconSize).graphicsLayer {
-                            scaleX = pressScale
-                            scaleY = pressScale
-                        },
-                    )
-                } else {
-                    Placeholder(item.kind)
-                }
+                ItemIcon(
+                    item,
+                    Modifier.size(iconSize).graphicsLayer {
+                        scaleX = pressScale
+                        scaleY = pressScale
+                    },
+                )
             }
             if (labels && !lifted) {
                 Text(
@@ -133,11 +147,67 @@ fun ItemCell(
     }
 }
 
+/** What an item looks like anywhere it is drawn: its app's icon, a folder tile, or a stand-in. */
+@Composable
+internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
+    when {
+        item.app != null -> AppIcon(item.app, modifier)
+        item.kind == ItemKind.FOLDER -> FolderIcon(item.folder, item.label, modifier)
+        else -> Placeholder(item.kind)
+    }
+}
+
+/** The first few apps of a folder on a dim rounded tile, described by the folder's [name]. */
+@Composable
+internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier = Modifier) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(FOLDER_PREVIEW_COLUMNS),
+        userScrollEnabled = false,
+        modifier =
+            modifier
+                .semantics { contentDescription = name }
+                .clip(RoundedCornerShape(percent = 25))
+                .background(Color.White.copy(alpha = FOLDER_TILE_ALPHA))
+                .padding(fraction = FOLDER_TILE_INSET),
+    ) {
+        items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->
+            AppIcon(app, Modifier.fillMaxWidth().padding(2.dp))
+        }
+    }
+}
+
+/** Padding as a share of the size the modifier is given; folder tiles come in every icon size. */
+private fun Modifier.padding(fraction: Float): Modifier = layout { measurable, constraints ->
+    val inset = (constraints.maxWidth * fraction).toInt()
+    val placeable =
+        measurable.measure(
+            constraints.copy(
+                maxWidth = constraints.maxWidth - 2 * inset,
+                maxHeight = constraints.maxHeight - 2 * inset,
+                minWidth = 0,
+                minHeight = 0,
+            )
+        )
+    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(inset, inset) }
+}
+
 @Composable
 internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier) {
     val bitmap =
         remember(app.key) { app.icon.toBitmap(ICON_BITMAP_SIZE, ICON_BITMAP_SIZE).asImageBitmap() }
     Image(bitmap = bitmap, contentDescription = app.label, modifier = modifier)
+}
+
+/** The platform's touch settings with a longer long press: a lift is deliberate. */
+@Composable
+private fun rememberLiftConfiguration(): ViewConfiguration {
+    val viewConfiguration = LocalViewConfiguration.current
+    return remember(viewConfiguration) {
+        object : ViewConfiguration by viewConfiguration {
+            override val longPressTimeoutMillis: Long
+                get() = LIFT_HOLD_MS
+        }
+    }
 }
 
 @Composable

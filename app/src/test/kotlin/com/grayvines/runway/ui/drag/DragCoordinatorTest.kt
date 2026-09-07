@@ -115,7 +115,7 @@ class DragCoordinatorTest {
         c.layOut()
         c.areas.dockPagePositioned(0, Bounds(0f, 200f, 300f, 250f), 3)
         c.startDrag(DragSource(7, ItemKind.APP, Container.DOCK, 0, 0, 0), Point(50f, 225f), grab)
-        c.dragTo(Point(250f, 225f)) // slot 2
+        c.dragTo(Point(215f, 225f)) // slot 2, off its icon's middle: a reorder, not a fold
         c.endDrag()
         runCurrent()
         val expected =
@@ -126,7 +126,7 @@ class DragCoordinatorTest {
                 2,
                 0,
                 mapOf(8L to Footprint(0, 0), 9L to Footprint(1, 0)),
-                from = Point(200f, 175f),
+                from = Point(165f, 175f),
             )
         assertEquals(listOf(expected), workspace.moves)
     }
@@ -192,7 +192,9 @@ class DragCoordinatorTest {
         val c = DragCoordinator(backgroundScope, lookup, workspace)
         c.layOut()
         c.startDrag(source, Point(50f, 50f), grab)
-        c.dragTo(Point(150f, 50f)) // cell (1,0) on page 0: occupied, so item 2 is displaced
+        // Corner snaps to cell (1,0) on page 0, occupied, so item 2 is displaced; the finger
+        // itself is near the cell's top edge, not over the icon, so this is not a fold.
+        c.dragTo(Point(150f, 15f))
         assertEquals(DropTarget.HomeCell(0, 1, 0), c.drag.value?.target)
         assertEquals(mapOf(2L to Footprint(0, 0)), (c.drag.value?.plan as DropPlan.Move).displaced)
 

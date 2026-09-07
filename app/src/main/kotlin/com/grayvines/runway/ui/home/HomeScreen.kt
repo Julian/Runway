@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
@@ -130,7 +131,7 @@ fun HomeScreen(
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
-            app = state.draggedApp(drag),
+            item = state.draggedItem(drag),
             cell = cell,
             iconSize = iconSize,
             lift = lift,
@@ -138,11 +139,14 @@ fun HomeScreen(
     }
 }
 
-/** The app being dragged or settling: a placed item's, or the one pulled out of the drawer. */
-private fun HomeState.draggedApp(drag: DragSession): AppEntry? {
+/** What is being dragged or settling: a placed item, or an app pulled out of the drawer. */
+private fun HomeState.draggedItem(drag: DragSession): HomeItem? {
     val newApp = drag.state?.source?.newApp
-    if (newApp != null) return apps.firstOrNull { it.ref == newApp }
-    return item(drag.draggedId ?: drag.settling?.itemId)?.app
+    if (newApp != null) {
+        val app = apps.firstOrNull { it.ref == newApp } ?: return null
+        return HomeItem(0, ItemKind.APP, 0, 0, 1, 1, app.label, app)
+    }
+    return item(drag.draggedId ?: drag.settling?.itemId)
 }
 
 /** A vertical drag on the pages pulls the drawer with it; the pager keeps horizontal swipes. */

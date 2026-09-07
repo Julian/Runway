@@ -19,8 +19,8 @@ data class Footprint(val x: Int, val y: Int, val width: Int = 1, val height: Int
         get() = width == 1 && height == 1
 }
 
-/** An item on a page, as far as layout is concerned. */
-data class Placed(val id: Long, val footprint: Footprint)
+/** An item on a page, as far as layout is concerned; [foldable] items take a dropped app in. */
+data class Placed(val id: Long, val footprint: Footprint, val foldable: Boolean = true)
 
 /** How far an item can grow from its top-left corner, one axis at a time. */
 data class ResizeBounds(val maxWidth: Int, val maxHeight: Int)
