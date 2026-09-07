@@ -1,12 +1,15 @@
 package com.grayvines.runway.data
 
 import androidx.room3.Room
+import androidx.sqlite.SQLiteException
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -170,6 +173,23 @@ class WorkspaceRepositoryTest {
         val byId = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
         assertEquals(1, byId[2L]?.x)
         assertEquals(0, byId[3L]?.x)
+    }
+
+    @Test
+    fun `addApp places a new item, a second placement of the same app included`() = runTest {
+        repo.autoFill(apps(2), columns = 3, pageRows = 1, dockSlots = 1) // dock: 1; home: 2 at x0
+        repo.addApp(apps(2)[1], Container.HOME, 0, 2, 0)
+        val items = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(listOf(0, 2), items.map { it.x })
+        assertEquals(listOf("pkg2/.Main", "pkg2/.Main"), items.map { it.component })
+    }
+
+    @Test
+    fun `addApp onto a taken cell is refused by the database`() = runTest {
+        repo.autoFill(apps(2), columns = 3, pageRows = 1, dockSlots = 1)
+        assertThrows(SQLiteException::class.java) {
+            runBlocking { repo.addApp(apps(2)[0], Container.HOME, 0, 0, 0) }
+        }
     }
 
     @Test

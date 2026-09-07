@@ -15,8 +15,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +28,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +38,9 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.home.AppIcon
+import com.grayvines.runway.ui.home.DragHandlers
+import com.grayvines.runway.ui.home.DragSession
+import com.grayvines.runway.ui.home.dragAfterLongPress
 
 const val DRAWER_TAG = "drawer"
 const val DRAWER_ITEM_TAG = "drawer-app"
@@ -66,6 +74,7 @@ fun AppDrawer(
     onPullEnd: (velocity: Float) -> Unit,
     onLaunch: (AppEntry) -> Unit,
     onClose: () -> Unit,
+    drag: DragSession?,
 ) {
     BackHandler(enabled = open, onBack = onClose)
     // Stays composed while open even when pulled fully down, so the gesture that pulled it can
@@ -100,17 +109,34 @@ fun AppDrawer(
                 .nestedScroll(pullToClose),
     ) {
         items(apps, key = { it.key }) { app ->
-            DrawerApp(app, iconSize, labels, onClick = { onLaunch(app) })
+            DrawerApp(
+                app,
+                iconSize,
+                labels,
+                onClick = { onLaunch(app) },
+                drag = drag?.handlersForDrawer(app),
+            )
         }
     }
 }
 
 @Composable
-private fun DrawerApp(app: AppEntry, iconSize: Dp, labels: Boolean, onClick: () -> Unit) {
+private fun DrawerApp(
+    app: AppEntry,
+    iconSize: Dp,
+    labels: Boolean,
+    onClick: () -> Unit,
+    drag: DragHandlers?,
+) {
+    // The gesture coroutine outlives recompositions: both of these must always be current.
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val handlers by rememberUpdatedState(drag)
     Column(
         modifier =
             Modifier.fillMaxWidth()
+                .onGloballyPositioned { coords = it }
                 .clickable(onClick = onClick)
+                .dragAfterLongPress(app.key, { coords }, { handlers })
                 .padding(vertical = 8.dp)
                 .testTag(DRAWER_ITEM_TAG),
         horizontalAlignment = Alignment.CenterHorizontally,

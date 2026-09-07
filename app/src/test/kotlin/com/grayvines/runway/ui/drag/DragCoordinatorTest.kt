@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -304,4 +305,30 @@ class DragCoordinatorTest {
             runCurrent()
             assertEquals(3, workspace.prunes)
         }
+
+    @Test
+    fun `an app from the drawer is added where it is dropped and does not settle`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        val app = AppRef("new/.Main", 0)
+        c.startDrag(
+            DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app),
+            Point(50f, 50f),
+            grab,
+        )
+        c.dragTo(Point(250f, 150f)) // cell (2,1), free
+        c.endDrag()
+        runCurrent()
+        assertEquals(app, workspace.moves.single().newApp)
+        assertEquals(
+            Container.HOME to (2 to 1),
+            workspace.moves.single().let { it.container to (it.x to it.y) },
+        )
+        assertNull(c.settling.value) // nothing to settle into or back to
+        workspace.reflected.complete(Unit)
+        runCurrent()
+        assertNull(c.pending.value)
+        assertEquals(1, workspace.prunes)
+    }
 }

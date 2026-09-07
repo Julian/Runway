@@ -149,7 +149,7 @@ private fun Placeholder(kind: ItemKind) {
  * A long press holds (the menu appears); moving past touch slop after that starts a drag from where
  * the finger first rested. Positions are converted to root pixels for the handlers.
  */
-private fun Modifier.dragAfterLongPress(
+internal fun Modifier.dragAfterLongPress(
     key: Any,
     coords: () -> LayoutCoordinates?,
     handlers: () -> DragHandlers?,

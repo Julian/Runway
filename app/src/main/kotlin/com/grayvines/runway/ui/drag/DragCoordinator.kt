@@ -16,7 +16,7 @@ data class Settling(val itemId: Long, val from: Point)
 interface DragWorkspace {
     fun pageCount(container: Container): Int
 
-    /** Writes the move; false if it could not be saved. */
+    /** Writes the move (or, for a [PendingMove.newApp], the new placement); false if not saved. */
     suspend fun move(move: PendingMove): Boolean
 
     /** Returns once the observed layout shows [move] applied. */
@@ -125,18 +125,24 @@ class DragCoordinator(
         val state = drag.value ?: return
         val move = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
-        // Whether the drop lands or is refused, the icon settles from where it was released.
-        val settling = Settling(state.source.itemId, from)
-        _settling.value = settling
-        scope.launch {
-            delay(SETTLE_TIMEOUT_MS) // safety net if the item never draws (e.g. off-screen page)
-            if (_settling.value == settling) _settling.value = null
+        // Whether the drop lands or is refused, the icon settles from where it was released. An
+        // app from the drawer has no cell to settle into or back to: it simply appears or does not.
+        if (state.source.newApp == null) {
+            val settling = Settling(state.source.itemId, from)
+            _settling.value = settling
+            scope.launch {
+                delay(
+                    SETTLE_TIMEOUT_MS
+                ) // safety net if the item never draws (e.g. off-screen page)
+                if (_settling.value == settling) _settling.value = null
+            }
         }
         if (move == null) {
             scope.launch { workspace.pruneEmptyPages() }
             return
         }
-        val pendingMove = move.asPendingMove(state.source.itemId).copy(from = from)
+        val pendingMove =
+            move.asPendingMove(state.source.itemId).copy(from = from, newApp = state.source.newApp)
         _pending.value = pendingMove
         scope.launch {
             try {

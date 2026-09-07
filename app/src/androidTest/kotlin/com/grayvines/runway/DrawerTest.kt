@@ -18,13 +18,17 @@ import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -155,6 +159,96 @@ class DrawerTest : LauncherFixture() {
         }
     }
 
+    @Test
+    fun anAppPulledOutOfTheDrawerLandsOnAFreeCellAndTheDrawerCloses() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val label = firstDrawerLabel()
+        openDrawer()
+        liftFromDrawer(label)
+        dragOn(to = grid.homeCell(4, 4))
+        awaitDrawerClosed() // it went as soon as the app lifted
+        release()
+        compose.waitUntil(TIMEOUT_MS) { placementsOf(label).any { it.x == 4 && it.y == 4 } }
+    }
+
+    @Test
+    fun anAppPulledOutOfTheDrawerOntoATakenDockSlotAddsNothing() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val label = firstDrawerLabel()
+        val before = placementsOf(label).size
+        openDrawer()
+        liftFromDrawer(label)
+        dragOn(to = grid.dockSlot(0))
+        release()
+        awaitDrawerClosed()
+        compose.waitForIdle()
+        assertEquals(before, placementsOf(label).size)
+    }
+
+    private fun firstDrawerLabel() = runBlocking {
+        graph.appRepository.apps
+            .first { it.isNotEmpty() }
+            .map { it.label }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+            .first()
+    }
+
+    /** Long-presses [label] in the open drawer and nudges it, so the drag has begun. */
+    private fun liftFromDrawer(label: String) {
+        val start = drawerApp(label).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun placementsOf(label: String) = runBlocking {
+        val component =
+            graph.appRepository.apps
+                .first { it.isNotEmpty() }
+                .first { it.label == label }
+                .ref
+                .component
+        listOf(Container.HOME, Container.DOCK)
+            .flatMap { graph.workspace.observe(it).first().pages }
+            .flatMap { it.items }
+            .filter { it.component == component }
+    }
+
+    @Test
+    fun aQuickShortSwipeOpensTheDrawer() {
+        // Fast enough that the drawer's animation cannot keep up with the finger, and short: what
+        // a real thumb does. It used to read as "no pull" and fall back.
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(pages.center)
+            repeat(3) {
+                moveBy(Offset(0f, -root.height * QUICK_SWIPE / 3))
+                advanceEventTime(QUICK_STEP_MS)
+            }
+            up()
+        }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
+                abs(it.boundsInRoot.top - root.top) < 1f
+            } ?: false
+        }
+    }
+
+    @Test
+    fun aSwipeUpFromTheSearchBarOpensTheDrawerToo() {
+        compose.onNodeWithTag(SEARCH_BAR_TAG).performTouchInput { swipeUp() }
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
         compose.waitUntil(TIMEOUT_MS) {
@@ -173,9 +267,11 @@ class DrawerTest : LauncherFixture() {
 
     private companion object {
         const val PULL_STEPS = 10
+        const val QUICK_SWIPE = 0.08f
+        const val QUICK_STEP_MS = 16L
         const val PULL_STEP_MS = 40L // slow enough not to count as a flick
-        const val PARTIAL_PULL = 0.1f // a 0.6-screen pull reveals fully; this is a sixth of it
+        const val PARTIAL_PULL = 0.01f // under Medium's 2%: shows the drawer, lets it fall back
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
-        const val MODEST_PULL = 0.1f // between the High and Low thresholds
+        const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
     }
 }

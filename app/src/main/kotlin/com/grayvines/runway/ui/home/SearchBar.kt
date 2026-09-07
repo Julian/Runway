@@ -42,9 +42,14 @@ const val SEARCH_TARGET_ICON_TAG = "search-target-icon"
 
 /** A pill showing the app that will handle the search; a tap hands off to it. */
 @Composable
-fun SearchBar(rowHeight: Dp, target: SearchTarget?, onSearch: () -> Unit) {
+fun SearchBar(
+    rowHeight: Dp,
+    target: SearchTarget?,
+    onSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(

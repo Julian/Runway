@@ -58,6 +58,21 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         dao.place(id, container, page, x, y)
     }
 
+    /** A new placement of [app], as dragging it out of the drawer makes. */
+    suspend fun addApp(app: AppRef, container: Container, page: Int, x: Int, y: Int) = write {
+        dao.insertItem(
+            ItemEntity(
+                kind = ItemKind.APP,
+                container = container,
+                pageIndex = page,
+                x = x,
+                y = y,
+                component = app.component,
+                profile = app.profile,
+            )
+        )
+    }
+
     /** Takes one placement off its page; a page left empty at the end goes with it. */
     suspend fun removeItem(id: Long) {
         write { dao.deleteItem(id) }

@@ -15,6 +15,9 @@ class DrawerMotionTest {
         assertTrue(opens(revealed = 0.3f, upwards = 0f))
         assertTrue(opens(revealed = 0.9f, upwards = 0f))
         assertTrue(opens(revealed = 0.1f, upwards = 0f, openAt = 0.1f)) // a sensitive setting
+        assertTrue(
+            opens(revealed = 0.02f, upwards = 0f, openAt = 0.0167f)
+        ) // High: barely past slop
     }
 
     @Test

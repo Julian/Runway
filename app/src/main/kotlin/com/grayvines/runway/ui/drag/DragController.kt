@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -9,7 +10,10 @@ import com.grayvines.runway.model.Placed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Where a dragged item came from. */
+/**
+ * Where a dragged item came from. An app pulled out of the drawer has no item yet: [newApp] says
+ * which app, [itemId] is 0, and the drop adds a placement instead of moving one.
+ */
 data class DragSource(
     val itemId: Long,
     val kind: ItemKind,
@@ -19,6 +23,7 @@ data class DragSource(
     val y: Int,
     val spanX: Int = 1,
     val spanY: Int = 1,
+    val newApp: AppRef? = null,
 )
 
 sealed interface DropTarget {

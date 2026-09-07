@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.model.Footprint
 
@@ -16,4 +17,6 @@ data class PendingMove(
     val displaced: Map<Long, Footprint>,
     /** Root-pixel top-left of the lifted cell at release; the settle animation starts there. */
     val from: Point? = null,
+    /** Set when the drop adds this app as a new item rather than moving [itemId]. */
+    val newApp: AppRef? = null,
 )

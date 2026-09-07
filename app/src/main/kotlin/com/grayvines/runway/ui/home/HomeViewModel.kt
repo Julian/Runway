@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ContainerContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.model.Footprint
@@ -109,12 +108,20 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             override suspend fun move(move: PendingMove): Boolean =
                 logged("could not save the move; the item snaps back") {
                     with(move) {
-                        graph.workspace.moveItem(itemId, container, page, x, y, displaced)
+                        val app = newApp
+                        if (app != null) {
+                            graph.workspace.addApp(app, container, page, x, y)
+                        } else {
+                            graph.workspace.moveItem(itemId, container, page, x, y, displaced)
+                        }
                     }
                 }
 
+            // The state the screen draws, not the database flow directly: the override must
+            // outlive the write until what replaces it is on screen, or the icon shows in its old
+            // cell for a frame between the two.
             override suspend fun awaitReflected(move: PendingMove) {
-                graph.workspace.observe(move.container).first { it.reflects(move) }
+                state.first { it.reflects(move) }
             }
 
             override suspend fun addPage(container: Container, index: Int): Boolean =
@@ -175,6 +182,13 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         dragging.startDrag(source, pointer, grab)
     }
 
+    /** An app pulled out of the drawer: the drawer closes under it and the drop adds it. */
+    fun startDragFromDrawer(app: AppEntry, pointer: Point, grab: Point) {
+        _drawerOpen.value = false
+        val source = DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app.ref)
+        dragging.startDrag(source, pointer, grab)
+    }
+
     fun launch(item: HomeItem) {
         item.app?.let(graph.appRepository::launch)
     }
@@ -213,7 +227,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     }
 }
 
-/** True once the observed layout shows [move] applied. */
-internal fun ContainerContent.reflects(move: PendingMove) = pages.any { p ->
-    p.index == move.page && p.items.any { it.id == move.itemId && it.x == move.x && it.y == move.y }
+/** True once the drawn layout shows [move] applied: the item, or the new app, is in its cell. */
+internal fun HomeState.reflects(move: PendingMove) =
+    pages(move.container).any { p ->
+        p.index == move.page &&
+            p.items.any { it.x == move.x && it.y == move.y && it.isMoverOf(move) }
+    }
+
+private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
+    val newApp = move.newApp
+    return if (newApp != null) app?.ref == newApp else id == move.itemId
 }

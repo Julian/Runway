@@ -6,9 +6,9 @@ package com.grayvines.runway.data.settings
  */
 @Suppress("MagicNumber") // the settings are the numbers
 enum class DrawerSwipe(val label: String, val openAt: Float, val flick: Float) {
-    LOW("Low", openAt = 0.2f, flick = 1.2f),
-    MEDIUM("Medium", openAt = 0.12f, flick = 0.9f),
-    HIGH("High", openAt = 0.06f, flick = 0.6f),
+    LOW("Low", openAt = 0.08f, flick = 0.6f),
+    MEDIUM("Medium", openAt = 0.02f, flick = 0.4f),
+    HIGH("High", openAt = 0.01f, flick = 0.25f),
 }
 
 /** User configuration. The defaults are the product. */

@@ -30,8 +30,8 @@ const val DRAG_OVERLAY_TAG = "drag-overlay"
  * pick-up has progressed, shared with the home area's pull-back so the two move as one.
  */
 @Composable
-fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: Float) {
-    val app = item?.app ?: return
+fun DragOverlay(drag: DragSession, app: AppEntry?, cell: DpSize, iconSize: Dp, lift: Float) {
+    if (app == null) return
     val state = drag.state
     val settling = drag.settling
     when {

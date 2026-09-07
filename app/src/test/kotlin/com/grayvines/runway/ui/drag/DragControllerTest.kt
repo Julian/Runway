@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.drag
 
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -105,5 +106,29 @@ class DragControllerTest {
         controller.move(Point(5f, 5f), null)
         assertNull(controller.state.value?.plan)
         assertEquals(Point(5f, 5f), controller.state.value?.pointer)
+    }
+
+    @Test
+    fun `an app from the drawer lands on a free cell, displaces on an occupied one, never in a full dock slot`() {
+        val fromDrawer =
+            DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = AppRef("new/.Main", 0))
+        controller.start(fromDrawer, Point(0f, 0f), Point(0f, 0f))
+        controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 2, 1))
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 2, 1), emptyMap()),
+            controller.state.value?.plan,
+        )
+        controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 0, 0))
+        assertEquals(
+            mapOf(1L to Footprint(2, 0)),
+            (controller.state.value?.plan as DropPlan.Move).displaced,
+        )
+        controller.move(Point(0f, 0f), DropTarget.DockSlot(0, 0))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        controller.move(Point(0f, 0f), DropTarget.DockSlot(0, 1))
+        assertEquals(
+            DropPlan.Move(DropTarget.DockSlot(0, 1), emptyMap()),
+            controller.state.value?.plan,
+        )
     }
 }

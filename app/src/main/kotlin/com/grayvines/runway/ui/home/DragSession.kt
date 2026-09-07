@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.DropPlan
@@ -18,6 +19,7 @@ class DragSession(
     val onSettled: (itemId: Long) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
+    private val onStartFromDrawer: (AppEntry, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
@@ -35,6 +37,13 @@ class DragSession(
     fun end() = onEnd()
 
     fun cancel() = onCancel()
+
+    /** Drawer apps have no menu on hold; moving after the hold pulls a new placement out. */
+    fun handlersForDrawer(app: AppEntry) =
+        DragHandlers(
+            onHold = {},
+            onStart = { pointer, grab -> onStartFromDrawer(app, pointer, grab) },
+        )
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         DragHandlers(

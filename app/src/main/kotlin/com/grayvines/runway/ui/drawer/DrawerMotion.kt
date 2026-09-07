@@ -21,6 +21,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
     private var openAt = 0f
     private var flick = 0f
 
+    /**
+     * Where the finger has pulled the drawer to, kept synchronously: the animatable catches up on
+     * its own frames, and a quick flick lets go before it has, which used to read as "no pull".
+     */
+    private var pulled = 0f
+    private var pulling = false
+
     /** [swipe] sets the pull and the flick that open; both are given as shares of the screen. */
     fun laidOut(heightPx: Float, swipe: DrawerSwipe) {
         travel = heightPx * PULL_FRACTION
@@ -30,7 +37,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
     fun dragBy(dy: Float) {
-        scope.launch { revealed.snapTo((revealed.value - dy / travel).coerceIn(0f, 1f)) }
+        if (!pulling) {
+            pulling = true
+            pulled = revealed.value
+        }
+        pulled = (pulled - dy / travel).coerceIn(0f, 1f)
+        val to = pulled
+        scope.launch { revealed.snapTo(to) }
     }
 
     /**
@@ -38,7 +51,9 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * drawer should end up other than it is; otherwise animates back to where it belongs.
      */
     fun release(velocity: Float, open: Boolean, onOpen: () -> Unit, onClose: () -> Unit) {
-        val wantOpen = shouldOpen(revealed.value, -velocity / travel, openAt, flick)
+        val wantOpen =
+            shouldOpen(if (pulling) pulled else revealed.value, -velocity / travel, openAt, flick)
+        pulling = false
         when {
             wantOpen && !open -> onOpen()
             !wantOpen && open -> onClose()

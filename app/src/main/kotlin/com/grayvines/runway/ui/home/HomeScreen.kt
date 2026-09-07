@@ -3,7 +3,6 @@ package com.grayvines.runway.ui.home
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,11 +21,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
@@ -38,6 +34,7 @@ import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerMotion
+import com.grayvines.runway.ui.drawer.drawerPull
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
@@ -100,6 +97,7 @@ fun HomeScreen(
         val releaseDrawer = { velocity: Float ->
             drawer.release(velocity, drawerOpen, onOpenDrawer, onCloseDrawer)
         }
+        val pullModifier = Modifier.drawerPull(drawer, releaseDrawer)
         HomeColumn(
             state = state,
             homePager = homePager,
@@ -109,21 +107,12 @@ fun HomeScreen(
             onLaunch = onLaunch,
             onSearch = onSearch,
             drag = drag,
-            pagesModifier = Modifier.pullsDrawer(drawer, releaseDrawer),
+            pagesModifier = pullModifier,
             onHomePagePositioned = onHomePagePositioned,
             onDockPagePositioned = onDockPagePositioned,
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
-        DragOverlay(
-            drag = drag,
-            item = state.item(drag.draggedId ?: drag.settling?.itemId),
-            cell = cell,
-            iconSize = iconSize,
-            lift = lift,
-        )
-        if (itemMenu != null) {
-            ItemMenu(itemMenu, itemMenuActions, onDismiss = onDismissItemMenu)
-        }
+        itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
             revealed = drawer.revealed.value,
             open = drawerOpen,
@@ -136,27 +125,27 @@ fun HomeScreen(
             onPullEnd = releaseDrawer,
             onLaunch = onLaunchApp,
             onClose = onCloseDrawer,
+            drag = drag,
+        )
+        // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
+        DragOverlay(
+            drag = drag,
+            app = state.draggedApp(drag),
+            cell = cell,
+            iconSize = iconSize,
+            lift = lift,
         )
     }
 }
 
+/** The app being dragged or settling: a placed item's, or the one pulled out of the drawer. */
+private fun HomeState.draggedApp(drag: DragSession): AppEntry? {
+    val newApp = drag.state?.source?.newApp
+    if (newApp != null) return apps.firstOrNull { it.ref == newApp }
+    return item(drag.draggedId ?: drag.settling?.itemId)?.app
+}
+
 /** A vertical drag on the pages pulls the drawer with it; the pager keeps horizontal swipes. */
-private fun Modifier.pullsDrawer(motion: DrawerMotion, onRelease: (velocity: Float) -> Unit) =
-    composed {
-        val release = rememberUpdatedState(onRelease)
-        pointerInput(motion) {
-            val tracker = VelocityTracker()
-            detectVerticalDragGestures(
-                onDragStart = { tracker.resetTracking() },
-                onDragEnd = { release.value(tracker.calculateVelocity().y) },
-                onDragCancel = { release.value(0f) },
-                onVerticalDrag = { change, dy ->
-                    tracker.addPosition(change.uptimeMillis, change.position)
-                    motion.dragBy(dy)
-                },
-            )
-        }
-    }
 
 /** Search bar, pages and dock, stacked; every page shares [cell]. */
 @Composable
@@ -179,7 +168,12 @@ private fun HomeColumn(
     val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
     Column(modifier) {
         if (settings.searchBarAtTop) {
-            SearchBar(rowHeight = cell.height, target = state.searchTarget, onSearch = onSearch)
+            SearchBar(
+                rowHeight = cell.height,
+                target = state.searchTarget,
+                onSearch = onSearch,
+                modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
+            )
         }
         Workspace(
             pages = state.homePages,
@@ -195,7 +189,12 @@ private fun HomeColumn(
             modifier = Modifier.weight(1f).then(pagesModifier),
         )
         if (!settings.searchBarAtTop) {
-            SearchBar(rowHeight = cell.height, target = state.searchTarget, onSearch = onSearch)
+            SearchBar(
+                rowHeight = cell.height,
+                target = state.searchTarget,
+                onSearch = onSearch,
+                modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
+            )
         }
         Dock(
             pages = state.dockPages,
