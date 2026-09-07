@@ -1,7 +1,6 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -18,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -46,7 +44,6 @@ private const val ICON_INSET = 0.3f
 private val DRAG_CORNER = 28.dp
 
 /** A dwell flips every 450 ms; the scroll must be over well before the next tick. */
-private const val FLIP_SCROLL_MS = 250
 
 /**
  * The launcher surface. The grid is [Settings.columns] × [Settings.rows]; the search bar and the
@@ -84,8 +81,8 @@ fun HomeScreen(
     val dockPager = rememberPagerState { state.dockPages.size }
     PagerCommands(homePager, goHome, flipHomePage)
     PageFlips(dockPager, flipDockPage)
-    LaunchedEffect(homePager) { snapshotFlow { homePager.currentPage }.collect(onHomePageShown) }
-    LaunchedEffect(dockPager) { snapshotFlow { dockPager.currentPage }.collect(onDockPageShown) }
+    PageShown(homePager, onHomePageShown)
+    PageShown(dockPager, onDockPageShown)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions)
@@ -239,29 +236,6 @@ private fun OpenFolder(
 ) {
     val folder = state.item(open.itemId) ?: return
     FolderSheet(folder, open.from, iconSize, onLaunch, onClose)
-}
-
-/** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */
-@Composable
-private fun PagerCommands(pager: PagerState, goHome: Flow<Unit>, flipPage: Flow<Int>) {
-    LaunchedEffect(goHome) { goHome.collect { pager.animateScrollToPage(0) } }
-    PageFlips(pager, flipPage)
-}
-
-/**
- * Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. The scroll
- * is shorter than the dwell between ticks, so each page settles before the next flip.
- */
-@Composable
-private fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
-    LaunchedEffect(flipPage) {
-        flipPage.collect { delta ->
-            val next = pager.currentPage + delta
-            if (next in 0 until pager.pageCount) {
-                pager.animateScrollToPage(next, animationSpec = tween(FLIP_SCROLL_MS))
-            }
-        }
-    }
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */

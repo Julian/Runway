@@ -191,8 +191,8 @@ class WorkspaceRepositoryTest {
     fun `a fold with nothing to fold leaves the target as it was`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
-        repo.foldInto(targetId = b.id, dropped = Dropped.Item(999)) // gone before the drop landed
-        repo.foldInto(targetId = b.id, dropped = Dropped.Item(b.id)) // onto itself
+        assertEquals(false, repo.foldInto(targetId = b.id, dropped = Dropped.Item(999))) // gone
+        assertEquals(false, repo.foldInto(targetId = b.id, dropped = Dropped.Item(b.id))) // itself
         val items = repo.observe(Container.HOME).first().pages.single().items
         assertEquals(ItemKind.APP, items.single { it.id == b.id }.kind)
         assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
@@ -200,7 +200,7 @@ class WorkspaceRepositoryTest {
         // A second placement of the same app dropped onto the first: just the extra placement goes.
         repo.addApp(AppRef(b.component!!, b.profile!!), Container.HOME, 0, 2, 0)
         val extra = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 2 }
-        repo.foldInto(targetId = b.id, dropped = Dropped.Item(extra.id))
+        assertEquals(false, repo.foldInto(targetId = b.id, dropped = Dropped.Item(extra.id)))
         val after = repo.observe(Container.HOME).first().pages.single().items
         assertEquals(ItemKind.APP, after.single { it.id == b.id }.kind)
         assertEquals(null, after.firstOrNull { it.id == extra.id })

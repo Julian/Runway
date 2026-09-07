@@ -31,18 +31,19 @@ fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
  * Drops [dropped] onto the placement [targetId]. An app there becomes a folder of the two; a folder
  * there takes the app in. A dropped placement is gone afterwards, its page pruned if that left it
  * empty. Anything else there, a dropped side that no longer exists, or an app dropped onto itself
- * (which only loses the extra placement) leaves the target as it was.
+ * (which only loses the extra placement) leaves the target as it was. True when the app went in.
  */
-suspend fun WorkspaceRepository.foldInto(targetId: Long, dropped: Dropped) {
-    write {
+suspend fun WorkspaceRepository.foldInto(targetId: Long, dropped: Dropped): Boolean {
+    val folded = write {
         val target = dao.item(targetId)?.takeIf { it.folderId != null || it.appRef() != null }
         val app = target?.let { dao.take(dropped, notOnto = it) }
-        if (target != null && app != null) {
-            dao.folderOf(target)?.let { dao.addToFolder(it, app) }
-        }
+        val folderId = if (target != null && app != null) dao.folderOf(target) else null
+        if (folderId != null && app != null) dao.addToFolder(folderId, app)
+        folderId != null
     }
     pruneTrailingEmptyPages(Container.HOME)
     pruneTrailingEmptyPages(Container.DOCK)
+    return folded
 }
 
 /** The folder [item] is, or becomes (an app turns into a new folder holding it); else null. */

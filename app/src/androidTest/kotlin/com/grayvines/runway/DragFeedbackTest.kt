@@ -186,10 +186,9 @@ class DragFeedbackTest : LauncherFixture() {
         val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
         holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        // Not yet: neighbours hold still until the finger has rested on the slot a moment.
-        val before = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
-        assertEquals(settings.dockSlots - 1, grid.dockSlotAt(before))
-        // The rest is timed on the real clock, not the test's: wait it out.
+        // Neighbours hold still until the finger has rested on the slot a moment (the
+        // coordinator's unit test times that; here the rest runs on the real clock, so a slow
+        // device may already be past it), then slide over while the finger is still down.
         compose.waitUntil(TIMEOUT_MS) {
             val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
             grid.dockSlotAt(shown) == settings.dockSlots - 2

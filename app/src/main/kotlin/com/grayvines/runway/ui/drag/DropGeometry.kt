@@ -39,6 +39,9 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
     val homeArea = home?.takeIf { pointer.y in it.top..it.bottom }
     val dockArea = dock?.takeIf { pointer.y in it.top..it.bottom }
     return when {
+        homeArea != null && (spanX > columns || spanY > rows) -> {
+            null // wider than the grid: nowhere to go
+        }
         homeArea != null -> {
             val cellW = homeArea.width / columns
             val cellH = homeArea.height / rows

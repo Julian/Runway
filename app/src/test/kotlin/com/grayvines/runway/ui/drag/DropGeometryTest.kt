@@ -44,6 +44,12 @@ class DropGeometryTest {
     }
 
     @Test
+    fun `a span wider than the grid has no target rather than a crash`() {
+        assertNull(areas.targetFor(Point(150f, 50f), noGrab, 4, 1))
+        assertNull(areas.targetFor(Point(150f, 50f), noGrab, 1, 3))
+    }
+
+    @Test
     fun `spans are kept inside the grid`() {
         assertEquals(DropTarget.HomeCell(1, 1, 0), areas.targetFor(Point(290f, 10f), noGrab, 2, 2))
     }

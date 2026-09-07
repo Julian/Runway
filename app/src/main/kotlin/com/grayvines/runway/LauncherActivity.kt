@@ -56,7 +56,10 @@ class LauncherActivity : ComponentActivity() {
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
                 var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
-                val reports = AreaReports(viewModel.dragging.areas) { state.settings }
+                // The live settings, not this composition's: page-shown callbacks are kept by
+                // effects that outlive it, and a changed grid must reach them.
+                val reports =
+                    AreaReports(viewModel.dragging.areas) { viewModel.state.value.settings }
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,

@@ -3,7 +3,6 @@ package com.grayvines.runway.ui.home
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.Dropped
@@ -36,6 +35,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Every placed item on every page, home and dock. */
 fun HomeState.allItems(): List<HomeItem> = (homePages + dockPages).flatMap { it.items }
@@ -133,10 +133,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                         val into = foldInto
                         when {
                             into != null ->
-                                graph.workspace.foldInto(
-                                    into,
-                                    if (app != null) Dropped.App(app) else Dropped.Item(itemId),
-                                )
+                                check(
+                                    graph.workspace.foldInto(
+                                        into,
+                                        if (app != null) Dropped.App(app) else Dropped.Item(itemId),
+                                    )
+                                ) {
+                                    "nothing to fold: the target or the dropped app is gone"
+                                }
                             app != null -> graph.workspace.addApp(app, container, page, x, y)
                             else ->
                                 graph.workspace.moveItem(itemId, container, page, x, y, displaced)
@@ -148,7 +152,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             // outlive the write until what replaces it is on screen, or the icon shows in its old
             // cell for a frame between the two.
             override suspend fun awaitReflected(move: PendingMove) {
-                state.first { it.reflects(move) }
+                // Bounded: a move the layout never shows (the item vanished meanwhile) must not
+                // keep the override, and the dropped icon hidden, for good.
+                withTimeoutOrNull(REFLECT_TIMEOUT_MS) { state.first { it.reflects(move) } }
+                    ?: Log.w(TAG, "the layout never showed $move")
             }
 
             override suspend fun addPage(container: Container, index: Int): Boolean =
@@ -164,11 +171,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 }
             }
 
+            // Anything at all: a save that fails must snap the icon back, never take the
+            // launcher down with it.
+            @Suppress("TooGenericExceptionCaught")
             private suspend fun logged(what: String, block: suspend () -> Unit): Boolean =
                 try {
                     block()
                     true
-                } catch (e: SQLiteException) {
+                } catch (e: Exception) {
                     Log.e(TAG, what, e)
                     false
                 }
@@ -282,6 +292,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+        const val REFLECT_TIMEOUT_MS = 3_000L
         const val TAG = "Runway"
     }
 }
