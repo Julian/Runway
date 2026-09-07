@@ -2,13 +2,14 @@ package com.grayvines.runway.data.settings
 
 /**
  * What it takes to open the drawer: a pull of [openAt] of the screen height, or a flick faster than
- * [flick] screen heights per second at any distance.
+ * [flickDpPerSecond] at any distance. Medium's flick is the 125 dp/s most sheets use, which any
+ * deliberate movement of a thumb clears; the distance rarely gets to decide.
  */
 @Suppress("MagicNumber") // the settings are the numbers
-enum class DrawerSwipe(val label: String, val openAt: Float, val flick: Float) {
-    LOW("Low", openAt = 0.08f, flick = 0.6f),
-    MEDIUM("Medium", openAt = 0.02f, flick = 0.4f),
-    HIGH("High", openAt = 0.01f, flick = 0.25f),
+enum class DrawerSwipe(val label: String, val openAt: Float, val flickDpPerSecond: Float) {
+    LOW("Low", openAt = 0.08f, flickDpPerSecond = 250f),
+    MEDIUM("Medium", openAt = 0.02f, flickDpPerSecond = 125f),
+    HIGH("High", openAt = 0.01f, flickDpPerSecond = 80f),
 }
 
 /** User configuration. The defaults are the product. */

@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
+import com.grayvines.runway.ui.home.SEARCH_MENU_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
@@ -103,6 +104,16 @@ class LauncherShellTest : LauncherFixture() {
         compose.waitUntil(TIMEOUT_MS) {
             runBlocking { graph.settings.settings.first().searchTarget } == other.packageName
         }
+        device.pressBack()
+    }
+
+    @Test
+    fun theSearchBarMenuOpensSettings() {
+        compose.onNodeWithTag(SEARCH_MENU_TAG).performClick()
+        assertTrue(
+            "settings did not open",
+            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
+        )
         device.pressBack()
     }
 

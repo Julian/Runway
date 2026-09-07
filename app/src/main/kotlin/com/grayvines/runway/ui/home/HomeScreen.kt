@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
@@ -61,6 +62,7 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem) -> Unit,
     onSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
     drag: DragSession,
     itemMenu: ItemMenuState?,
     itemMenuActions: ItemMenuActions,
@@ -88,16 +90,10 @@ fun HomeScreen(
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        val scope = rememberCoroutineScope()
-        val drawer = remember { DrawerMotion(scope) }
+        val drawer =
+            rememberDrawer(drawerOpen, maxHeight, settings.drawerSwipe, onOpenDrawer, onCloseDrawer)
         // The home area steps back for a lifted icon and for the drawer alike.
-        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.revealed.value)
-        drawer.laidOut(with(LocalDensity.current) { maxHeight.toPx() }, settings.drawerSwipe)
-        LaunchedEffect(drawerOpen) { drawer.settle(drawerOpen) }
-        val releaseDrawer = { velocity: Float ->
-            drawer.release(velocity, drawerOpen, onOpenDrawer, onCloseDrawer)
-        }
-        val pullModifier = Modifier.drawerPull(drawer, releaseDrawer)
+        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.revealed.value)
         HomeColumn(
             state = state,
             homePager = homePager,
@@ -106,23 +102,24 @@ fun HomeScreen(
             iconSize = iconSize,
             onLaunch = onLaunch,
             onSearch = onSearch,
+            onOpenSettings = onOpenSettings,
             drag = drag,
-            pagesModifier = pullModifier,
+            pagesModifier = drawer.pull,
             onHomePagePositioned = onHomePagePositioned,
             onDockPagePositioned = onDockPagePositioned,
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
-            revealed = drawer.revealed.value,
+            revealed = drawer.motion.revealed.value,
             open = drawerOpen,
             apps = state.apps,
             columns = settings.columns,
             iconSize = iconSize,
             labels = settings.drawerLabels,
             insets = insets,
-            onPull = drawer::dragBy,
-            onPullEnd = releaseDrawer,
+            onPull = drawer.motion::dragBy,
+            onPullEnd = drawer.release,
             onLaunch = onLaunchApp,
             onClose = onCloseDrawer,
             drag = drag,
@@ -157,6 +154,7 @@ private fun HomeColumn(
     iconSize: Dp,
     onLaunch: (HomeItem) -> Unit,
     onSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
@@ -172,6 +170,7 @@ private fun HomeColumn(
                 rowHeight = cell.height,
                 target = state.searchTarget,
                 onSearch = onSearch,
+                onMenu = onOpenSettings,
                 modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
             )
         }
@@ -193,6 +192,7 @@ private fun HomeColumn(
                 rowHeight = cell.height,
                 target = state.searchTarget,
                 onSearch = onSearch,
+                onMenu = onOpenSettings,
                 modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
             )
         }
@@ -217,6 +217,30 @@ private fun HomeColumn(
 private fun Modifier.dragTracking(drag: DragSession): Modifier {
     val current = rememberUpdatedState(drag)
     return this.then(remember { Modifier.tracksDrag { current.value } })
+}
+
+/** The drawer's motion, its release decision, and the pull gesture for the pages, wired once. */
+private class DrawerControls(
+    val motion: DrawerMotion,
+    val release: (velocity: Float) -> Unit,
+    val pull: Modifier,
+)
+
+@Composable
+private fun rememberDrawer(
+    open: Boolean,
+    height: Dp,
+    swipe: DrawerSwipe,
+    onOpen: () -> Unit,
+    onClose: () -> Unit,
+): DrawerControls {
+    val scope = rememberCoroutineScope()
+    val motion = remember { DrawerMotion(scope) }
+    val density = LocalDensity.current
+    motion.laidOut(with(density) { height.toPx() }, density.density, swipe)
+    LaunchedEffect(open) { motion.settle(open) }
+    val release = { velocity: Float -> motion.release(velocity, open, onOpen, onClose) }
+    return DrawerControls(motion, release, Modifier.drawerPull(motion, release))
 }
 
 /** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */

@@ -1,53 +1,56 @@
 package com.grayvines.runway.ui.home
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
-import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.system.search.SearchTarget
 
-/** The pill's height as a fraction of its grid row, capped so sparse grids don't balloon it. */
-private const val PILL_HEIGHT = 0.6f
-private val PILL_MAX_HEIGHT = 64.dp
-/** The target's icon height as a fraction of the pill. */
-private const val PILL_ICON_HEIGHT = 0.55f
-/** Slightly faded so the pill reads as a control, not another app icon. */
-private const val PILL_ICON_ALPHA = 0.75f
-private const val ICON_BITMAP_SIZE = 128
+/** The bar is [BAR_HEIGHT] tall inside its grid row: no surface, just what is on it. */
+private val BAR_HEIGHT = 48.dp
+private val GLASS = 24.dp
+
+/** Everything on the bar is white at this alpha: present, but quieter than the icons below. */
+private const val BAR_ALPHA = 0.85f
 
 const val SEARCH_BAR_TAG = "search-bar"
 const val SEARCH_TARGET_ICON_TAG = "search-target-icon"
+const val SEARCH_MENU_TAG = "search-menu"
 
-/** A pill showing the app that will handle the search; a tap hands off to it. */
+/**
+ * A transparent bar: a magnifying glass, the word "Search", and a menu on the far side that opens
+ * Runway's settings. A tap on the bar hands off to the search app; the glass is described by that
+ * app's name, so what a tap does is said out loud and can be checked.
+ */
 @Composable
 fun SearchBar(
     rowHeight: Dp,
     target: SearchTarget?,
     onSearch: () -> Unit,
+    onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val ink = Color.White.copy(alpha = BAR_ALPHA)
     Box(
         modifier = modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
@@ -55,8 +58,7 @@ fun SearchBar(
         Row(
             modifier =
                 Modifier.fillMaxWidth()
-                    .height(min(rowHeight * PILL_HEIGHT, PILL_MAX_HEIGHT))
-                    .background(Scrim, CircleShape)
+                    .height(BAR_HEIGHT)
                     .clip(CircleShape)
                     .clickable(
                         onClickLabel = target?.let { "Search with ${it.label}" } ?: "Search",
@@ -67,30 +69,21 @@ fun SearchBar(
                     .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (target != null) {
-                val bitmap =
-                    remember(target.packageName) {
-                        target.icon.toBitmap(ICON_BITMAP_SIZE, ICON_BITMAP_SIZE).asImageBitmap()
-                    }
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = target.label,
-                    modifier =
-                        Modifier.fillMaxHeight(PILL_ICON_HEIGHT)
-                            .aspectRatio(1f)
-                            .testTag(SEARCH_TARGET_ICON_TAG),
-                    alpha = PILL_ICON_ALPHA,
-                )
-            }
+            Icon(
+                Icons.Outlined.Search,
+                contentDescription = target?.label,
+                tint = ink,
+                modifier = Modifier.size(GLASS).testTag(SEARCH_TARGET_ICON_TAG),
+            )
             Text(
                 text = "Search",
-                color = Color.White.copy(alpha = PILL_ICON_ALPHA),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 12.dp),
+                color = ink,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
+            IconButton(onClick = onMenu, modifier = Modifier.testTag(SEARCH_MENU_TAG)) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Runway settings", tint = ink)
+            }
         }
     }
 }
-
-/** Translucent surface colour used over the wallpaper. */
-val Scrim: Color = Color.Black.copy(alpha = 0.35f)

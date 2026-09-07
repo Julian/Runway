@@ -28,11 +28,11 @@ class DrawerMotion(private val scope: CoroutineScope) {
     private var pulled = 0f
     private var pulling = false
 
-    /** [swipe] sets the pull and the flick that open; both are given as shares of the screen. */
-    fun laidOut(heightPx: Float, swipe: DrawerSwipe) {
+    /** [swipe] sets the pull (a share of the screen) and the flick (dp/s, scaled by [density]). */
+    fun laidOut(heightPx: Float, density: Float, swipe: DrawerSwipe) {
         travel = heightPx * PULL_FRACTION
         openAt = swipe.openAt / PULL_FRACTION
-        flick = swipe.flick / PULL_FRACTION
+        flick = swipe.flickDpPerSecond * density
     }
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
@@ -51,8 +51,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * drawer should end up other than it is; otherwise animates back to where it belongs.
      */
     fun release(velocity: Float, open: Boolean, onOpen: () -> Unit, onClose: () -> Unit) {
-        val wantOpen =
-            shouldOpen(if (pulling) pulled else revealed.value, -velocity / travel, openAt, flick)
+        val wantOpen = shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick)
         pulling = false
         when {
             wantOpen && !open -> onOpen()
@@ -68,13 +67,18 @@ class DrawerMotion(private val scope: CoroutineScope) {
 }
 
 /**
- * [upwardsPerSecond] is in pull distances per second, positive when the finger moves up. A flick
- * faster than [flick] decides on its own; otherwise past [openAt] (a share of the pull distance) a
- * released drawer opens, below it it falls back.
+ * [upwardsPxPerSecond] is the release velocity, positive when the finger moves up. A flick faster
+ * than [flickPxPerSecond] decides on its own; otherwise past [openAt] (a share of the pull
+ * distance) a released drawer opens, below it it falls back.
  */
-internal fun shouldOpen(revealed: Float, upwardsPerSecond: Float, openAt: Float, flick: Float) =
+internal fun shouldOpen(
+    revealed: Float,
+    upwardsPxPerSecond: Float,
+    openAt: Float,
+    flickPxPerSecond: Float,
+) =
     when {
-        upwardsPerSecond > flick -> true
-        upwardsPerSecond < -flick -> false
+        upwardsPxPerSecond > flickPxPerSecond -> true
+        upwardsPxPerSecond < -flickPxPerSecond -> false
         else -> revealed >= openAt
     }

@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DrawerMotionTest {
-    private fun opens(revealed: Float, upwards: Float, openAt: Float = 0.3f, flick: Float = 1.5f) =
+    /** Velocities in px/s against a 400 px/s flick. */
+    private fun opens(revealed: Float, upwards: Float, openAt: Float = 0.3f, flick: Float = 400f) =
         shouldOpen(revealed, upwards, openAt, flick)
 
     @Test
@@ -22,9 +23,11 @@ class DrawerMotionTest {
 
     @Test
     fun `a flick decides regardless of how much is showing`() {
-        assertTrue(opens(revealed = 0.05f, upwards = 2f))
-        assertFalse(opens(revealed = 0.95f, upwards = -2f))
-        assertFalse(opens(revealed = 0.1f, upwards = 1f)) // too slow to count
-        assertTrue(opens(revealed = 0.1f, upwards = 1f, flick = 0.8f)) // unless the setting says so
+        assertTrue(opens(revealed = 0.05f, upwards = 600f))
+        assertFalse(opens(revealed = 0.95f, upwards = -600f))
+        assertFalse(opens(revealed = 0.1f, upwards = 300f)) // too slow to count
+        assertTrue(
+            opens(revealed = 0.1f, upwards = 300f, flick = 250f)
+        ) // unless the setting says so
     }
 }

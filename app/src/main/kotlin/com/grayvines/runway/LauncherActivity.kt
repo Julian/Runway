@@ -21,6 +21,7 @@ import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.home.applying
+import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 
 /** The HOME activity. Holds no state of its own. */
@@ -50,6 +51,7 @@ class LauncherActivity : ComponentActivity() {
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
+                    onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                     itemMenu = itemMenu,
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
