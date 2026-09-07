@@ -91,6 +91,8 @@ android {
         checkAllWarnings = true
         abortOnError = true
         checkDependencies = true
+        // A library's release day must not break CI. Updates are a chore done on purpose.
+        disable += "NewerVersionAvailable"
     }
 
     testOptions {
