@@ -57,7 +57,14 @@ open class LauncherFixture {
     fun seed() {
         runBlocking {
             graph.settings.update { settings }
-            val all = graph.appRepository.apps.first { it.isNotEmpty() }
+            // Tests find icons by label, so two apps with the same one (a stock image ships two
+            // "Chrome"s) would be indistinguishable: such apps stay out of the layout.
+            val all =
+                graph.appRepository.apps
+                    .first { it.isNotEmpty() }
+                    .groupBy { it.label }
+                    .values
+                    .mapNotNull { it.singleOrNull() }
             // Our own settings app goes in the first home cell so tests can tap it on page 1.
             val ours = all.first { it.component.packageName == app.packageName }
             val apps =

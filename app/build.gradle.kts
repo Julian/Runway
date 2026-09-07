@@ -103,6 +103,29 @@ android {
                 exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
             }
         }
+        // Emulators Gradle creates, boots and discards itself, so the instrumented tests run on
+        // the same images everywhere: `./gradlew phonesGroupDebugAndroidTest`, or one device's
+        // task such as `pixel10ProApi37DebugAndroidTest`.
+        managedDevices {
+            localDevices {
+                create("pixel9Api36") {
+                    device = "Pixel 9"
+                    apiLevel = 36 // our minSdk
+                    systemImageSource = "google"
+                }
+                create("pixel10ProApi37") {
+                    device = "Pixel 10 Pro"
+                    apiLevel = 37 // the phone Runway is developed on
+                    systemImageSource = "google"
+                }
+            }
+            groups {
+                create("phones") {
+                    targetDevices.add(localDevices["pixel9Api36"])
+                    targetDevices.add(localDevices["pixel10ProApi37"])
+                }
+            }
+        }
     }
 }
 
@@ -155,10 +178,11 @@ registerInstallAsHome("installAsHome", "installDebug", "com.grayvines.runway.deb
 
 registerInstallAsHome("installReleaseAsHome", "installRelease", "com.grayvines.runway")
 
-// The connected test task only says "there were failing tests"; name them, with messages.
+// The instrumented test tasks only say "there were failing tests"; name them, with messages.
+// Covers a connected device and the managed ones alike.
 val printConnectedTestFailures =
     tasks.register("printConnectedTestFailures") {
-        val results = layout.buildDirectory.dir("outputs/androidTest-results/connected")
+        val results = layout.buildDirectory.dir("outputs/androidTest-results")
         doLast {
             val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
             results
@@ -191,12 +215,17 @@ val printConnectedTestFailures =
         }
     }
 
-// Instrumented tests uninstall the app afterwards; put the debug build back as home.
+// Instrumented tests on a connected device uninstall the app afterwards; put the debug build
+// back as home. Managed devices are thrown away, so there is nothing to put back.
 tasks
     .matching { it.name == "connectedDebugAndroidTest" }
     .configureEach {
         finalizedBy(printConnectedTestFailures, "installAsHome")
     }
+
+tasks
+    .matching { it.name.endsWith("DebugAndroidTest") && it.name != "connectedDebugAndroidTest" }
+    .configureEach { finalizedBy(printConnectedTestFailures) }
 
 dependencies {
     implementation(platform(libs.compose.bom))
