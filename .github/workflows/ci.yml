@@ -53,7 +53,7 @@ jobs:
           # The phone Runway is developed against (its image is the 37.0 line, not 16 KB pages;
           # the 16 KB one's system server used to die during installs here).
           - name: API 37, Pixel 10 Pro
-            api: 37
+            api: "37.0" # the platform package is named for its point release, unlike 36's
             image: "37.0"
             target: google_apis
             profile: pixel_10_pro
