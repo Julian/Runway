@@ -17,27 +17,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.grayvines.runway.data.ItemKind
-import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
-import com.grayvines.runway.ui.drawer.DrawerMotion
 import com.grayvines.runway.ui.drawer.DrawerQuery
-import com.grayvines.runway.ui.drawer.drawerPull
+import com.grayvines.runway.ui.drawer.releasesAbandonedPull
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
@@ -88,11 +84,12 @@ fun HomeScreen(
     LaunchedEffect(dockPager) { snapshotFlow { dockPager.currentPage }.collect(onDockPageShown) }
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
-    BoxWithConstraints(Modifier.fillMaxSize().dragTracking(drag)) {
+    val drawer = rememberDrawer(drawerOpen, drawerActions)
+    BoxWithConstraints(Modifier.fillMaxSize().dragTracking(drag).releasesAbandonedPull(drawer)) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        val drawer = rememberDrawer(drawerOpen, maxHeight, settings.drawerSwipe, drawerActions)
+        PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
         // The home area steps back for a lifted icon and for the drawer alike.
         val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.revealed.value)
         HomeColumn(
@@ -224,34 +221,6 @@ private fun HomeColumn(
 private fun Modifier.dragTracking(drag: DragSession): Modifier {
     val current = rememberUpdatedState(drag)
     return this.then(remember { Modifier.tracksDrag { current.value } })
-}
-
-/** What a vertical swipe on the home screen can ask for. */
-class DrawerActions(val open: () -> Unit, val close: () -> Unit, val openShade: () -> Unit)
-
-/** The drawer's motion, its release decision, and the pull gesture for the pages, wired once. */
-private class DrawerControls(
-    val motion: DrawerMotion,
-    val release: (velocity: Float) -> Unit,
-    val pull: Modifier,
-)
-
-@Composable
-private fun rememberDrawer(
-    open: Boolean,
-    height: Dp,
-    swipe: DrawerSwipe,
-    actions: DrawerActions,
-): DrawerControls {
-    val scope = rememberCoroutineScope()
-    val motion = remember { DrawerMotion(scope) }
-    val density = LocalDensity.current
-    motion.laidOut(with(density) { height.toPx() }, density.density, swipe)
-    LaunchedEffect(open) { motion.settle(open) }
-    val release = { velocity: Float ->
-        motion.release(velocity, open, actions.open, actions.close, actions.openShade)
-    }
-    return DrawerControls(motion, release, Modifier.drawerPull(motion, release))
 }
 
 /** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */

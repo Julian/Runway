@@ -27,7 +27,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * Negative is a pull the other way, down from a closed drawer, which is for the shade.
      */
     private var pulled = 0f
-    private var pulling = false
+    /**
+     * True from the first move of a pull until it is released. A pull whose gesture is taken over
+     * (a long press, a page swipe) never reports letting go; whoever sees the finger lift must
+     * release it, or the drawer stays wherever it was.
+     */
+    var pulling = false
+        private set
 
     /** [swipe] sets the pull (a share of the screen) and the flick (dp/s, scaled by [density]). */
     fun laidOut(heightPx: Float, density: Float, swipe: DrawerSwipe) {
@@ -64,10 +70,16 @@ class DrawerMotion(private val scope: CoroutineScope) {
         val wantShade = pulling && !open && shouldOpen(-pulled, velocity, openAt, flick)
         pulling = false
         when {
-            wantOpen && !open -> onOpen()
-            !wantOpen && open -> onClose()
-            wantShade -> onOpenShade()
-            else -> scope.launch { settle(open) }
+            wantOpen && !open -> {
+                onOpen()
+            }
+            !wantOpen && open -> {
+                onClose()
+            }
+            else -> {
+                if (wantShade) onOpenShade()
+                scope.launch { settle(open) }
+            }
         }
     }
 

@@ -92,6 +92,26 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun aPullCutShortStillLeavesTheDrawerFullyOpenOrClosed() {
+        // A pull that the system cancels part way (a call comes in, another gesture takes over)
+        // never reports letting go. The drawer must still end up somewhere definite.
+        openDrawer()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput {
+            down(center)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, root.height * PARTIAL_PULL / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            cancel()
+        }
+        compose.waitUntil(TIMEOUT_MS) {
+            val drawer = compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()
+            drawer == null || abs(drawer.boundsInRoot.top - root.top) < 1f
+        }
+    }
+
+    @Test
     fun theHomeIntentClosesTheDrawerAndStaysOnTheCurrentPage() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
         compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }

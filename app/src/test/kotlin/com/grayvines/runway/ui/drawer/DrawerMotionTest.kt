@@ -84,6 +84,16 @@ class DrawerMotionTest {
     }
 
     @Test
+    fun `a pull is in progress from its first move until it is released`() =
+        runWithMotion { motion, release ->
+            assertFalse(motion.pulling)
+            motion.dragBy(-10f)
+            assertTrue(motion.pulling)
+            release(0f, false)
+            assertFalse(motion.pulling)
+        }
+
+    @Test
     fun `a pull down that comes back up asks for nothing`() = runWithMotion { motion, release ->
         repeat(5) { motion.dragBy(10f) }
         repeat(5) { motion.dragBy(-10f) }
