@@ -93,6 +93,18 @@ class DrawerMotionTest {
         }
 
     @Test
+    fun `a pull down never lifts the drawer, however slow`() = runWithMotion { motion, release ->
+        motion.startPull(fingerY = 800f)
+        motion.dragBy(3f) // a slow start, not yet committed either way
+        advanceUntilIdle()
+        assertEquals(0f, motion.shown.value, 0.001f)
+        repeat(5) { motion.dragBy(10f) } // committed downward
+        advanceUntilIdle()
+        assertEquals(0f, motion.shown.value, 0.001f)
+        assertEquals(Asked.SHADE, release(0f, false))
+    }
+
+    @Test
     fun `a pull that begins inside the open drawer moves it from where it is`() =
         runWithMotion { motion, release ->
             motion.revealed.snapTo(1f)

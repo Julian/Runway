@@ -15,6 +15,9 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -85,12 +88,14 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     fun refresh() {
         scope.launch {
             refreshing.withLock {
-                val fresh =
+                // Rasterising every icon is the slow part of a refresh: spread it over the cores.
+                val fresh = coroutineScope {
                     userManager.userProfiles
-                        .flatMap { user ->
-                            launcherApps.getActivityList(null, user).map { it.toEntry() }
-                        }
-                        .sortedBy { it.label.lowercase() }
+                        .flatMap { user -> launcherApps.getActivityList(null, user) }
+                        .map { info -> async { info.toEntry() } }
+                        .awaitAll()
+                }
+                    .sortedBy { it.label.lowercase() }
                 _apps.value = fresh
                 _refreshed.tryEmit(fresh)
             }

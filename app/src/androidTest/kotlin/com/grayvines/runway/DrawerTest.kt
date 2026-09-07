@@ -402,6 +402,8 @@ class DrawerTest : LauncherFixture() {
             }
         }
         compose.onNodeWithTag(SHADE_HINT_TAG, useUnmergedTree = true).assertExists()
+        // And the drawer has not so much as stirred.
+        compose.onAllNodesWithTag(DRAWER_TAG).assertCountEquals(0)
         compose.onRoot().performTouchInput { up() }
         awaitGone(SHADE_HINT_TAG)
         assertTrue("too short a pull for the shade", !device.hasObject(SHADE))

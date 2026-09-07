@@ -48,10 +48,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * it is [revealed].
      */
     val shown: State<Float> = derivedStateOf {
-        if (pulling && heightPx > 0f) {
-            ((basePx + catchUpPx * caughtUp.value + pulledPx) / heightPx).coerceIn(0f, 1f)
-        } else {
-            revealed.value
+        when {
+            !pulling || heightPx <= 0f -> revealed.value
+            // Only a swipe committed upward moves the drawer; downward, or not yet decided, it
+            // stays exactly where it was, so a pull towards the shade never lifts it.
+            way == 1 ->
+                ((basePx + catchUpPx * caughtUp.value + pulledPx) / heightPx).coerceIn(0f, 1f)
+            else -> basePx / heightPx
         }
     }
 
@@ -123,10 +126,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
         farthestPx = 0f
         basePx = revealed.value * heightPx
         catchUpPx = fingerY?.let { (heightPx - it - basePx).coerceAtLeast(0f) } ?: 0f
-        scope.launch {
-            caughtUp.snapTo(0f)
-            caughtUp.animateTo(1f, tween(CATCH_UP_MS))
-        }
+        scope.launch { caughtUp.snapTo(0f) }
     }
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
@@ -142,7 +142,11 @@ class DrawerMotion(private val scope: CoroutineScope) {
         val moved = (pulled - dy / travel).coerceIn(-1f, 1f)
         // One swipe, one direction: past a little way out, it is committed to that side of
         // rest, and coming back can only undo it, never turn into the other action.
-        if (way == 0 && abs(moved) > COMMIT) way = if (moved > 0f) 1 else -1
+        if (way == 0 && abs(moved) > COMMIT) {
+            way = if (moved > 0f) 1 else -1
+            // Committed upward: now the drawer's top edge sets off to meet the finger.
+            if (way == 1) scope.launch { caughtUp.animateTo(1f, tween(CATCH_UP_MS)) }
+        }
         pulled =
             when (way) {
                 1 -> moved.coerceAtLeast(0f)
