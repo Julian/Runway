@@ -67,9 +67,11 @@ class LauncherShellTest : LauncherFixture() {
 
     @Test
     fun theSearchBarFollowsThePickedTarget() {
-        val handlers = graph.searchTargets.handlers()
-        assumeTrue("no web-search handler installed", handlers.isNotEmpty())
-        val picked = handlers.last()
+        // A handler other than the automatic choice, or the setting changes nothing.
+        val automatic = graph.searchTargets.resolve(null)?.packageName
+        val picked = graph.searchTargets.handlers().firstOrNull { it.packageName != automatic }
+        assumeTrue("needs a second web-search handler to pick", picked != null)
+        picked!!
         runBlocking { graph.settings.update { it.copy(searchTarget = picked.packageName) } }
         compose.waitUntil(TIMEOUT_MS) {
             compose

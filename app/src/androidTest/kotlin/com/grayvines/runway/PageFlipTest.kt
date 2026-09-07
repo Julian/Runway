@@ -118,11 +118,12 @@ class PageFlipTest : LauncherFixture() {
 
     @Test
     fun liftingTheLastDockIconAndHoldingStillAddsNoPage() {
-        // The last slot's icon sits inside the edge zone; merely lifting it must not flip.
+        // Picked up by its edge, so the finger is inside the edge zone from the start; merely
+        // lifting it, and a nudge that stays in the zone, must not flip.
         val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
-        // A nudge, still inside the slot, so the lift happens without leaving the edge zone.
-        val start = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
-        holdDrag(from = lastDockApp, to = start + Offset(0f, -LIFT_NUDGE_PX))
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val start = grid.dockRightEdge()
+        holdDragAt(start, start + Offset(0f, -LIFT_NUDGE_PX))
         Thread.sleep(EDGE_ADD_MS)
         compose.waitForIdle()
         assertEquals(1, dockPageCount())

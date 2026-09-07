@@ -25,13 +25,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
-import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drawer.DRAWER_INDEX_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.drawer.index
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
@@ -50,12 +50,6 @@ import org.junit.runner.RunWith
 class DrawerTest : LauncherFixture() {
     @Test
     fun swipingUpOnThePagesOpensTheDrawerListingEveryAppAlphabetically() {
-        val labels = runBlocking {
-            graph.appRepository.apps
-                .first { it.isNotEmpty() }
-                .map { it.label }
-                .sortedWith(String.CASE_INSENSITIVE_ORDER)
-        }
         openDrawer()
         compose
             .onAllNodesWithTag(DRAWER_ITEM_TAG)
@@ -115,7 +109,7 @@ class DrawerTest : LauncherFixture() {
         compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput {
             down(center)
             repeat(PULL_STEPS) {
-                moveBy(Offset(0f, root.height * PARTIAL_PULL / PULL_STEPS))
+                moveBy(Offset(0f, partialPullPx() / PULL_STEPS))
                 advanceEventTime(PULL_STEP_MS)
             }
             cancel()
@@ -146,7 +140,7 @@ class DrawerTest : LauncherFixture() {
         compose.onRoot().performTouchInput {
             down(pages.center)
             repeat(PULL_STEPS) {
-                moveBy(Offset(0f, -root.height * PARTIAL_PULL / PULL_STEPS))
+                moveBy(Offset(0f, -partialPullPx() / PULL_STEPS))
                 advanceEventTime(PULL_STEP_MS)
             }
         }
@@ -232,13 +226,7 @@ class DrawerTest : LauncherFixture() {
         assertEquals(before, placementsOf(label).size) // in the folder, not on a cell of its own
     }
 
-    private fun firstDrawerLabel() = runBlocking {
-        graph.appRepository.apps
-            .first { it.isNotEmpty() }
-            .map { it.label }
-            .sortedWith(String.CASE_INSENSITIVE_ORDER)
-            .first()
-    }
+    private fun firstDrawerLabel() = labels.first()
 
     /** Long-presses [label] in the open drawer and nudges it, so the drag has begun. */
     private fun liftFromDrawer(label: String) {
@@ -252,19 +240,6 @@ class DrawerTest : LauncherFixture() {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-    }
-
-    private fun placementsOf(label: String) = runBlocking {
-        val component =
-            graph.appRepository.apps
-                .first { it.isNotEmpty() }
-                .first { it.label == label }
-                .ref
-                .component
-        listOf(Container.HOME, Container.DOCK)
-            .flatMap { graph.workspace.observe(it).first().pages }
-            .flatMap { it.items }
-            .filter { it.component == component }
     }
 
     @Test
@@ -348,8 +323,8 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         // The letter of an app a third of the way in, and the first app under that letter: the
         // one a jump brings to the top.
-        val letter = drawerLabelAThirdIn().first().uppercaseChar()
-        val target = sortedDrawerLabels().first { it.first().uppercaseChar() == letter }
+        val letter = listOf(drawerLabelAThirdIn()).index { it }.single().letter
+        val target = labels.first { listOf(it).index { l -> l }.single().letter == letter }
         compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
         compose.onNode(hasContentDescription("Jump to $letter")).performTouchInput { click() }
         compose.waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
@@ -381,16 +356,11 @@ class DrawerTest : LauncherFixture() {
         compose.onAllNodesWithTag(DRAWER_INDEX_TAG).assertCountEquals(0)
     }
 
-    private fun drawerLabelAThirdIn() = sortedDrawerLabels().let { it[it.size / 3] }
+    private fun drawerLabelAThirdIn() = labels[labels.size / 3]
 
-    private fun lastDrawerLabel() = sortedDrawerLabels().last()
+    private fun lastDrawerLabel() = labels.last()
 
-    private fun sortedDrawerLabels() = runBlocking {
-        graph.appRepository.apps
-            .first { it.isNotEmpty() }
-            .map { it.label }
-            .sortedWith(String.CASE_INSENSITIVE_ORDER)
-    }
+    private fun sortedDrawerLabels() = labels
 
     @Test
     fun theDrawerFollowsTheHomeColumnsUntilGivenItsOwn() {
@@ -417,7 +387,7 @@ class DrawerTest : LauncherFixture() {
 
     @Test
     fun swipingDownOnThePagesPullsDownTheNotificationShade() {
-        pullDown(OPENING_PULL)
+        pullDown(compose.onRoot().fetchSemanticsNode().boundsInRoot.height * OPENING_PULL)
         assertTrue(
             "the notification shade should have come down",
             device.wait(Until.hasObject(SHADE), TIMEOUT_MS),
@@ -426,7 +396,7 @@ class DrawerTest : LauncherFixture() {
 
     @Test
     fun aShortSwipeDownLeavesTheHomeScreenAsItWas() {
-        pullDown(PARTIAL_PULL)
+        pullDown(partialPullPx())
         assertFalse("no shade for a pull this short", device.wait(Until.hasObject(SHADE), GRACE_MS))
         assertTrue(
             "nor any drawer",
@@ -441,13 +411,12 @@ class DrawerTest : LauncherFixture() {
         device.wait(Until.gone(SHADE), TIMEOUT_MS)
     }
 
-    private fun pullDown(share: Float) {
-        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+    private fun pullDown(px: Float) {
         val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {
             down(pages.center)
             repeat(PULL_STEPS) {
-                moveBy(Offset(0f, root.height * share / PULL_STEPS))
+                moveBy(Offset(0f, px / PULL_STEPS))
                 advanceEventTime(PULL_STEP_MS)
             }
             up()
@@ -489,7 +458,6 @@ class DrawerTest : LauncherFixture() {
         const val QUICK_SWIPE = 0.08f
         const val QUICK_STEP_MS = 16L
         const val PULL_STEP_MS = 40L // slow enough not to count as a flick
-        const val PARTIAL_PULL = 0.01f // under Medium's 2%: shows the drawer, lets it fall back
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
         const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
         const val JUMP_TOLERANCE = 0.1f // the list's top padding, and then some

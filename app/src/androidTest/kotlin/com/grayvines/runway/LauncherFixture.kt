@@ -1,6 +1,8 @@
 package com.grayvines.runway
 
 import android.content.Intent
+import android.os.SystemClock
+import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -21,7 +23,9 @@ import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
@@ -53,6 +57,15 @@ open class LauncherFixture {
     protected lateinit var firstDockApp: String
     protected lateinit var firstHomeApp: String
 
+    /**
+     * The apps tests may refer to by label: those with a label of their own, sorted as the drawer
+     * sorts.
+     */
+    protected lateinit var apps: List<AppEntry>
+
+    protected val labels: List<String>
+        get() = apps.map { it.label }
+
     @Before
     fun seed() {
         runBlocking {
@@ -65,6 +78,8 @@ open class LauncherFixture {
                     .groupBy { it.label }
                     .values
                     .mapNotNull { it.singleOrNull() }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+            apps = all
             // Our own settings app goes in the first home cell so tests can tap it on page 1.
             val ours = all.first { it.component.packageName == app.packageName }
             val apps =
@@ -79,7 +94,8 @@ open class LauncherFixture {
             )
         }
         // The layout arrives through Room flows, which Compose's idling does not track.
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        // Settings and layout go through DataStore and Room; a cold emulator can take a while.
+        compose.waitUntil(LONG_TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
     /** Screen geometry after switching to a grid, in root pixels. */
@@ -128,7 +144,9 @@ open class LauncherFixture {
         runBlocking {
             graph.settings.update { it.copy(columns = columns, rows = rows, dockSlots = dockSlots) }
         }
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
+        compose.waitUntil(LONG_TIMEOUT_MS) {
+            icon(firstHomeApp).fetchSemanticsNode().size != before
+        }
         return Grid(columns, rows - Settings.RESERVED_ROWS, dockSlots)
     }
 
@@ -139,8 +157,11 @@ open class LauncherFixture {
     }
 
     /** Like [drag] but leaves the finger down at [to]. */
-    protected fun holdDrag(from: String, to: Offset) {
-        val start = icon(from).fetchSemanticsNode().boundsInRoot.center
+    protected fun holdDrag(from: String, to: Offset) =
+        holdDragAt(icon(from).fetchSemanticsNode().boundsInRoot.center, to)
+
+    /** A long press at [start] (root px), then a drag to [to], finger left down. */
+    protected fun holdDragAt(start: Offset, to: Offset) {
         compose.onRoot().performTouchInput {
             down(start)
             advanceEventTime(LONG_PRESS_MS)
@@ -245,10 +266,43 @@ open class LauncherFixture {
         )
     }
 
+    /**
+     * [label] is still in the first home cell once the drop has fully played out: the lifted icon
+     * has settled and a write that was going to land has had time to. Idling alone does not wait on
+     * the database.
+     */
     protected fun assertUnmoved(label: String) {
-        compose.waitForIdle()
+        awaitGone(DRAG_OVERLAY_TAG)
+        SystemClock.sleep(WRITE_GRACE_MS)
         assertEquals(0 to 0, homeCellOf(label))
         assertEquals(Container.HOME, placementOf(label)?.container)
+    }
+
+    /** Waits until no node carries [tag]. */
+    protected fun awaitGone(tag: String) {
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    /**
+     * A pull that shows the drawer without opening it: past touch slop, short of the default
+     * setting's threshold, on any screen.
+     */
+    protected fun partialPullPx(): Float {
+        val slop = ViewConfiguration.get(app).scaledTouchSlop
+        val opens =
+            compose.onRoot().fetchSemanticsNode().boundsInRoot.height * DrawerSwipe.MEDIUM.openAt
+        return (slop + opens) / 2
+    }
+
+    /** Every placement of [label], across home and dock. */
+    protected fun placementsOf(label: String): List<ItemEntity> = runBlocking {
+        val ref = apps.first { it.label == label }.ref
+        listOf(Container.HOME, Container.DOCK)
+            .flatMap { graph.workspace.observe(it).first().pages }
+            .flatMap { it.items }
+            .filter { it.component == ref.component && it.profile == ref.profile }
     }
 
     /** The lifted icon is our settings app; a stray click would open its "Grid" section. */
@@ -379,6 +433,12 @@ const val LIFT_HOLD_MS = 550L
 
 /** Past touch slop: enough movement after a hold to turn it into a drag. */
 const val LIFT_NUDGE_PX = 60f
+
+/** How long a database write that was going to happen takes to show up. */
+const val WRITE_GRACE_MS = 500L
+
+/** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
+const val BESIDE = 0.35f
 const val FRAME_MS = 16L
 const val LIFT_FRAMES = 60
 const val DRAG_STEPS = 10

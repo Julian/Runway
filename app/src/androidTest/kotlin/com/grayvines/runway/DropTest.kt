@@ -113,9 +113,6 @@ class DropTest : LauncherFixture() {
     }
 
     private companion object {
-        /** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
-        const val BESIDE = 0.35f
-
         /** Outside even the wider zone a fold, once begun, keeps to. */
         const val WELL_BESIDE = 0.45f
     }

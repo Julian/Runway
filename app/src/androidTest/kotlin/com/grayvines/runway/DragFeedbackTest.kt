@@ -144,9 +144,18 @@ class DragFeedbackTest : LauncherFixture() {
         val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
         holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        // Once the neighbour has slid over for the hover (a rest on the real clock)...
+        compose.waitUntil(TIMEOUT_MS) {
+            val at = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+            grid.dockSlotAt(at) == settings.dockSlots - 2
+        }
+        // ...hold the clock, or the frame after the release would be the finished state, and
+        // check the neighbour stays put rather than springing back for a frame.
+        compose.mainClock.autoAdvance = false
         release()
         compose.mainClock.advanceTimeByFrame()
         val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+        compose.mainClock.autoAdvance = true
         assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
         assertSettlesTowards(firstDockApp, grid.dockSlot(settings.dockSlots - 1))
         // And it stays there while the database catches up.
@@ -194,10 +203,5 @@ class DragFeedbackTest : LauncherFixture() {
             grid.dockSlotAt(shown) == settings.dockSlots - 2
         }
         release()
-    }
-
-    private companion object {
-        /** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
-        const val BESIDE = 0.35f
     }
 }
