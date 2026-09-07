@@ -38,6 +38,13 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps
 
+    /**
+     * One refresh at a time, in order: a burst of package callbacks must end on the newest list.
+     * Declared before `init`, which starts the first refresh: a property below it would still be
+     * null if that refresh ran before the constructor finished.
+     */
+    private val refreshing = Mutex()
+
     private val _refreshed = MutableSharedFlow<List<AppEntry>>(extraBufferCapacity = 1)
 
     /**
@@ -79,11 +86,6 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         refresh()
     }
-
-    /**
-     * One refresh at a time, in order: a burst of package callbacks must end on the newest list.
-     */
-    private val refreshing = Mutex()
 
     fun refresh() {
         scope.launch {

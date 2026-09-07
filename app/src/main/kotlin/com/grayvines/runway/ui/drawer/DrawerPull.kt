@@ -62,16 +62,24 @@ private fun Modifier.pullsDrawer(
 ) =
     pointerInput(motion) {
         val tracker = VelocityTracker()
+        var started = false
         try {
             detectVerticalDragGestures(
                 onDragStart = {
                     tracker.resetTracking()
-                    motion.startPull(rootY(it))
+                    started = false
                 },
                 onDragEnd = { onRelease(tracker.calculateVelocity().y) },
                 onDragCancel = { onRelease(0f) },
                 onVerticalDrag = { change, dy ->
                     tracker.addPosition(change.uptimeMillis, change.position)
+                    if (!started) {
+                        started = true
+                        // The first move carries the slop the finger crossed unnoticed; the
+                        // pull begins where the finger was before it, so that after this move
+                        // the drawer's edge is exactly under the finger.
+                        motion.startPull(rootY(change.position - Offset(0f, dy)))
+                    }
                     motion.dragBy(dy)
                 },
             )

@@ -14,9 +14,15 @@ import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DrawerMotionTest {
-    /** Velocities in px/s against a 400 px/s flick. */
+    /** Velocities in px/s against a 400 px/s flick; 30 px/s back is a change of mind. */
     private fun opens(revealed: Float, upwards: Float, openAt: Float = 0.3f, flick: Float = 400f) =
-        shouldOpen(revealed, upwards, openAt, flick)
+        shouldOpen(revealed, upwards, openAt, flick, againstPxPerSecond = 30f)
+
+    @Test
+    fun `moving back at all when letting go falls back, holding still does not`() {
+        assertFalse(opens(revealed = 0.9f, upwards = -50f)) // slowly back down: a change of mind
+        assertTrue(opens(revealed = 0.9f, upwards = -10f)) // the jitter of a still finger
+    }
 
     @Test
     fun `a released drawer opens past the threshold and falls back before it`() {
@@ -79,17 +85,18 @@ class DrawerMotionTest {
     fun `the drawer catches up with the finger, then moves with it one to one`() =
         runWithMotion { motion, release ->
             motion.startPull(fingerY = 800f) // 200 px up a 1000 px screen
+            motion.dragBy(-10f) // the first move upward commits the swipe: off it sets
             advanceUntilIdle() // the catch-up runs its course
-            assertEquals(0.2f, motion.shown.value, 0.01f) // its top edge is at the finger
+            assertEquals(0.21f, motion.shown.value, 0.01f) // its top edge is at the finger
             motion.dragBy(-100f)
-            assertEquals(0.3f, motion.shown.value, 0.01f)
-            motion.dragBy(10f) // a wobble, not a change of mind
-            assertEquals(0.29f, motion.shown.value, 0.01f)
-            // Let go: 290 px is past the threshold, so it asks to open, and until the opening
+            assertEquals(0.31f, motion.shown.value, 0.01f)
+            motion.dragBy(5f) // a wobble, not a change of mind
+            assertEquals(0.305f, motion.shown.value, 0.01f)
+            // Let go: 305 px is past the threshold, so it asks to open, and until the opening
             // animation takes over it stays drawn where the finger left it.
             assertEquals(Asked.OPEN, release(0f, false))
             advanceUntilIdle()
-            assertEquals(0.29f, motion.shown.value, 0.01f)
+            assertEquals(0.305f, motion.shown.value, 0.01f)
         }
 
     @Test
@@ -175,7 +182,7 @@ class DrawerMotionTest {
 
             motion.startPull(null)
             repeat(30) { motion.dragBy(-10f) }
-            motion.dragBy(10f) // 10 px: a wobble
+            motion.dragBy(5f) // 5 px: a wobble, within the 8 dp that reads as a change of mind
             assertEquals(Asked.OPEN, release(0f, false))
         }
 

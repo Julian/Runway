@@ -8,6 +8,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.grayvines.runway.data.settings.DrawerSwipe
@@ -31,7 +32,13 @@ private const val CATCH_UP_MS = 120
  * A finger that comes back this far (dp) from the farthest it pulled has changed its mind: letting
  * go then cancels, however far the pull had got.
  */
-private const val REVERSAL_DP = 24f
+private const val REVERSAL_DP = 8f
+
+/**
+ * A finger still moving against the pull when it lets go (dp/s), however slowly, has changed its
+ * mind; below this is the jitter of a finger holding still.
+ */
+private const val AGAINST_DP_PER_SECOND = 30f
 
 /**
  * How much of the drawer is showing, 0 closed to 1 open, and what a finger does to it. The finger
@@ -76,6 +83,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
      */
     private var farthestPx = 0f
     private var reversalPx = 0f
+    private var against = 0f
 
     /**
      * How far a pull the other way, down from a closed drawer, has gone, 0 to 1 of what would open
@@ -93,8 +101,12 @@ class DrawerMotion(private val scope: CoroutineScope) {
      */
     private var pulled = 0f
 
-    /** Which side of rest this pull committed to: 1 up (drawer), -1 down (shade), 0 not yet. */
-    private var way = 0
+    /**
+     * Which side of rest this pull committed to: 1 up (drawer), -1 down (shade), 0 not yet. State,
+     * not a plain field: [shown] branches on it, and a derived value only recomputes when state it
+     * read changes, so a plain field would leave the drawer drawn at rest for the whole pull.
+     */
+    private var way by mutableIntStateOf(0)
 
     /**
      * True from the first move of a pull until it is released. A pull whose gesture is taken over
@@ -111,6 +123,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
         openAt = swipe.openAt / PULL_FRACTION
         flick = swipe.flickDpPerSecond * density
         reversalPx = REVERSAL_DP * density
+        against = AGAINST_DP_PER_SECOND * density
     }
 
     /**
@@ -176,7 +189,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
                 !open &&
                 way < 0 &&
                 !reversed() &&
-                shouldOpen(-pulled, velocity, openAt, flick)
+                shouldOpen(-pulled, velocity, openAt, flick, against)
         // Whatever comes next animates from where the drawer is drawn now.
         val at = shown.value
         scope.launch { revealed.snapTo(at) }
@@ -188,8 +201,15 @@ class DrawerMotion(private val scope: CoroutineScope) {
             !wantOpen && open -> {
                 onClose()
             }
+            wantShade -> {
+                onOpenShade()
+                // The shade is about to cover everything: snap back rather than animate under it.
+                scope.launch {
+                    given.snapTo(0f)
+                    revealed.snapTo(0f)
+                }
+            }
             else -> {
-                if (wantShade) onOpenShade()
                 scope.launch { settle(open) }
             }
         }
@@ -204,7 +224,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
     private fun wantsOpen(velocity: Float) =
         way >= 0 &&
             !reversed() &&
-            shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick)
+            shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick, against)
 
     /** Follows the model: open animates the rest of the way in, closed the rest of the way out. */
     suspend fun settle(open: Boolean) {
@@ -215,17 +235,19 @@ class DrawerMotion(private val scope: CoroutineScope) {
 
 /**
  * [upwardsPxPerSecond] is the release velocity, positive when the finger moves up. A flick faster
- * than [flickPxPerSecond] decides on its own; otherwise past [openAt] (a share of the pull
- * distance) a released drawer opens, below it it falls back.
+ * than [flickPxPerSecond] opens on its own; any movement back faster than [againstPxPerSecond], a
+ * change of mind, falls back on its own; otherwise past [openAt] (a share of the pull distance) a
+ * released drawer opens, below it it falls back.
  */
 internal fun shouldOpen(
     revealed: Float,
     upwardsPxPerSecond: Float,
     openAt: Float,
     flickPxPerSecond: Float,
+    againstPxPerSecond: Float,
 ) =
     when {
         upwardsPxPerSecond > flickPxPerSecond -> true
-        upwardsPxPerSecond < -flickPxPerSecond -> false
+        upwardsPxPerSecond < -againstPxPerSecond -> false
         else -> revealed >= openAt
     }
