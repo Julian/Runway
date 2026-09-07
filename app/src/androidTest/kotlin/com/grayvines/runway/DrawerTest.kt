@@ -2,9 +2,11 @@ package com.grayvines.runway
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -25,6 +27,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.ui.drawer.DRAWER_INDEX_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
@@ -78,8 +81,7 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun backClosesTheDrawer() {
         openDrawer()
-        device.pressBack()
-        awaitDrawerClosed()
+        closeDrawerWithBack()
     }
 
     @Test
@@ -137,8 +139,7 @@ class DrawerTest : LauncherFixture() {
                 abs(it.boundsInRoot.top - root.top) < 1f
             } ?: false
         }
-        device.pressBack()
-        awaitDrawerClosed()
+        closeDrawerWithBack()
     }
 
     @Test
@@ -303,6 +304,52 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun touchingALetterOfTheIndexJumpsTheListToIt() {
+        // One column, so the list is far taller than the screen and a jump has somewhere to go.
+        runBlocking { graph.settings.update { it.copy(drawerIndex = true, drawerColumns = 1) } }
+        compose.waitForIdle()
+        openDrawer()
+        val target = middleDrawerLabel()
+        val letter = target.first().uppercaseChar()
+        compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
+        compose.onNode(hasContentDescription("Jump to $letter")).performTouchInput { click() }
+        compose.waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
+        // At the top of the list, not merely somewhere on the screen.
+        val list = compose.onNodeWithTag(DRAWER_LIST_TAG).fetchSemanticsNode().boundsInRoot
+        val item = drawerApp(target).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "$target at ${item.top} should sit at the top of the list (${list.top})",
+            item.top - list.top < list.height * JUMP_TOLERANCE,
+        )
+    }
+
+    @Test
+    fun theIndexStaysOutOfTheWayWhileSearching() {
+        runBlocking { graph.settings.update { it.copy(drawerIndex = true) } }
+        compose.waitForIdle()
+        openDrawer()
+        compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
+        searchField().performTextInput(firstHomeApp)
+        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        compose.onAllNodesWithTag(DRAWER_INDEX_TAG).assertCountEquals(0)
+    }
+
+    @Test
+    fun theIndexIsOffUnlessAskedFor() {
+        openDrawer()
+        compose.onAllNodesWithTag(DRAWER_INDEX_TAG).assertCountEquals(0)
+    }
+
+    private fun middleDrawerLabel() = runBlocking {
+        val labels =
+            graph.appRepository.apps
+                .first { it.isNotEmpty() }
+                .map { it.label }
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+        labels[labels.size / 2]
+    }
+
+    @Test
     fun theDrawerFollowsTheHomeColumnsUntilGivenItsOwn() {
         openDrawer()
         assertEquals(settings.columns, drawerRowLength())
@@ -371,6 +418,20 @@ class DrawerTest : LauncherFixture() {
         }
     }
 
+    /** With the keyboard up the first back only hides that, as in any app; then back closes. */
+    private fun closeDrawerWithBack() {
+        device.pressBack()
+        if (!drawerGoneWithin(KEYBOARD_GRACE_MS)) device.pressBack()
+        awaitDrawerClosed()
+    }
+
+    private fun drawerGoneWithin(ms: Long) = runCatching {
+        compose.waitUntil(ms) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
+        }
+    }
+        .isSuccess
+
     private fun awaitDrawerClosed() {
         compose.waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
@@ -388,7 +449,9 @@ class DrawerTest : LauncherFixture() {
         const val PARTIAL_PULL = 0.01f // under Medium's 2%: shows the drawer, lets it fall back
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
         const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
+        const val JUMP_TOLERANCE = 0.1f // the list's top padding, and then some
         const val DRAWER_COLUMNS = 6 // more than the fixture's 4 home columns
+        const val KEYBOARD_GRACE_MS = 1_000L // a closing drawer is long gone by then
         const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
         val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }

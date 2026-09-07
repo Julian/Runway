@@ -117,6 +117,9 @@ private fun DrawerSection(settings: Settings, onChange: ((Settings) -> Settings)
             onChange { it.copy(drawerColumns = v) }
         }
     }
+    Toggle("Alphabet along the edge", settings.drawerIndex) { v ->
+        onChange { it.copy(drawerIndex = v) }
+    }
 }
 
 @Composable

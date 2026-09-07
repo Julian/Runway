@@ -28,6 +28,8 @@ data class Settings(
     val drawerKeyboard: Boolean = true,
     /** The drawer's own column count; null follows the home grid. */
     val drawerColumns: Int? = null,
+    /** An alphabet down the drawer's right edge that jumps the list. */
+    val drawerIndex: Boolean = false,
 ) {
     /** Rows left for items: the dock and the search bar each take one full row. */
     val pageRows: Int

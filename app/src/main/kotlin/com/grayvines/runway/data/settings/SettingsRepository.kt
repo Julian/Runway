@@ -35,6 +35,7 @@ class SettingsRepository(context: Context) {
         val drawerSwipe = stringPreferencesKey("drawer_swipe")
         val drawerKeyboard = booleanPreferencesKey("drawer_keyboard")
         val drawerColumns = intPreferencesKey("drawer_columns")
+        val drawerIndex = booleanPreferencesKey("drawer_index")
     }
 
     private fun Preferences.toSettings(): Settings {
@@ -54,6 +55,7 @@ class SettingsRepository(context: Context) {
                 } ?: defaults.drawerSwipe,
             drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
             drawerColumns = this[Keys.drawerColumns],
+            drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
         )
     }
 
@@ -69,5 +71,6 @@ class SettingsRepository(context: Context) {
         prefs[Keys.drawerSwipe] = drawerSwipe.name
         prefs[Keys.drawerKeyboard] = drawerKeyboard
         drawerColumns?.let { prefs[Keys.drawerColumns] = it } ?: prefs.remove(Keys.drawerColumns)
+        prefs[Keys.drawerIndex] = drawerIndex
     }
 }

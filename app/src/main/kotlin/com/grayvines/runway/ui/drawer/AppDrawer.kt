@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +65,7 @@ import com.grayvines.runway.ui.home.AppIcon
 import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.dragAfterLongPress
+import kotlinx.coroutines.launch
 
 const val DRAWER_TAG = "drawer"
 const val DRAWER_ITEM_TAG = "drawer-app"
@@ -92,11 +96,12 @@ private const val HINT_ALPHA = 0.5f
 /**
  * Every launchable app, alphabetically, on an opaque surface, under a search field that narrows the
  * list as you type ([query]) and takes the keyboard as the drawer opens when [keyboard] says so.
- * Icons are the home screen's [iconSize] unless [columns] leaves less room than that. Drawn
- * [revealed] of the way up from the bottom edge, following the finger, translucent and slightly
- * larger while it arrives so it reads as settling onto the screen rather than sliding across it.
- * Closes on back, and pulling the list down past its top pulls the drawer down with it; letting go
- * decides ([onPullEnd]). Launching an app closes it.
+ * Icons are the home screen's [iconSize] unless [columns] leaves less room than that. With nothing
+ * typed and [index] set, an alphabet down the right edge jumps the list. Drawn [revealed] of the
+ * way up from the bottom edge, following the finger, translucent and slightly larger while it
+ * arrives so it reads as settling onto the screen rather than sliding across it. Closes on back,
+ * and pulling the list down past its top pulls the drawer down with it; letting go decides
+ * ([onPullEnd]). Launching an app closes it.
  */
 @Composable
 fun AppDrawer(
@@ -105,6 +110,7 @@ fun AppDrawer(
     apps: List<AppEntry>,
     query: DrawerQuery,
     keyboard: Boolean,
+    index: Boolean,
     columns: Int,
     iconSize: Dp,
     labels: Boolean,
@@ -142,27 +148,50 @@ fun AppDrawer(
                 Modifier.padding(top = insets.calculateTopPadding() + MARGIN / 2)
                     .padding(horizontal = MARGIN),
             )
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columns),
-                // Insets pad the content, not the grid: its scrollable then covers the whole
-                // screen, so a pull that starts at the edge still pulls.
-                contentPadding = insets.aboveKeyboard(),
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .weight(1f)
-                        .testTag(DRAWER_LIST_TAG)
-                        .nestedScroll(pullToClose),
-            ) {
-                items(shownApps, key = { it.key }) { app ->
-                    DrawerApp(
-                        app,
-                        icon,
-                        labels,
-                        onClick = { onLaunch(app) },
-                        drag = drag?.handlersForDrawer(app),
-                    )
+            IndexedGrid(shownApps, index && query.text.isBlank(), Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    state = it,
+                    // Insets pad the content, not the grid: its scrollable then covers the whole
+                    // screen, so a pull that starts at the edge still pulls.
+                    contentPadding = insets.aboveKeyboard(indexed = index),
+                    modifier =
+                        Modifier.fillMaxSize().testTag(DRAWER_LIST_TAG).nestedScroll(pullToClose),
+                ) {
+                    items(shownApps, key = { it.key }) { app ->
+                        DrawerApp(
+                            app,
+                            icon,
+                            labels,
+                            onClick = { onLaunch(app) },
+                            drag = drag?.handlersForDrawer(app),
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/** The grid, with the alphabet index over its right edge when [indexed]. */
+@Composable
+private fun IndexedGrid(
+    apps: List<AppEntry>,
+    indexed: Boolean,
+    modifier: Modifier,
+    grid: @Composable (LazyGridState) -> Unit,
+) {
+    val state = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val entries = remember(apps) { apps.index() }
+    Box(modifier.fillMaxWidth()) {
+        grid(state)
+        if (indexed) {
+            DrawerIndex(
+                entries,
+                onJump = { position -> scope.launch { state.scrollToItem(position) } },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
         }
     }
 }
@@ -193,13 +222,13 @@ private fun fittedIconSize(iconSize: Dp, width: Dp, insets: PaddingValues, colum
  * at the bottom the keyboard's height while it shows, else the bar's.
  */
 @Composable
-private fun PaddingValues.aboveKeyboard(): PaddingValues {
+private fun PaddingValues.aboveKeyboard(indexed: Boolean): PaddingValues {
     val direction = LocalLayoutDirection.current
     val keyboard = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     return PaddingValues(
         start = calculateStartPadding(direction) + MARGIN,
         top = MARGIN / 2,
-        end = calculateEndPadding(direction) + MARGIN,
+        end = calculateEndPadding(direction) + MARGIN + if (indexed) INDEX_WIDTH else 0.dp,
         bottom = maxOf(calculateBottomPadding(), keyboard) + MARGIN,
     )
 }
