@@ -9,7 +9,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -25,6 +24,7 @@ import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -340,13 +340,22 @@ open class LauncherFixture {
     }
 
     /** Icons live inside clickable cells, whose semantics merge; look at the unmerged tree. */
+    /**
+     * The app's icon. Not the search bar's glass, which is described by the search app's name and
+     * so shares a label with that app's icon.
+     */
     protected fun icon(label: String) =
-        compose.onNodeWithContentDescription(label, useUnmergedTree = true)
+        compose.onNode(
+            hasContentDescription(label) and !hasTestTag(SEARCH_TARGET_ICON_TAG),
+            useUnmergedTree = true,
+        )
 
     /** The icon in its cell, even while a copy of it is being dragged in the overlay. */
     protected fun cellIcon(label: String) =
         compose.onNode(
-            hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG),
+            hasContentDescription(label) and
+                !hasTestTag(DRAG_OVERLAY_TAG) and
+                !hasTestTag(SEARCH_TARGET_ICON_TAG),
             useUnmergedTree = true,
         )
 
