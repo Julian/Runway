@@ -1,7 +1,6 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,13 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
@@ -92,7 +94,10 @@ fun HomeScreen(
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
         PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
         // The home area steps back for a lifted icon and for the drawer alike.
-        val lift = maxOf(liftProgress(lifting = drag.state != null), drawer.motion.shown.value)
+        val lifting = liftProgress(lifting = drag.state != null)
+        // Read inside layers and draws, never here: every frame of a lift or a pull would
+        // otherwise recompose every cell on screen.
+        val lift = { maxOf(lifting.value, drawer.motion.shown.value) }
         HomeColumn(
             state = state,
             homePager = homePager,
@@ -112,7 +117,7 @@ fun HomeScreen(
         openFolder?.let { OpenFolder(state, it, iconSize, onLaunchFromFolder, onCloseFolder) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
-            revealed = drawer.motion.shown.value,
+            shown = drawer.motion.shown,
             open = drawerOpen,
             apps = state.apps,
             query = drawerQuery,
@@ -256,7 +261,7 @@ private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings):
  * home area steps back, and on release both return on the settle spring.
  */
 @Composable
-private fun liftProgress(lifting: Boolean): Float {
+private fun liftProgress(lifting: Boolean): State<Float> {
     val lift = remember { Animatable(0f) }
     LaunchedEffect(lifting) {
         if (lifting) {
@@ -265,19 +270,26 @@ private fun liftProgress(lifting: Boolean): Float {
             lift.animateTo(0f, DragMotion.settle)
         }
     }
-    return lift.value
+    return lift.asState()
 }
 
 /** Pulled back by [lift] (0 at rest, 1 fully lifted) behind a faint rounded border. */
-private fun Modifier.pulledBack(lift: Float): Modifier {
-    val zoom = DragMotion.lerp(1f, DragMotion.ZOOM, lift)
-    val borderAlpha = (DragMotion.BORDER_ALPHA * lift).coerceIn(0f, 1f)
-    return graphicsLayer {
-            scaleX = zoom
-            scaleY = zoom
-        }
-        .border(1.dp, Color.White.copy(alpha = borderAlpha), RoundedCornerShape(DRAG_CORNER))
+private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
+    val zoom = DragMotion.lerp(1f, DragMotion.ZOOM, lift())
+    scaleX = zoom
+    scaleY = zoom
 }
+    .drawWithContent {
+        drawContent()
+        val alpha = (DragMotion.BORDER_ALPHA * lift()).coerceIn(0f, 1f)
+        if (alpha > 0f) {
+            drawRoundRect(
+                color = Color.White.copy(alpha = alpha),
+                cornerRadius = CornerRadius(DRAG_CORNER.toPx()),
+                style = Stroke(1.dp.toPx()),
+            )
+        }
+    }
 
 private fun HomeState.item(id: Long?): HomeItem? = id?.let {
     (homePages + dockPages).flatMap { p -> p.items }.firstOrNull { it.id == id }

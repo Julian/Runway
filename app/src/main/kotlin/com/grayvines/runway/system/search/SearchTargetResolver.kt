@@ -7,8 +7,13 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.util.Log
 
-/** The app the search bar hands off to. */
-class SearchTarget(val packageName: String, val label: String, val icon: Drawable)
+/** The app the search bar hands off to; the same app is the same target, whatever icon object. */
+class SearchTarget(val packageName: String, val label: String, val icon: Drawable) {
+    override fun equals(other: Any?) =
+        other is SearchTarget && other.packageName == packageName && other.label == label
+
+    override fun hashCode() = packageName.hashCode() * 31 + label.hashCode()
+}
 
 /**
  * Picks the web-search handler (the configured package, else Firefox, else the first one) and hands

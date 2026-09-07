@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Launchable activities across all profiles, kept current via [LauncherApps.Callback]. */
 class AppRepository(context: Context, private val scope: CoroutineScope) {
@@ -62,14 +64,21 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         refresh()
     }
 
+    /**
+     * One refresh at a time, in order: a burst of package callbacks must end on the newest list.
+     */
+    private val refreshing = Mutex()
+
     fun refresh() {
         scope.launch {
-            _apps.value =
-                userManager.userProfiles
-                    .flatMap { user ->
-                        launcherApps.getActivityList(null, user).map { it.toEntry() }
-                    }
-                    .sortedBy { it.label.lowercase() }
+            refreshing.withLock {
+                _apps.value =
+                    userManager.userProfiles
+                        .flatMap { user ->
+                            launcherApps.getActivityList(null, user).map { it.toEntry() }
+                        }
+                        .sortedBy { it.label.lowercase() }
+            }
         }
     }
 

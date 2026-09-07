@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.ContainerContent
 import com.grayvines.runway.data.Dropped
+import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeFolders
@@ -31,8 +33,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -186,6 +190,19 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     val dragging = DragCoordinator(viewModelScope, lookup, dragWorkspace)
 
+    /**
+     * Asking the package manager who handles a web search is slow: done only when the chosen
+     * package or the installed apps change, not on every layout write.
+     */
+    private val searchTarget =
+        combine(
+                graph.settings.settings.map { it.searchTarget }.distinctUntilChanged(),
+                graph.appRepository.apps,
+            ) { chosen, _ ->
+                graph.searchTargets.resolve(chosen)
+            }
+            .distinctUntilChanged()
+
     val state: StateFlow<HomeState> =
         combine(
                 graph.settings.settings,
@@ -193,14 +210,21 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.workspace.observe(Container.DOCK),
                 graph.appRepository.apps,
                 graph.workspace.observeFolders(),
-            ) { settings, home, dock, apps, folders ->
+                searchTarget,
+            ) { flows ->
+                @Suppress("UNCHECKED_CAST") val settings = flows[0] as Settings
+                @Suppress("UNCHECKED_CAST") val home = flows[1] as ContainerContent
+                @Suppress("UNCHECKED_CAST") val dock = flows[2] as ContainerContent
+                @Suppress("UNCHECKED_CAST") val apps = flows[3] as List<AppEntry>
+                @Suppress("UNCHECKED_CAST") val folders = flows[4] as List<FolderContent>
+                val target = flows[5] as SearchTarget?
                 val byKey = apps.associateBy { it.key }
                 val byFolder = folders.associateBy { it.id }
                 HomeState(
                     settings = settings,
                     homePages = home.toHomePages(byKey, byFolder),
                     dockPages = dock.toHomePages(byKey, byFolder),
-                    searchTarget = graph.searchTargets.resolve(settings.searchTarget),
+                    searchTarget = target,
                     apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
                     // Not before the app list: with it empty every icon would be hidden and
                     // every cell would look free.

@@ -33,6 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,14 +97,14 @@ private const val HINT_ALPHA = 0.5f
  * Every launchable app, alphabetically, on an opaque surface, under a search field that narrows the
  * list as you type ([query]) and takes the keyboard as the drawer opens when [keyboard] says so.
  * Icons are the home screen's [iconSize] unless [columns] leaves less room than that. With nothing
- * typed and [index] set, an alphabet down the right edge jumps the list. Drawn [revealed] of the
- * way up from the bottom edge, its top edge under the finger once it has caught up with it,
- * translucent while it arrives. Closes on back, and pulling the list down past its top pulls the
- * drawer down with it; letting go decides ([onPullEnd]). Launching an app closes it.
+ * typed and [index] set, an alphabet down the right edge jumps the list. Drawn [shown] of the way
+ * up from the bottom edge, its top edge under the finger once it has caught up with it, translucent
+ * while it arrives. Closes on back, and pulling the list down past its top pulls the drawer down
+ * with it; letting go decides ([onPullEnd]). Launching an app closes it.
  */
 @Composable
 fun AppDrawer(
-    revealed: Float,
+    shown: State<Float>,
     open: Boolean,
     apps: List<AppEntry>,
     query: DrawerQuery,
@@ -121,10 +123,12 @@ fun AppDrawer(
     BackHandler(enabled = open, onBack = onClose)
     // Stays composed while open even when pulled fully down, so the gesture that pulled it can
     // finish and decide; only a closed drawer with nothing showing is gone.
-    if (!open && revealed <= 0f) return
+    // Present while open, or while any of it shows; decided from state so a pull's frames do
+    // not recompose the drawer, only redraw it.
+    val present by remember(open) { derivedStateOf { open || shown.value > 0f } }
+    if (!present) return
     val pull = rememberUpdatedState(onPull)
     val pullEnd = rememberUpdatedState(onPullEnd)
-    val shown = rememberUpdatedState(revealed)
     val list = rememberLazyGridState()
     val pullToClose = remember {
         PullToClose(
@@ -196,8 +200,8 @@ private fun IndexedGrid(
 }
 
 /**
- * Drawn [revealed] of the way up from the bottom, translucent on the way. Not scaled: its top edge
- * is where the finger is, and must stay there.
+ * Drawn [shown] of the way up from the bottom, translucent on the way. Not scaled: its top edge is
+ * where the finger is, and must stay there.
  */
 private fun Modifier.arriving(revealed: () -> Float) = graphicsLayer {
     alpha = (FAINTEST + (1f - FAINTEST) * revealed() / OPAQUE_AT).coerceAtMost(1f)

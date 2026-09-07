@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -49,13 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
-
-private const val ICON_BITMAP_SIZE = 256
 
 /** A folder shows its first few apps in a little grid on a dim tile. */
 private const val FOLDER_PREVIEW_COLUMNS = 2
@@ -213,10 +209,8 @@ private fun Modifier.padding(fraction: Float): Modifier = layout { measurable, c
 
 @Composable
 internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Boolean = true) {
-    val bitmap =
-        remember(app.key) { app.icon.toBitmap(ICON_BITMAP_SIZE, ICON_BITMAP_SIZE).asImageBitmap() }
     Image(
-        bitmap = bitmap,
+        bitmap = app.bitmap,
         contentDescription = app.label.takeIf { described },
         modifier = modifier,
     )

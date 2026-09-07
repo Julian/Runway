@@ -32,7 +32,7 @@ const val DRAG_OVERLAY_TAG = "drag-overlay"
  * pick-up has progressed, shared with the home area's pull-back so the two move as one.
  */
 @Composable
-fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: Float) {
+fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, lift: () -> Float) {
     if (item == null) return
     val state = drag.state
     val settling = drag.settling
@@ -49,7 +49,10 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
                 Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y),
                 cell,
                 iconSize,
-                DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift) * folding,
+                {
+                    DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift()) *
+                        folding
+                },
             )
         }
         settling != null -> {
@@ -93,7 +96,8 @@ private fun Settle(
             Point(DragMotion.lerp(from.x, target.x, t), DragMotion.lerp(from.y, target.y, t))
         }
     val at = Point(centre.x - half.x, centre.y - half.y)
-    OverlayCell(item, at, cell, iconSize, DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t))
+    val scale = DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t)
+    OverlayCell(item, at, cell, iconSize) { scale }
 }
 
 @Composable
@@ -102,7 +106,7 @@ private fun OverlayCell(
     at: Point,
     cell: DpSize,
     iconSize: Dp,
-    scale: Float,
+    scale: () -> Float,
 ) {
     Box(
         modifier = Modifier.offset { IntOffset(at.x.toInt(), at.y.toInt()) }.size(cell),
@@ -112,8 +116,9 @@ private fun OverlayCell(
             item,
             Modifier.size(iconSize)
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    val s = scale()
+                    scaleX = s
+                    scaleY = s
                 }
                 .testTag(DRAG_OVERLAY_TAG),
         )
