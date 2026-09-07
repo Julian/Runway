@@ -3,6 +3,8 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -10,7 +12,9 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
@@ -22,6 +26,8 @@ import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
+import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
+import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
@@ -79,7 +85,7 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun pullingTheListDownPastTheTopClosesTheDrawer() {
         openDrawer()
-        compose.onNodeWithTag(DRAWER_TAG).performTouchInput { swipeDown() }
+        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput { swipeDown() }
         awaitDrawerClosed()
     }
 
@@ -251,6 +257,54 @@ class DrawerTest : LauncherFixture() {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
+
+    @Test
+    fun typingInTheDrawerNarrowsTheListToTheMatchingApps() {
+        openDrawer()
+        searchField().assertIsFocused() // the keyboard comes up with the drawer
+        searchField().performTextInput(firstHomeApp)
+        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        drawerApp(firstHomeApp).assertIsDisplayed()
+    }
+
+    @Test
+    fun enterInTheDrawerLaunchesTheMatchAndClosesTheDrawer() {
+        openDrawer()
+        searchField().performTextInput(firstHomeApp)
+        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        searchField().performImeAction()
+        assertTrue(
+            "settings did not open",
+            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
+        )
+        device.pressBack()
+        awaitDrawerClosed()
+    }
+
+    @Test
+    fun reopeningTheDrawerStartsWithAnEmptySearch() {
+        openDrawer()
+        searchField().performTextInput(firstHomeApp)
+        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        sendHomeIntent()
+        awaitDrawerClosed()
+        openDrawer()
+        compose.waitUntil(TIMEOUT_MS) { drawerItems().size > 1 }
+    }
+
+    @Test
+    fun withTheKeyboardSettingOffTheFieldWaitsToBeTapped() {
+        runBlocking { graph.settings.update { it.copy(drawerKeyboard = false) } }
+        compose.waitForIdle()
+        openDrawer()
+        searchField().assertIsNotFocused()
+        searchField().performClick()
+        searchField().assertIsFocused()
+    }
+
+    private fun searchField() = compose.onNodeWithTag(DRAWER_SEARCH_TAG)
+
+    private fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
 
     @Test
     fun swipingDownOnThePagesPullsDownTheNotificationShade() {

@@ -19,6 +19,7 @@ import com.grayvines.runway.ui.drag.DragWorkspace
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
+import com.grayvines.runway.ui.drawer.matching
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -80,6 +81,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private val _drawerOpen = MutableStateFlow(false)
     val drawerOpen: StateFlow<Boolean> = _drawerOpen
+
+    /** What is typed in the drawer's search field; every open starts empty. */
+    private val _drawerQuery = MutableStateFlow("")
+    val drawerQuery: StateFlow<String> = _drawerQuery
 
     /** The long-press item menu. */
     val itemMenu = ItemMenuHost(graph, viewModelScope)
@@ -184,7 +189,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** An app pulled out of the drawer: the drawer closes under it and the drop adds it. */
     fun startDragFromDrawer(app: AppEntry, pointer: Point, grab: Point) {
-        _drawerOpen.value = false
+        closeDrawer()
         val source = DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app.ref)
         dragging.startDrag(source, pointer, grab)
     }
@@ -201,22 +206,33 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** Launches from the drawer; the drawer closes behind the app. */
     fun launch(app: AppEntry) {
         graph.appRepository.launch(app)
-        _drawerOpen.value = false
+        closeDrawer()
     }
 
     fun openDrawer() {
+        _drawerQuery.value = ""
         _drawerOpen.value = true
     }
 
     fun closeDrawer() {
         _drawerOpen.value = false
+        _drawerQuery.value = ""
+    }
+
+    fun setDrawerQuery(query: String) {
+        _drawerQuery.value = query
+    }
+
+    /** Enter in the drawer's search field launches the best match, if there is one. */
+    fun launchDrawerMatch() {
+        state.value.apps.matching(_drawerQuery.value).firstOrNull()?.let(::launch)
     }
 
     /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */
     fun onHomeIntent() {
         when {
             itemMenu.isOpen -> itemMenu.dismiss()
-            _drawerOpen.value -> _drawerOpen.value = false
+            _drawerOpen.value -> closeDrawer()
             else -> _goHome.tryEmit(Unit)
         }
     }

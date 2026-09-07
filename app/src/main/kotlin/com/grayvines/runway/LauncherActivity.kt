@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.DrawerActions
 import com.grayvines.runway.ui.home.HomeScreen
@@ -30,6 +32,14 @@ import com.grayvines.runway.ui.theme.RunwayTheme
 class LauncherActivity : ComponentActivity() {
     private val viewModel: HomeViewModel by viewModels {
         viewModelFactory { initializer { HomeViewModel(appGraph) } }
+    }
+
+    private val drawerActions by lazy {
+        DrawerActions(
+            open = viewModel::openDrawer,
+            close = viewModel::closeDrawer,
+            openShade = ::openNotifications,
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,12 +68,8 @@ class LauncherActivity : ComponentActivity() {
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
                     drawerOpen = drawerOpen,
-                    drawerActions =
-                        DrawerActions(
-                            open = viewModel::openDrawer,
-                            close = viewModel::closeDrawer,
-                            openShade = ::openNotifications,
-                        ),
+                    drawerActions = drawerActions,
+                    drawerQuery = drawerQuery(),
                     onLaunchApp = viewModel::launch,
                     drag =
                         DragSession(
@@ -91,6 +97,12 @@ class LauncherActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         viewModel.onHomeIntent()
+    }
+
+    @Composable
+    private fun drawerQuery(): DrawerQuery {
+        val text by viewModel.drawerQuery.collectAsStateWithLifecycle()
+        return DrawerQuery(text, viewModel::setDrawerQuery, viewModel::launchDrawerMatch)
     }
 
     /** A swipe down on the home screen. Some Androids refuse; then the user hears why. */

@@ -87,6 +87,9 @@ fun SettingsScreen(
                     it.copy(drawerSwipe = DrawerSwipe.entries.first { e -> e.label == picked })
                 }
             }
+            Toggle("Keyboard when opening", settings.drawerKeyboard) { v ->
+                onChange { it.copy(drawerKeyboard = v) }
+            }
 
             Section("Search bar")
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->

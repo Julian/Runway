@@ -33,6 +33,7 @@ class SettingsRepository(context: Context) {
         val searchBarAtTop = booleanPreferencesKey("search_bar_at_top")
         val searchTarget = stringPreferencesKey("search_target")
         val drawerSwipe = stringPreferencesKey("drawer_swipe")
+        val drawerKeyboard = booleanPreferencesKey("drawer_keyboard")
     }
 
     private fun Preferences.toSettings(): Settings {
@@ -50,6 +51,7 @@ class SettingsRepository(context: Context) {
                 this[Keys.drawerSwipe]?.let { name ->
                     DrawerSwipe.entries.firstOrNull { it.name == name }
                 } ?: defaults.drawerSwipe,
+            drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
         )
     }
 
@@ -63,5 +65,6 @@ class SettingsRepository(context: Context) {
         prefs[Keys.searchBarAtTop] = searchBarAtTop
         searchTarget?.let { prefs[Keys.searchTarget] = it } ?: prefs.remove(Keys.searchTarget)
         prefs[Keys.drawerSwipe] = drawerSwipe.name
+        prefs[Keys.drawerKeyboard] = drawerKeyboard
     }
 }

@@ -35,6 +35,7 @@ import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerMotion
+import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.drawer.drawerPull
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
@@ -69,6 +70,7 @@ fun HomeScreen(
     onDismissItemMenu: () -> Unit,
     drawerOpen: Boolean,
     drawerActions: DrawerActions,
+    drawerQuery: DrawerQuery,
     onLaunchApp: (AppEntry) -> Unit,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onHomePageShown: (page: Int) -> Unit,
@@ -112,6 +114,8 @@ fun HomeScreen(
             revealed = drawer.motion.revealed.value,
             open = drawerOpen,
             apps = state.apps,
+            query = drawerQuery,
+            keyboard = settings.drawerKeyboard,
             columns = settings.columns,
             iconSize = iconSize,
             labels = settings.drawerLabels,

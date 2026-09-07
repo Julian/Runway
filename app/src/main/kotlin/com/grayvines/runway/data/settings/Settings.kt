@@ -24,6 +24,8 @@ data class Settings(
     /** Package that receives the web-search intent; null picks Firefox, else the first handler. */
     val searchTarget: String? = null,
     val drawerSwipe: DrawerSwipe = DrawerSwipe.MEDIUM,
+    /** Whether opening the drawer also brings up the keyboard, ready to search. */
+    val drawerKeyboard: Boolean = true,
 ) {
     /** Rows left for items: the dock and the search bar each take one full row. */
     val pageRows: Int
