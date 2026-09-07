@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -99,6 +100,9 @@ open class LauncherFixture {
         // Compose's idling does not track; the activity was up before either, so the screen may
         // still show the previous test's grid until they land.
         awaitGrid(settings.columns, settings.pageRows)
+        // Touches injected before the window has focus are refused ("Failed to inject touch
+        // input"): the previous test's activity may still be on its way out on a slow device.
+        compose.waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
     }
 
     /**
@@ -296,6 +300,24 @@ open class LauncherFixture {
         assertEquals(Container.HOME, placementOf(label)?.container)
     }
 
+    /**
+     * Taps [node], trying again if the device was too busy to take the tap: right after a drop a
+     * slow emulator can refuse injected input ("Failed to inject touch input") for a moment.
+     */
+    protected fun tap(node: SemanticsNodeInteraction) {
+        var attempt = 0
+        while (true) {
+            try {
+                node.performClick()
+                return
+            } catch (e: AssertionError) {
+                if (++attempt == TAP_ATTEMPTS || "inject" !in e.message.orEmpty()) throw e
+                compose.waitForIdle()
+                SystemClock.sleep(WRITE_GRACE_MS)
+            }
+        }
+    }
+
     /** Waits until no node carries [tag]. */
     protected fun awaitGone(tag: String) {
         compose.waitUntil(TIMEOUT_MS) {
@@ -451,6 +473,9 @@ const val LIFT_HOLD_MS = 550L
 
 /** Past touch slop: enough movement after a hold to turn it into a drag. */
 const val LIFT_NUDGE_PX = 60f
+
+/** How often a refused tap is tried before giving up. */
+const val TAP_ATTEMPTS = 3
 
 /** Icon sizes are rounded to pixels on the way; this much slack covers it. */
 const val GRID_TOLERANCE_PX = 2f

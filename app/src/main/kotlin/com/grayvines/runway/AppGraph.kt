@@ -37,9 +37,9 @@ class AppGraph(private val context: Context) {
         appScope.launch {
             appRepository.removed.collect { workspace.removePackage(it.component, it.profile) }
         }
-        // Every fresh app list also reconciles the layout, for uninstalls missed while not running.
+        // Every refresh also reconciles the layout, for uninstalls missed while not running.
         appScope.launch {
-            appRepository.apps
+            appRepository.refreshed
                 .filter { it.isNotEmpty() }
                 .collect { apps -> workspace.retainApps(apps.mapTo(mutableSetOf()) { it.ref }) }
         }

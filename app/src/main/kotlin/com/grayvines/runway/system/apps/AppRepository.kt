@@ -35,6 +35,14 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps
 
+    private val _refreshed = MutableSharedFlow<List<AppEntry>>(extraBufferCapacity = 1)
+
+    /**
+     * Every list a refresh produced, including one identical to the last: [apps] only reports
+     * changes, and reconciling the layout must happen on every refresh regardless.
+     */
+    val refreshed: SharedFlow<List<AppEntry>> = _refreshed
+
     private val _removed = MutableSharedFlow<AppRef>(extraBufferCapacity = REMOVAL_BUFFER)
 
     /** Package name (as [AppRef.component]) and profile of each uninstalled app. */
@@ -77,12 +85,14 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     fun refresh() {
         scope.launch {
             refreshing.withLock {
-                _apps.value =
+                val fresh =
                     userManager.userProfiles
                         .flatMap { user ->
                             launcherApps.getActivityList(null, user).map { it.toEntry() }
                         }
                         .sortedBy { it.label.lowercase() }
+                _apps.value = fresh
+                _refreshed.tryEmit(fresh)
             }
         }
     }

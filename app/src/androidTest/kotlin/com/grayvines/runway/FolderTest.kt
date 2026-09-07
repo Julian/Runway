@@ -200,7 +200,7 @@ class FolderTest : LauncherFixture() {
         val neighbour = labelAtHomeCell(1, 0)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
         compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
-        compose.onNodeWithContentDescription("Folder", useUnmergedTree = true).performClick()
+        tap(compose.onNodeWithContentDescription("Folder", useUnmergedTree = true))
         compose.waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
