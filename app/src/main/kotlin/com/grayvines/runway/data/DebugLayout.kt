@@ -7,6 +7,7 @@ package com.grayvines.runway.data
 
 suspend fun WorkspaceRepository.clear() = write {
     dao.deleteAllItems()
+    dao.deleteAllFolders()
     dao.deleteAllPages()
     dao.insertPage(PageEntity(Container.HOME, 0))
     dao.insertPage(PageEntity(Container.DOCK, 0))
@@ -20,6 +21,7 @@ suspend fun WorkspaceRepository.autoFill(
     dockSlots: Int,
 ) = write {
     dao.deleteAllItems()
+    dao.deleteAllFolders()
     dao.deleteAllPages()
     dao.insertPage(PageEntity(Container.DOCK, 0))
     apps.take(dockSlots).forEachIndexed { slot, app ->

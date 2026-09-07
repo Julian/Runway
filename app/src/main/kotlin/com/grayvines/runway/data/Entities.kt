@@ -44,7 +44,10 @@ data class FolderAppEntity(
     val component: String,
     val profile: Long,
     val position: Int,
-)
+) {
+    val ref: AppRef
+        get() = AppRef(component, profile)
+}
 
 /** Explicit page list; the count is dynamic and pages are only ever added on purpose. */
 @Entity(tableName = "pages", primaryKeys = ["container", "page_index"])

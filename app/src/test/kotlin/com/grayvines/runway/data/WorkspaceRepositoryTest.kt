@@ -147,6 +147,67 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `an uninstalled app leaves every folder, and an emptied folder goes with its placement`() =
+        runTest {
+            // The dock takes the first app; a, b and c are the three on the home page.
+            repo.autoFill(apps(4), columns = 3, pageRows = 1, dockSlots = 1)
+            val (a, b, c) =
+                repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+
+            repo.removePackage("pkg2", profile = 0) // a's package
+            assertEquals(
+                listOf(AppRef("pkg3/.Main", 0)),
+                repo.observeFolders().first().single().apps,
+            )
+
+            // b's app gone while the launcher was not running.
+            repo.retainApps(setOf(AppRef("pkg1/.Main", 0), AppRef("pkg4/.Main", 0)))
+            assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
+            val left = repo.observe(Container.HOME).first().pages.single().items
+            assertEquals(listOf(c.id), left.map { it.id }) // the folder placement went too
+        }
+
+    @Test
+    fun `removing a folder placement or clearing the layout drops the folder itself`() = runTest {
+        repo.autoFill(
+            apps(5),
+            columns = 4,
+            pageRows = 1,
+            dockSlots = 1,
+        ) // one in the dock, four home
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+        repo.removeItem(b.id)
+        assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
+
+        val (x, y) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = y.id, dropped = Dropped.Item(x.id))
+        repo.clear()
+        assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
+    }
+
+    @Test
+    fun `a fold with nothing to fold leaves the target as it was`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(999)) // gone before the drop landed
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(b.id)) // onto itself
+        val items = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(ItemKind.APP, items.single { it.id == b.id }.kind)
+        assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
+
+        // A second placement of the same app dropped onto the first: just the extra placement goes.
+        repo.addApp(AppRef(b.component!!, b.profile!!), Container.HOME, 0, 2, 0)
+        val extra = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 2 }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(extra.id))
+        val after = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(ItemKind.APP, after.single { it.id == b.id }.kind)
+        assertEquals(null, after.firstOrNull { it.id == extra.id })
+        assertEquals(a.id, after.first { it.x == 0 }.id)
+    }
+
+    @Test
     fun `addPage appends an empty page and is idempotent`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         repo.addPage(Container.HOME, 1)

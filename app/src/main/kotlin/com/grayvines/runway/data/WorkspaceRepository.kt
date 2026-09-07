@@ -73,9 +73,15 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         )
     }
 
-    /** Takes one placement off its page; a page left empty at the end goes with it. */
+    /**
+     * Takes one placement off its page; a page left empty at the end goes with it, and so does a
+     * folder that this was the last placement of.
+     */
     suspend fun removeItem(id: Long) {
-        write { dao.deleteItem(id) }
+        write {
+            dao.deleteItem(id)
+            dao.deleteUnplacedFolders()
+        }
         pruneTrailingEmptyPages(Container.HOME)
         pruneTrailingEmptyPages(Container.DOCK)
     }
@@ -97,15 +103,24 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
                     profile in profiles &&
                     AppRef(component, profile) !in installed
             }
-        if (stale.isEmpty()) return
-        write { dao.deleteItems(stale.map { it.id }) }
+        val gone = dao.folderApps().filter { it.profile in profiles && it.ref !in installed }
+        if (stale.isEmpty() && gone.isEmpty()) return
+        write {
+            dao.deleteItems(stale.map { it.id })
+            gone.forEach { dao.deleteFolderApp(it.component, it.profile) }
+            dao.deleteEmptyFolders()
+        }
         pruneTrailingEmptyPages(Container.HOME)
         pruneTrailingEmptyPages(Container.DOCK)
     }
 
-    /** An app was uninstalled: its icons go, leaving holes. */
+    /**
+     * An app was uninstalled: its icons go, leaving holes, and it leaves every folder it was in.
+     */
     suspend fun removePackage(packageName: String, profile: Long) = write {
         dao.deleteItemsOfPackage(packageName, profile)
+        dao.deleteFolderAppsOfPackage(packageName, profile)
+        dao.deleteEmptyFolders()
     }
 
     internal suspend fun <T> write(block: suspend () -> T): T =

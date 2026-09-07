@@ -15,10 +15,16 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.FolderContent
+import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.FOLD_HINT_TAG
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -110,6 +116,22 @@ class FolderTest : LauncherFixture() {
         makeFolder()
         compose.onRoot().performTouchInput { click(bottomCenter - Offset(0f, 20f)) }
         awaitFolderClosed()
+    }
+
+    @Test
+    fun anOpenFolderWhosePlacementGoesClosesItself() {
+        makeFolder()
+        val placement = runBlocking {
+            graph.workspace.observe(Container.HOME).first().pages.first().items.first {
+                it.kind == ItemKind.FOLDER
+            }
+        }
+        runBlocking { graph.workspace.removeItem(placement.id) } // as Remove in its menu would
+        awaitFolderClosed()
+        assertEquals(
+            emptyList<FolderContent>(),
+            runBlocking { graph.workspace.observeFolders().first() },
+        )
     }
 
     @Test

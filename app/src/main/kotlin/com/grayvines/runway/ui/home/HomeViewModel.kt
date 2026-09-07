@@ -37,6 +37,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Every placed item on every page, home and dock. */
+fun HomeState.allItems(): List<HomeItem> = (homePages + dockPages).flatMap { it.items }
+
 /** A folder placement that is open, and the cell it opened out of. */
 data class OpenFolder(val itemId: Long, val from: Bounds)
 
@@ -199,6 +202,15 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     init {
         viewModelScope.launch { graph.workspace.ensureInitialised() }
+        // A folder whose placement goes (uninstalled away, removed) is no longer open.
+        viewModelScope.launch {
+            state.collect { s ->
+                val open = _openFolder.value
+                if (open != null && s.loaded && s.allItems().none { it.id == open.itemId }) {
+                    closeFolder()
+                }
+            }
+        }
     }
 
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
@@ -281,7 +293,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 internal fun HomeState.reflects(move: PendingMove): Boolean {
     val newApp = move.newApp
     if (move.foldInto != null && newApp == null) {
-        return (homePages + dockPages).flatMap { it.items }.none { it.id == move.itemId }
+        return allItems().none { it.id == move.itemId }
     }
     return pages(move.container).any { p ->
         p.index == move.page &&

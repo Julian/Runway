@@ -66,8 +66,31 @@ interface WorkspaceDao {
 
     @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
 
+    @Query(
+        "DELETE FROM folder_apps WHERE profile = :profile " +
+            "AND substr(component, 1, length(:packageName) + 1) = :packageName || '/'"
+    )
+    suspend fun deleteFolderAppsOfPackage(packageName: String, profile: Long)
+
+    @Query("DELETE FROM folder_apps WHERE component = :component AND profile = :profile")
+    suspend fun deleteFolderApp(component: String, profile: Long)
+
+    /** A folder with nothing in it is gone, and (by cascade) so is every placement of it. */
+    @Query("DELETE FROM folders WHERE id NOT IN (SELECT DISTINCT folder_id FROM folder_apps)")
+    suspend fun deleteEmptyFolders()
+
+    /** A folder nothing places any more is gone, with its apps. */
+    @Query(
+        "DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM items WHERE folder_id IS NOT NULL)"
+    )
+    suspend fun deleteUnplacedFolders()
+
+    @Query("DELETE FROM folders") suspend fun deleteAllFolders()
+
     @Query("SELECT * FROM folder_apps ORDER BY position")
     fun observeFolderApps(): Flow<List<FolderAppEntity>>
+
+    @Query("SELECT * FROM folder_apps") suspend fun folderApps(): List<FolderAppEntity>
 
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
