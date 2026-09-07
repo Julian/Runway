@@ -116,7 +116,7 @@ fun HomeScreen(
             apps = state.apps,
             query = drawerQuery,
             keyboard = settings.drawerKeyboard,
-            columns = settings.columns,
+            columns = settings.drawerColumnsOrHome,
             iconSize = iconSize,
             labels = settings.drawerLabels,
             insets = insets,

@@ -26,10 +26,16 @@ data class Settings(
     val drawerSwipe: DrawerSwipe = DrawerSwipe.MEDIUM,
     /** Whether opening the drawer also brings up the keyboard, ready to search. */
     val drawerKeyboard: Boolean = true,
+    /** The drawer's own column count; null follows the home grid. */
+    val drawerColumns: Int? = null,
 ) {
     /** Rows left for items: the dock and the search bar each take one full row. */
     val pageRows: Int
         get() = rows - RESERVED_ROWS
+
+    /** What the drawer lays out with. */
+    val drawerColumnsOrHome: Int
+        get() = drawerColumns ?: columns
 
     companion object {
         const val DEFAULT_COLUMNS = 7

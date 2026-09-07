@@ -77,19 +77,7 @@ fun SettingsScreen(
             Toggle("Dock", settings.dockLabels) { v -> onChange { it.copy(dockLabels = v) } }
             Toggle("Drawer", settings.drawerLabels) { v -> onChange { it.copy(drawerLabels = v) } }
 
-            Section("Drawer")
-            OptionRow(
-                label = "Swipe sensitivity",
-                current = settings.drawerSwipe.label,
-                options = DrawerSwipe.entries.map { it.label },
-            ) { picked ->
-                onChange {
-                    it.copy(drawerSwipe = DrawerSwipe.entries.first { e -> e.label == picked })
-                }
-            }
-            Toggle("Keyboard when opening", settings.drawerKeyboard) { v ->
-                onChange { it.copy(drawerKeyboard = v) }
-            }
+            DrawerSection(settings, onChange)
 
             Section("Search bar")
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->
@@ -104,6 +92,29 @@ fun SettingsScreen(
                 Button(onClick = debugActions.fillWithAllApps) { Text("Fill with all apps") }
                 Button(onClick = debugActions.clearLayout) { Text("Clear layout") }
             }
+        }
+    }
+}
+
+@Composable
+private fun DrawerSection(settings: Settings, onChange: ((Settings) -> Settings) -> Unit) {
+    Section("Drawer")
+    OptionRow(
+        label = "Swipe sensitivity",
+        current = settings.drawerSwipe.label,
+        options = DrawerSwipe.entries.map { it.label },
+    ) { picked ->
+        onChange { it.copy(drawerSwipe = DrawerSwipe.entries.first { e -> e.label == picked }) }
+    }
+    Toggle("Keyboard when opening", settings.drawerKeyboard) { v ->
+        onChange { it.copy(drawerKeyboard = v) }
+    }
+    Toggle("Same columns as home", settings.drawerColumns == null) { same ->
+        onChange { it.copy(drawerColumns = if (same) null else it.columns) }
+    }
+    settings.drawerColumns?.let { drawerColumns ->
+        Stepper("Columns", drawerColumns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { v ->
+            onChange { it.copy(drawerColumns = v) }
         }
     }
 }

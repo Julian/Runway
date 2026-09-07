@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -79,6 +80,9 @@ private const val OPAQUE_AT = 0.6f
 /** Room between the edges of the screen and what is on the drawer. */
 private val MARGIN = 16.dp
 
+/** With more columns than home the icons shrink to this share of the drawer's cell. */
+private const val ICON_SHARE = 0.7f
+
 /** The search field matches the home screen's bar: the same height, glass, and quiet white. */
 private val FIELD_HEIGHT = 48.dp
 private val GLASS = 24.dp
@@ -88,10 +92,11 @@ private const val HINT_ALPHA = 0.5f
 /**
  * Every launchable app, alphabetically, on an opaque surface, under a search field that narrows the
  * list as you type ([query]) and takes the keyboard as the drawer opens when [keyboard] says so.
- * Drawn [revealed] of the way up from the bottom edge, following the finger, translucent and
- * slightly larger while it arrives so it reads as settling onto the screen rather than sliding
- * across it. Closes on back, and pulling the list down past its top pulls the drawer down with it;
- * letting go decides ([onPullEnd]). Launching an app closes it.
+ * Icons are the home screen's [iconSize] unless [columns] leaves less room than that. Drawn
+ * [revealed] of the way up from the bottom edge, following the finger, translucent and slightly
+ * larger while it arrives so it reads as settling onto the screen rather than sliding across it.
+ * Closes on back, and pulling the list down past its top pulls the drawer down with it; letting go
+ * decides ([onPullEnd]). Launching an app closes it.
  */
 @Composable
 fun AppDrawer(
@@ -125,48 +130,62 @@ fun AppDrawer(
         )
     }
     val shownApps = remember(apps, query.text) { apps.matching(query.text) }
-    Column(
-        Modifier.fillMaxSize()
-            .graphicsLayer {
-                val away = 1f - shown.value
-                alpha = (shown.value / OPAQUE_AT).coerceAtMost(1f)
-                scaleX = 1f + (FROM_SCALE - 1f) * away
-                scaleY = scaleX
-                translationY = away * size.height
-            }
-            .background(SURFACE)
-            .testTag(DRAWER_TAG)
+    BoxWithConstraints(
+        Modifier.fillMaxSize().arriving { shown.value }.background(SURFACE).testTag(DRAWER_TAG)
     ) {
-        SearchField(
-            query,
-            keyboard,
-            open,
-            Modifier.padding(top = insets.calculateTopPadding() + MARGIN / 2)
-                .padding(horizontal = MARGIN),
-        )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            // Insets pad the content, not the grid: its scrollable then covers the whole screen,
-            // so a pull that starts at the edge still pulls. The keyboard, when up, takes the
-            // bottom.
-            contentPadding = insets.aboveKeyboard(),
-            modifier =
-                Modifier.fillMaxWidth()
-                    .weight(1f)
-                    .testTag(DRAWER_LIST_TAG)
-                    .nestedScroll(pullToClose),
-        ) {
-            items(shownApps, key = { it.key }) { app ->
-                DrawerApp(
-                    app,
-                    iconSize,
-                    labels,
-                    onClick = { onLaunch(app) },
-                    drag = drag?.handlersForDrawer(app),
-                )
+        val icon = fittedIconSize(iconSize, maxWidth, insets, columns)
+        Column(Modifier.fillMaxSize()) {
+            SearchField(
+                query,
+                keyboard,
+                open,
+                Modifier.padding(top = insets.calculateTopPadding() + MARGIN / 2)
+                    .padding(horizontal = MARGIN),
+            )
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                // Insets pad the content, not the grid: its scrollable then covers the whole
+                // screen, so a pull that starts at the edge still pulls.
+                contentPadding = insets.aboveKeyboard(),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .weight(1f)
+                        .testTag(DRAWER_LIST_TAG)
+                        .nestedScroll(pullToClose),
+            ) {
+                items(shownApps, key = { it.key }) { app ->
+                    DrawerApp(
+                        app,
+                        icon,
+                        labels,
+                        onClick = { onLaunch(app) },
+                        drag = drag?.handlersForDrawer(app),
+                    )
+                }
             }
         }
     }
+}
+
+/** Drawn [revealed] of the way up from the bottom, translucent and a little large on the way. */
+private fun Modifier.arriving(revealed: () -> Float) = graphicsLayer {
+    val away = 1f - revealed()
+    alpha = (revealed() / OPAQUE_AT).coerceAtMost(1f)
+    scaleX = 1f + (FROM_SCALE - 1f) * away
+    scaleY = scaleX
+    translationY = away * size.height
+}
+
+/** The home screen's icon size, unless [columns] across the room inside the margins is tighter. */
+@Composable
+private fun fittedIconSize(iconSize: Dp, width: Dp, insets: PaddingValues, columns: Int): Dp {
+    val direction = LocalLayoutDirection.current
+    val room =
+        width -
+            insets.calculateStartPadding(direction) -
+            insets.calculateEndPadding(direction) -
+            MARGIN * 2
+    return minOf(iconSize, room / columns * ICON_SHARE)
 }
 
 /**

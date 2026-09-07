@@ -302,6 +302,25 @@ class DrawerTest : LauncherFixture() {
         searchField().assertIsFocused()
     }
 
+    @Test
+    fun theDrawerFollowsTheHomeColumnsUntilGivenItsOwn() {
+        openDrawer()
+        assertEquals(settings.columns, drawerRowLength())
+        runBlocking { graph.settings.update { it.copy(drawerColumns = DRAWER_COLUMNS) } }
+        compose.waitUntil(TIMEOUT_MS) { drawerRowLength() == DRAWER_COLUMNS }
+        // Six across a 4-column screen: the icons shrink to fit rather than overlap.
+        val first = drawerItems().first().boundsInRoot
+        val second = drawerItems()[1].boundsInRoot
+        assertTrue("items overlap: $first then $second", second.left >= first.right - 1f)
+    }
+
+    /** How many apps share the first row. */
+    private fun drawerRowLength(): Int {
+        val items = drawerItems()
+        val top = items.first().boundsInRoot.top
+        return items.count { abs(it.boundsInRoot.top - top) < 1f }
+    }
+
     private fun searchField() = compose.onNodeWithTag(DRAWER_SEARCH_TAG)
 
     private fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
@@ -369,6 +388,7 @@ class DrawerTest : LauncherFixture() {
         const val PARTIAL_PULL = 0.01f // under Medium's 2%: shows the drawer, lets it fall back
         const val OPENING_PULL = 0.35f // well past a third of the pull distance
         const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
+        const val DRAWER_COLUMNS = 6 // more than the fixture's 4 home columns
         const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
         val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }
