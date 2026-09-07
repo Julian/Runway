@@ -25,7 +25,7 @@ fun Dock(
     slot: DpSize,
     iconSize: Dp,
     labels: Boolean,
-    onLaunch: (HomeItem) -> Unit,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     onPagePositioned: (page: Int, Bounds) -> Unit,
 ) {

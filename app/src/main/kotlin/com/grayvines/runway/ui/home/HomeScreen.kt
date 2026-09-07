@@ -34,6 +34,7 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.drawer.releasesAbandonedPull
+import com.grayvines.runway.ui.folder.FolderSheet
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
@@ -58,13 +59,16 @@ fun HomeScreen(
     goHome: Flow<Unit>,
     flipHomePage: Flow<Int>,
     flipDockPage: Flow<Int>,
-    onLaunch: (HomeItem) -> Unit,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     drag: DragSession,
     itemMenu: ItemMenuState?,
     itemMenuActions: ItemMenuActions,
     onDismissItemMenu: () -> Unit,
+    openFolder: OpenFolder?,
+    onLaunchFromFolder: (AppEntry) -> Unit,
+    onCloseFolder: () -> Unit,
     drawerOpen: Boolean,
     drawerActions: DrawerActions,
     drawerQuery: DrawerQuery,
@@ -107,6 +111,7 @@ fun HomeScreen(
             onDockPagePositioned = onDockPagePositioned,
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
+        openFolder?.let { OpenFolder(state, it, iconSize, onLaunchFromFolder, onCloseFolder) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
             revealed = drawer.motion.revealed.value,
@@ -156,7 +161,7 @@ private fun HomeColumn(
     dockPager: PagerState,
     cell: DpSize,
     iconSize: Dp,
-    onLaunch: (HomeItem) -> Unit,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     drag: DragSession,
@@ -221,6 +226,19 @@ private fun HomeColumn(
 private fun Modifier.dragTracking(drag: DragSession): Modifier {
     val current = rememberUpdatedState(drag)
     return this.then(remember { Modifier.tracksDrag { current.value } })
+}
+
+/** The open folder's sheet, for as long as the folder's placement exists. */
+@Composable
+private fun OpenFolder(
+    state: HomeState,
+    open: OpenFolder,
+    iconSize: Dp,
+    onLaunch: (AppEntry) -> Unit,
+    onClose: () -> Unit,
+) {
+    val folder = state.item(open.itemId) ?: return
+    FolderSheet(folder, open.from, iconSize, onLaunch, onClose)
 }
 
 /** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */

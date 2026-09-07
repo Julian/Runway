@@ -16,6 +16,7 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
+import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragWorkspace
@@ -35,6 +36,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/** A folder placement that is open, and the cell it opened out of. */
+data class OpenFolder(val itemId: Long, val from: Bounds)
 
 /** One thing drawn in a cell. */
 data class HomeItem(
@@ -86,6 +90,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private val _drawerOpen = MutableStateFlow(false)
     val drawerOpen: StateFlow<Boolean> = _drawerOpen
+
+    /** The folder open over the pages, and the cell (root px) it grew out of; null when none. */
+    private val _openFolder = MutableStateFlow<OpenFolder?>(null)
+    val openFolder: StateFlow<OpenFolder?> = _openFolder
 
     /** What is typed in the drawer's search field; every open starts empty. */
     private val _drawerQuery = MutableStateFlow("")
@@ -207,8 +215,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         dragging.startDrag(source, pointer, grab)
     }
 
-    fun launch(item: HomeItem) {
-        item.app?.let(graph.appRepository::launch)
+    /** A tap on a placed item in [cell]: an app launches, a folder opens out of its cell. */
+    fun launch(item: HomeItem, cell: Bounds) {
+        when {
+            item.app != null -> graph.appRepository.launch(item.app)
+            item.kind == ItemKind.FOLDER -> _openFolder.value = OpenFolder(item.id, cell)
+        }
+    }
+
+    fun closeFolder() {
+        _openFolder.value = null
     }
 
     /** The search bar was tapped: hand off to the target app. */
@@ -216,10 +232,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         graph.searchTargets.search(state.value.searchTarget)
     }
 
-    /** Launches from the drawer; the drawer closes behind the app. */
+    /** Launches from the drawer or an open folder; whichever was open closes behind the app. */
     fun launch(app: AppEntry) {
         graph.appRepository.launch(app)
         closeDrawer()
+        closeFolder()
     }
 
     fun openDrawer() {
@@ -245,6 +262,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     fun onHomeIntent() {
         when {
             itemMenu.isOpen -> itemMenu.dismiss()
+            _openFolder.value != null -> closeFolder()
             _drawerOpen.value -> closeDrawer()
             else -> _goHome.tryEmit(Unit)
         }

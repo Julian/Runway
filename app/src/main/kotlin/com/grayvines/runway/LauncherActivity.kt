@@ -53,6 +53,7 @@ class LauncherActivity : ComponentActivity() {
                 val settling by viewModel.dragging.settling.collectAsStateWithLifecycle()
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
                 val itemMenu by viewModel.itemMenu.state.collectAsStateWithLifecycle()
+                val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
                 var settleTarget by remember(settling) { mutableStateOf<Point?>(null) }
                 val state = remember(base, pending) { base.applying(pending) }
                 val reports = AreaReports(viewModel.dragging.areas) { state.settings }
@@ -67,6 +68,9 @@ class LauncherActivity : ComponentActivity() {
                     itemMenu = itemMenu,
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
+                    openFolder = openFolder,
+                    onLaunchFromFolder = viewModel::launch,
+                    onCloseFolder = viewModel::closeFolder,
                     drawerOpen = drawerOpen,
                     drawerActions = drawerActions,
                     drawerQuery = drawerQuery(),

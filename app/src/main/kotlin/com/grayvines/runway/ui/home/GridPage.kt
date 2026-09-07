@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 
 /**
@@ -32,7 +33,7 @@ internal fun GridPage(
     cell: DpSize,
     iconSize: Dp,
     labels: Boolean,
-    onLaunch: (HomeItem) -> Unit,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     handlersFor: (HomeItem) -> DragHandlers?,
     modifier: Modifier = Modifier,
@@ -63,7 +64,7 @@ internal fun GridPage(
                         item,
                         iconSize = iconSize,
                         labels = labels,
-                        onClick = { onLaunch(item) },
+                        onClick = { cell -> onLaunch(item, cell) },
                         drag = handlersFor(item),
                         lifted = item.id == drag?.draggedId || settlingHere != null,
                         receiving = item.id == drag?.foldTargetId,

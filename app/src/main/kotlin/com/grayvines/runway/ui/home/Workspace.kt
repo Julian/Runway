@@ -24,7 +24,7 @@ fun Workspace(
     cell: DpSize,
     iconSize: Dp,
     labels: Boolean,
-    onLaunch: (HomeItem) -> Unit,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     onPagePositioned: (page: Int, Bounds) -> Unit,
     modifier: Modifier = Modifier,

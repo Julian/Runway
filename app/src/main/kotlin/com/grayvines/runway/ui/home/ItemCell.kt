@@ -85,7 +85,7 @@ fun ItemCell(
     item: HomeItem,
     iconSize: Dp,
     labels: Boolean,
-    onClick: () -> Unit,
+    onClick: (cell: Bounds) -> Unit,
     modifier: Modifier = Modifier,
     drag: DragHandlers? = null,
     lifted: Boolean = false,
@@ -111,11 +111,9 @@ fun ItemCell(
                 modifier
                     .fillMaxSize()
                     .onGloballyPositioned { coords = it }
-                    .clickable(
-                        interactionSource = interactions,
-                        indication = null,
-                        onClick = onClick,
-                    )
+                    .clickable(interactionSource = interactions, indication = null) {
+                        onClick(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
+                    }
                     .dragAfterLongPress(item.id, { coords }, { handlers }),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -171,7 +169,8 @@ internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier =
                 .padding(fraction = FOLDER_TILE_INSET),
     ) {
         items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->
-            AppIcon(app, Modifier.fillMaxWidth().padding(2.dp))
+            // Part of the tile, which the folder's name describes: not an icon in its own right.
+            AppIcon(app, Modifier.fillMaxWidth().padding(2.dp), described = false)
         }
     }
 }
@@ -192,10 +191,14 @@ private fun Modifier.padding(fraction: Float): Modifier = layout { measurable, c
 }
 
 @Composable
-internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier) {
+internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Boolean = true) {
     val bitmap =
         remember(app.key) { app.icon.toBitmap(ICON_BITMAP_SIZE, ICON_BITMAP_SIZE).asImageBitmap() }
-    Image(bitmap = bitmap, contentDescription = app.label, modifier = modifier)
+    Image(
+        bitmap = bitmap,
+        contentDescription = app.label.takeIf { described },
+        modifier = modifier,
+    )
 }
 
 /** The platform's touch settings with a longer long press: a lift is deliberate. */
