@@ -128,9 +128,11 @@ fun AppDrawer(
     val pull = rememberUpdatedState(onPull)
     val pullEnd = rememberUpdatedState(onPullEnd)
     val shown = rememberUpdatedState(revealed)
+    val list = rememberLazyGridState()
     val pullToClose = remember {
         PullToClose(
             revealed = { shown.value },
+            atTop = { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0 },
             onPull = { pull.value(it) },
             onPullEnd = { pullEnd.value(it) },
         )
@@ -148,7 +150,7 @@ fun AppDrawer(
                 Modifier.padding(top = insets.calculateTopPadding() + MARGIN / 2)
                     .padding(horizontal = MARGIN),
             )
-            IndexedGrid(shownApps, index && query.text.isBlank(), Modifier.weight(1f)) {
+            IndexedGrid(shownApps, list, index && query.text.isBlank(), Modifier.weight(1f)) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = it,
@@ -177,11 +179,11 @@ fun AppDrawer(
 @Composable
 private fun IndexedGrid(
     apps: List<AppEntry>,
+    state: LazyGridState,
     indexed: Boolean,
     modifier: Modifier,
     grid: @Composable (LazyGridState) -> Unit,
 ) {
-    val state = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val entries = remember(apps) { apps.index() }
     Box(modifier.fillMaxWidth()) {
@@ -318,16 +320,23 @@ private fun DrawerApp(
 }
 
 /**
- * Scroll the list cannot use moves the drawer instead: downward when the list is at its top, and
- * upward again while the drawer is part way down. Letting go reports the velocity.
+ * A swipe that begins with the list at its top pulls the drawer down instead of scrolling, and back
+ * up again while it is part way; letting go reports the velocity. A swipe that merely scrolls the
+ * list back to its top stops there: its leftover, and its fling, are not a pull.
  */
 private class PullToClose(
     private val revealed: () -> Float,
+    private val atTop: () -> Boolean,
     private val onPull: (Float) -> Unit,
     private val onPullEnd: (Float) -> Unit,
 ) : NestedScrollConnection {
+    /** Whether the swipe in progress may pull: decided as it begins, from where the list was. */
+    private var pulling: Boolean? = null
+
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-        if (revealed() < 1f && available.y < 0f) {
+        val pulls =
+            pulling ?: (source == NestedScrollSource.UserInput && atTop()).also { pulling = it }
+        if (pulls && revealed() < 1f && available.y < 0f) {
             onPull(available.y)
             return available
         }
@@ -339,12 +348,13 @@ private class PullToClose(
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        if (available.y > 0f) onPull(available.y)
+        if (pulling == true && available.y > 0f) onPull(available.y)
         return Offset.Zero
     }
 
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        onPullEnd(available.y)
+        if (pulling == true) onPullEnd(available.y)
+        pulling = null
         return Velocity.Zero
     }
 }

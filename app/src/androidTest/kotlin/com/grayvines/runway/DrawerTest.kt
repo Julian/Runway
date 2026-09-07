@@ -92,6 +92,21 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun scrollingTheListBackUpToItsTopLeavesTheDrawerOpen() {
+        // One column, so there is something to scroll.
+        runBlocking { graph.settings.update { it.copy(drawerColumns = 1) } }
+        compose.waitForIdle()
+        openDrawer()
+        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        // A fast swipe down: the list flies back to its top, and would overshoot into a pull.
+        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
+        drawerApp(sortedDrawerLabels().first()).assertIsDisplayed() // and it is at the top
+    }
+
+    @Test
     fun aPullCutShortStillLeavesTheDrawerFullyOpenOrClosed() {
         // A pull that the system cancels part way (a call comes in, another gesture takes over)
         // never reports letting go. The drawer must still end up somewhere definite.
