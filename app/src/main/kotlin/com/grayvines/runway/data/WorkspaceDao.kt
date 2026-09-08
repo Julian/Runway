@@ -92,6 +92,13 @@ interface WorkspaceDao {
 
     @Query("SELECT * FROM folder_apps") suspend fun folderApps(): List<FolderAppEntity>
 
+    @Query("SELECT * FROM items") suspend fun items(): List<ItemEntity>
+
+    @Query("SELECT * FROM pages ORDER BY container, page_index")
+    suspend fun allPages(): List<PageEntity>
+
+    @Query("SELECT * FROM folders") suspend fun folders(): List<FolderEntity>
+
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()

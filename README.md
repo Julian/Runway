@@ -35,6 +35,12 @@ It also installs the `fixture` module's app beside the launcher first: a stand-i
 
 Debug builds use the application id `com.grayvines.runway.debug` so they can be installed alongside a release build without touching its layout.
 
+## Backups
+
+Settings has "Save a backup" and "Restore a backup".
+A backup is a JSON file of the settings and the layout: which apps and folders sit in which cells.
+Restoring replaces both; apps that are not installed are left out, and widgets are not carried between devices.
+
 ## Baseline profile
 
 Published releases ship a baseline profile, which has Android compile the launcher's hot paths at install time so the first frames, scrolls and drags do not run interpreted.

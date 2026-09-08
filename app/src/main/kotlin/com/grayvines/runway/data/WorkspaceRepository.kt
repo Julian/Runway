@@ -6,9 +6,10 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.serialization.Serializable
 
 /** An app identity as stored: flattened component name plus profile serial. */
-data class AppRef(val component: String, val profile: Long)
+@Serializable data class AppRef(val component: String, val profile: Long)
 
 /** Pages of one container with their items, as the UI consumes them. */
 data class ContainerContent(val pages: List<PageContent>)

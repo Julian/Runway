@@ -80,7 +80,7 @@ private suspend fun WorkspaceDao.addToFolder(folderId: Long, app: AppRef) {
     insertFolderApp(FolderAppEntity(folderId, app.component, app.profile, position))
 }
 
-private fun ItemEntity.appRef(): AppRef? {
+internal fun ItemEntity.appRef(): AppRef? {
     val component = component ?: return null
     val profile = profile ?: return null
     return AppRef(component, profile)

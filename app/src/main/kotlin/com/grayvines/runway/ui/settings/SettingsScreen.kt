@@ -45,6 +45,7 @@ fun SettingsScreen(
     searchTargets: List<SearchTarget>,
     onChange: ((Settings) -> Settings) -> Unit,
     onOpenHome: (() -> Unit)?,
+    backupActions: BackupActions,
     debugActions: DebugActions?,
 ) {
     Scaffold { padding ->
@@ -85,6 +86,13 @@ fun SettingsScreen(
             }
             SearchTargetPicker(settings.searchTarget, searchTargets) { packageName ->
                 onChange { it.copy(searchTarget = packageName) }
+            }
+
+            Section("Backup")
+            Row {
+                Button(onClick = backupActions.save) { Text("Save a backup") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = backupActions.restore) { Text("Restore a backup") }
             }
 
             if (debugActions != null) {

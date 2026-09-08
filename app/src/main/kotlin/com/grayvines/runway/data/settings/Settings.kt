@@ -1,5 +1,7 @@
 package com.grayvines.runway.data.settings
 
+import kotlinx.serialization.Serializable
+
 /**
  * What it takes to open the drawer: a pull of [openAt] of the screen height, or a flick faster than
  * [flickDpPerSecond] at any distance. Medium's flick is the 125 dp/s most sheets use, which any
@@ -13,6 +15,7 @@ enum class DrawerSwipe(val label: String, val openAt: Float, val flickDpPerSecon
 }
 
 /** User configuration. The defaults are the product. */
+@Serializable
 data class Settings(
     val columns: Int = DEFAULT_COLUMNS,
     val rows: Int = DEFAULT_ROWS,

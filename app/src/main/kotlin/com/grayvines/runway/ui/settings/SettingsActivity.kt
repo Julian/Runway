@@ -4,21 +4,42 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.grayvines.runway.LauncherActivity
 import com.grayvines.runway.appGraph
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.clear
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.theme.SettingsTheme
+import java.io.IOException
+import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsActivity : ComponentActivity() {
+    private val saveBackup =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(BACKUP_MIME)) { uri ->
+            if (uri != null) {
+                withFile("could not save the backup") { write(uri, appGraph.backup.export()) }
+            }
+        }
+    private val restoreBackup =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                withFile("could not read the backup") { restore(uri) }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -48,6 +69,11 @@ class SettingsActivity : ComponentActivity() {
                     onChange = { transform ->
                         graph.appScope.launch { graph.settings.update(transform) }
                     },
+                    backupActions =
+                        BackupActions(
+                            save = { saveBackup.launch("runway-${LocalDate.now()}.json") },
+                            restore = { restoreBackup.launch(arrayOf(BACKUP_MIME, "*/*")) },
+                        ),
                     debugActions =
                         if (debuggable) {
                             DebugActions(
@@ -71,5 +97,47 @@ class SettingsActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /** Runs a file operation off the main thread; what goes wrong is shown, not thrown. */
+    private fun withFile(failure: String, block: suspend () -> String) {
+        lifecycleScope.launch {
+            val message =
+                try {
+                    withContext(Dispatchers.IO) { block() }
+                } catch (e: IOException) {
+                    Log.w(TAG, failure, e)
+                    failure
+                } catch (e: IllegalArgumentException) {
+                    Log.w(TAG, failure, e)
+                    e.message ?: failure
+                }
+            Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun write(uri: android.net.Uri, text: String): String {
+        contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) }
+            ?: throw IOException("nothing to write to")
+        return "Backup saved"
+    }
+
+    private suspend fun restore(uri: android.net.Uri): String {
+        val text =
+            contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+                ?: throw IOException("nothing to read")
+        val installed =
+            appGraph.appRepository.apps.first { it.isNotEmpty() }.mapTo(mutableSetOf()) { it.ref }
+        val restored = appGraph.backup.restore(text, installed)
+        return if (restored.skipped == 0) {
+            "Restored ${restored.placed} items"
+        } else {
+            "Restored ${restored.placed} items; ${restored.skipped} apps are not installed"
+        }
+    }
+
+    private companion object {
+        const val TAG = "Runway"
+        const val BACKUP_MIME = "application/json"
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.grayvines.runway.data.RunwayDatabase
 import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.backup.BackupService
 import com.grayvines.runway.data.settings.SettingsRepository
 import com.grayvines.runway.system.NotificationShade
 import com.grayvines.runway.system.apps.AppRepository
@@ -30,6 +31,7 @@ class AppGraph(private val context: Context) {
     val workspace: WorkspaceRepository by lazy { WorkspaceRepository(database) }
     val settings: SettingsRepository by lazy { SettingsRepository(context) }
     val searchTargets: SearchTargetResolver by lazy { SearchTargetResolver(context) }
+    val backup: BackupService by lazy { BackupService(workspace, settings) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
