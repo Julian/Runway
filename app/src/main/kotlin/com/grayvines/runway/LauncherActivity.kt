@@ -25,6 +25,7 @@ import com.grayvines.runway.ui.home.DrawerActions
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.home.applying
+import com.grayvines.runway.ui.menu.HomeMenuSession
 import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 
@@ -42,6 +43,12 @@ class LauncherActivity : ComponentActivity() {
         )
     }
 
+    private val homeMenuActions by lazy {
+        viewModel.homeMenu.actions(
+            openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) }
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -52,6 +59,7 @@ class LauncherActivity : ComponentActivity() {
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
                 val itemMenu by viewModel.itemMenu.state.collectAsStateWithLifecycle()
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
+                val homeMenuAt by viewModel.homeMenu.state.collectAsStateWithLifecycle()
                 val state = remember(base, pending) { base.applying(pending) }
                 // The live settings, not this composition's: page-shown callbacks are kept by
                 // effects that outlive it, and a changed grid must reach them.
@@ -64,10 +72,17 @@ class LauncherActivity : ComponentActivity() {
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
-                    onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                     itemMenu = itemMenu,
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
+                    homeMenu =
+                        HomeMenuSession(
+                            at = homeMenuAt,
+                            actions = homeMenuActions,
+                            onOpen = viewModel.homeMenu::open,
+                            onDismiss = viewModel.homeMenu::dismiss,
+                            showPage = viewModel.homeMenu.showPage,
+                        ),
                     openFolder = openFolder,
                     folderActions = viewModel.folderActions,
                     drawerOpen = drawerOpen,

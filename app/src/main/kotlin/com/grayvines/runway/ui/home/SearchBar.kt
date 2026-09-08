@@ -16,15 +16,23 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.search.SearchTarget
+import com.grayvines.runway.ui.drag.Bounds
 
 /** The bar is [BAR_HEIGHT] tall inside its grid row: no surface, just what is on it. */
 private val BAR_HEIGHT = 48.dp
@@ -47,7 +55,8 @@ fun SearchBar(
     rowHeight: Dp,
     target: SearchTarget?,
     onSearch: () -> Unit,
-    onMenu: () -> Unit,
+    /** The three dots were tapped; where they are (root px), for a menu to sit under. */
+    onMenu: (Bounds) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ink = Color.White.copy(alpha = BAR_ALPHA)
@@ -81,8 +90,12 @@ fun SearchBar(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
-            IconButton(onClick = onMenu, modifier = Modifier.testTag(SEARCH_MENU_TAG)) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Runway settings", tint = ink)
+            var dots by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            IconButton(
+                onClick = { onMenu(dots?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)) },
+                modifier = Modifier.onGloballyPositioned { dots = it }.testTag(SEARCH_MENU_TAG),
+            ) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Runway menu", tint = ink)
             }
         }
     }

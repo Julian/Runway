@@ -34,11 +34,14 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.drawer.releasesAbandonedPull
 import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.folder.FolderSheet
+import com.grayvines.runway.ui.menu.HomeMenu
+import com.grayvines.runway.ui.menu.HomeMenuSession
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
@@ -65,11 +68,11 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
-    onOpenSettings: () -> Unit,
     drag: DragSession,
     itemMenu: ItemMenuState?,
     itemMenuActions: ItemMenuActions,
     onDismissItemMenu: () -> Unit,
+    homeMenu: HomeMenuSession,
     openFolder: OpenFolder?,
     folderActions: FolderActions,
     drawerOpen: Boolean,
@@ -85,7 +88,7 @@ fun HomeScreen(
     val settings = state.settings
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
-    PagerCommands(homePager, goHome, flipHomePage)
+    PagerCommands(homePager, goHome, flipHomePage, homeMenu.showPage)
     PageFlips(dockPager, flipDockPage)
     PagesShown(homePager, dockPager, onHomePageShown, onDockPageShown)
 
@@ -109,11 +112,12 @@ fun HomeScreen(
             iconSize = iconSize,
             onLaunch = onLaunch,
             onSearch = onSearch,
-            onOpenSettings = onOpenSettings,
+            onMenu = homeMenu.onOpen,
             drag = drag,
             pagesModifier = drawer.pull,
             onHomePagePositioned = onHomePagePositioned,
             onDockPagePositioned = onDockPagePositioned,
+            onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
@@ -134,6 +138,7 @@ fun HomeScreen(
         itemMenu?.let {
             ItemMenu(it, itemMenuActions, state.drawerFolders, onDismiss = onDismissItemMenu)
         }
+        homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
@@ -180,10 +185,11 @@ private fun HomeColumn(
     iconSize: Dp,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onMenu: (Bounds) -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
+    onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
     /** Applied to the pages alone: the dock and search bar do not pull the drawer. */
     pagesModifier: Modifier = Modifier,
@@ -196,7 +202,7 @@ private fun HomeColumn(
                 rowHeight = cell.height,
                 target = state.searchTarget,
                 onSearch = onSearch,
-                onMenu = onOpenSettings,
+                onMenu = onMenu,
                 modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
             )
         }
@@ -211,6 +217,7 @@ private fun HomeColumn(
             onLaunch = onLaunch,
             drag = drag,
             onPagePositioned = onHomePagePositioned,
+            onHoldEmpty = onHoldEmpty,
             modifier = Modifier.weight(1f).then(pagesModifier),
         )
         if (!settings.searchBarAtTop) {
@@ -218,7 +225,7 @@ private fun HomeColumn(
                 rowHeight = cell.height,
                 target = state.searchTarget,
                 onSearch = onSearch,
-                onMenu = onOpenSettings,
+                onMenu = onMenu,
                 modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
             )
         }

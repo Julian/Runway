@@ -99,7 +99,7 @@ fun AppTile(
 
 /** The platform's touch settings with a longer long press: a lift is deliberate. */
 @Composable
-private fun rememberLiftConfiguration(): ViewConfiguration {
+internal fun rememberLiftConfiguration(): ViewConfiguration {
     val viewConfiguration = LocalViewConfiguration.current
     return remember(viewConfiguration) {
         object : ViewConfiguration by viewConfiguration {

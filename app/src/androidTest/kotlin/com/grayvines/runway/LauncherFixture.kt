@@ -38,6 +38,7 @@ import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.ICON_INSET
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
@@ -117,6 +118,18 @@ open class LauncherFixture {
         }
     }
 
+    /** The first cell of the first home page nothing sits on. */
+    protected fun freeHomeCell(columns: Int, pageRows: Int): Pair<Int, Int> {
+        val taken = runBlocking {
+            graph.workspace.observe(Container.HOME).first().pages.first().items.map {
+                it.x to it.y
+            }
+        }
+        return (0 until pageRows)
+            .flatMap { y -> (0 until columns).map { x -> x to y } }
+            .first { it !in taken }
+    }
+
     /** Swipes the pages up and waits for the drawer. */
     protected fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
@@ -139,7 +152,11 @@ open class LauncherFixture {
     }
 
     protected fun menuRow(text: String) =
-        compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)))
+        compose.onNode(
+            hasText(text) and
+                (hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)) or
+                    hasAnyAncestor(hasTestTag(HOME_MENU_TAG)))
+        )
 
     /** The window manager's word on what has focus, for a failure message. */
     private fun windowFocus(): String =

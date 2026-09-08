@@ -9,6 +9,7 @@ import com.grayvines.runway.data.settings.SettingsRepository
 import com.grayvines.runway.system.NotificationShade
 import com.grayvines.runway.system.apps.AppRepository
 import com.grayvines.runway.system.search.SearchTargetResolver
+import com.grayvines.runway.system.wallpaper.WallpaperPicker
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ class AppGraph(private val context: Context) {
     val settings: SettingsRepository by lazy { SettingsRepository(context) }
     val searchTargets: SearchTargetResolver by lazy { SearchTargetResolver(context) }
     val backup: BackupService by lazy { BackupService(workspace, settings) }
+    val wallpapers: WallpaperPicker by lazy { WallpaperPicker(context) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */

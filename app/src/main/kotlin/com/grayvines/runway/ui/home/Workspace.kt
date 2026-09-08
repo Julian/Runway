@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.Point
 
 const val WORKSPACE_TAG = "workspace"
 
@@ -27,6 +28,7 @@ fun Workspace(
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     onPagePositioned: (page: Int, Bounds) -> Unit,
+    onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     HorizontalPager(
@@ -42,6 +44,7 @@ fun Workspace(
             onLaunch = onLaunch,
             drag = drag,
             handlersFor = { item -> drag?.handlersFor(item, page) },
+            onHoldEmpty = onHoldEmpty,
             modifier =
                 Modifier.onGloballyPositioned { coords ->
                     onPagePositioned(page, coords.boundsInRoot().toBounds())

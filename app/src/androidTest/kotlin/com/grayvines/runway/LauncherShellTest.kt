@@ -15,6 +15,7 @@ import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.SEARCH_MENU_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -131,8 +132,10 @@ class LauncherShellTest : LauncherFixture() {
     }
 
     @Test
-    fun theSearchBarMenuOpensSettings() {
+    fun theSearchBarsThreeDotsOpenTheHomeMenu_andSettingsFromThereOpensSettings() {
         compose.onNodeWithTag(SEARCH_MENU_TAG).performClick()
+        waitUntil { compose.onAllNodesWithTag(HOME_MENU_TAG).fetchSemanticsNodes().isNotEmpty() }
+        menuRow("Settings").performClick()
         assertTrue(
             "settings did not open",
             device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),

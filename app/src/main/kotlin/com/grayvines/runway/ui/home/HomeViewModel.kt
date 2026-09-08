@@ -30,6 +30,7 @@ import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import com.grayvines.runway.ui.drawer.matching
 import com.grayvines.runway.ui.folder.FolderActions
+import com.grayvines.runway.ui.menu.HomeMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -119,6 +120,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** The long-press item menu. */
     val itemMenu = ItemMenuHost(graph, viewModelScope)
+
+    val homeMenu =
+        HomeMenuHost(graph, viewModelScope) { count -> state.first { it.homePages.size >= count } }
 
     private val lookup =
         object : WorkspaceLookup {
@@ -277,6 +281,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
         itemMenu.dismiss()
+        homeMenu.dismiss()
         val source =
             DragSource(item.id, item.kind, container, page, item.x, item.y, item.spanX, item.spanY)
         dragging.startDrag(source, pointer, grab)
@@ -288,6 +293,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
      */
     fun startDragOfApp(app: AppEntry, fromFolder: Long?, pointer: Point, grab: Point) {
         itemMenu.dismiss()
+        homeMenu.dismiss()
         closeDrawer()
         closeFolder()
         val source =
@@ -329,6 +335,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun openDrawer() {
+        homeMenu.dismiss()
         _drawerQuery.value = ""
         _drawerOpen.value = true
     }
@@ -351,6 +358,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     fun onHomeIntent() {
         when {
             itemMenu.isOpen -> itemMenu.dismiss()
+            homeMenu.isOpen -> homeMenu.dismiss()
             _openFolder.value != null -> closeFolder()
             _drawerOpen.value -> closeDrawer()
             else -> _goHome.tryEmit(Unit)

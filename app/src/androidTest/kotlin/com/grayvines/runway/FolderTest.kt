@@ -305,18 +305,6 @@ class FolderTest : LauncherFixture() {
         }
     }
 
-    /** The first cell of the first home page nothing sits on. */
-    private fun freeHomeCell(columns: Int, pageRows: Int): Pair<Int, Int> {
-        val taken = runBlocking {
-            graph.workspace.observe(Container.HOME).first().pages.first().items.map {
-                it.x to it.y
-            }
-        }
-        return (0 until pageRows)
-            .flatMap { y -> (0 until columns).map { x -> x to y } }
-            .first { it !in taken }
-    }
-
     private fun folderName() = runBlocking {
         graph.workspace.observeFolders().first().singleOrNull()?.name
     }

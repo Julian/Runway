@@ -4,18 +4,28 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -40,14 +50,16 @@ internal fun GridPage(
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     handlersFor: (HomeItem) -> DragHandlers?,
+    onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val cellW = with(density) { cell.width.roundToPx() }
     val cellH = with(density) { cell.height.roundToPx() }
     val positions = mutableListOf<State<IntOffset>>()
-    Layout(
-        content = {
+    // The page's own long press (on empty space) takes the same hold as an icon's lift.
+    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
+        GridLayout(items, cellW, cellH, positions, onHoldEmpty, modifier) {
             items.forEach { item ->
                 key(item.id) {
                     val cellDrag = rememberCellDrag(item, drag)
@@ -85,8 +97,24 @@ internal fun GridPage(
                     )
                 }
             }
-        },
-        modifier = modifier.fillMaxSize(),
+        }
+    }
+}
+
+/** Every item at its footprint, sized by its span; the page itself fills what it is given. */
+@Composable
+private fun GridLayout(
+    items: List<HomeItem>,
+    cellW: Int,
+    cellH: Int,
+    positions: List<State<IntOffset>>,
+    onHoldEmpty: (Point) -> Unit,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(
+        content = content,
+        modifier = modifier.fillMaxSize().holdsEmptyCells(items, cellW, cellH, onHoldEmpty),
     ) { measurables, constraints ->
         val placeables = measurables.mapIndexed { i, measurable ->
             val f = items[i].footprint
@@ -96,6 +124,46 @@ internal fun GridPage(
             placeables.forEachIndexed { i, placeable -> placeable.place(positions[i].value) }
         }
     }
+}
+
+/**
+ * A long press on a cell no item covers reports its root position; one on an item is that item's
+ * own affair. The hold is the same as an icon's lift. Nothing is consumed before the press lands,
+ * so a swipe that starts on empty space still scrolls or pulls as it did.
+ */
+@Composable
+private fun Modifier.holdsEmptyCells(
+    items: List<HomeItem>,
+    cellW: Int,
+    cellH: Int,
+    onHold: (Point) -> Unit,
+): Modifier {
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val current = rememberUpdatedState(items)
+    val hold = rememberUpdatedState(onHold)
+    return onGloballyPositioned { coords = it }
+        .pointerInput(cellW, cellH) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val cellX = (down.position.x / cellW).toInt()
+                val cellY = (down.position.y / cellH).toInt()
+                val covered =
+                    current.value.any { item ->
+                        cellX in item.x until item.x + item.spanX &&
+                            cellY in item.y until item.y + item.spanY
+                    }
+                val press = if (covered) null else awaitLongPressOrCancellation(down.id)
+                if (press != null) {
+                    val root = coords?.localToRoot(press.position) ?: press.position
+                    hold.value(Point(root.x, root.y))
+                    // The finger is the menu's now: no scroll or pull from here on.
+                    do {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+        }
 }
 
 /**

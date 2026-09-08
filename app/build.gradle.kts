@@ -249,6 +249,7 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
+    implementation(libs.compose.material.icons.extended)
 
     // Pinned so the instrumented tests' coroutines-test matches the app's coroutines-core.
     implementation(libs.kotlinx.coroutines.android)

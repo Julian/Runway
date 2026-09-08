@@ -41,6 +41,7 @@ fun Dock(
             onLaunch = onLaunch,
             drag = drag,
             handlersFor = { item -> drag?.handlersFor(item, page, Container.DOCK) },
+            onHoldEmpty = {}, // the dock is for reaching, not for the home menu
             modifier =
                 Modifier.onGloballyPositioned { coords ->
                     onPagePositioned(page, coords.boundsInRoot().toBounds())

@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 private const val FLIP_SCROLL_MS = 250
 
@@ -28,10 +29,25 @@ private fun PageShown(pager: PagerState, onShown: (page: Int) -> Unit) {
     LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { shown.value(it) } }
 }
 
-/** Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages. */
+/**
+ * Drives the home pager from outside: HOME returns to page 1, edge dwells flip pages, and a page
+ * just added ([showPage], by index) is scrolled to.
+ */
 @Composable
-internal fun PagerCommands(pager: PagerState, goHome: Flow<Unit>, flipPage: Flow<Int>) {
+internal fun PagerCommands(
+    pager: PagerState,
+    goHome: Flow<Unit>,
+    flipPage: Flow<Int>,
+    showPage: Flow<Int>,
+) {
     LaunchedEffect(goHome) { goHome.collect { pager.animateScrollToPage(0) } }
+    LaunchedEffect(showPage) {
+        showPage.collect { page ->
+            // The page was just written; the pager learns of it a composition later.
+            snapshotFlow { pager.pageCount }.first { it > page }
+            pager.animateScrollToPage(page)
+        }
+    }
     PageFlips(pager, flipPage)
 }
 
