@@ -134,6 +134,19 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `renaming a folder keeps the trimmed name, and a blank one changes nothing`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+        val folder = repo.observeFolders().first().single()
+
+        assertTrue(repo.renameFolder(folder.id, "  Tools "))
+        assertEquals("Tools", repo.observeFolders().first().single().name)
+        assertEquals(false, repo.renameFolder(folder.id, "   "))
+        assertEquals("Tools", repo.observeFolders().first().single().name)
+    }
+
+    @Test
     fun `folding the last item of a page away leaves the page for the drop to prune`() = runTest {
         repo.autoFill(apps(3), columns = 1, pageRows = 1, dockSlots = 1)
         val pages = repo.observe(Container.HOME).first().pages

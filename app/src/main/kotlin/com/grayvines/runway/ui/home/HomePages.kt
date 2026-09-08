@@ -57,5 +57,6 @@ private fun ItemEntity.toHomeItem(
         label = labelOverride ?: app?.label ?: folder?.name ?: "",
         app = app,
         folder = folder?.apps?.mapNotNull { apps["${it.profile}/${it.component}"] }.orEmpty(),
+        folderId = folder?.id,
     )
 }

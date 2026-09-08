@@ -3,6 +3,8 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -11,6 +13,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
@@ -20,6 +25,7 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
+import com.grayvines.runway.ui.folder.FOLDER_NAME_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.FOLD_HINT_TAG
@@ -97,6 +103,34 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
         folderApp(firstHomeApp).assertIsDisplayed()
         folderApp(neighbour).assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingTheNameOfAnOpenFolderLetsYouRenameIt() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).assertIsFocused()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Tools")
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
+        compose.waitUntil(TIMEOUT_MS) { folderName() == "Tools" }
+        compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Tools")
+        compose.onRoot().performTouchInput { click(bottomCenter - Offset(0f, 20f)) }
+        awaitFolderClosed()
+        compose.onNodeWithContentDescription("Tools", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun aBlankNameIsNotKept() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(FOLDER_NAME_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Folder")
+        assertEquals("Folder", folderName())
     }
 
     @Test
@@ -205,6 +239,10 @@ class FolderTest : LauncherFixture() {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         return neighbour
+    }
+
+    private fun folderName() = runBlocking {
+        graph.workspace.observeFolders().first().singleOrNull()?.name
     }
 
     private fun folderApp(label: String) =

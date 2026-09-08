@@ -11,6 +11,7 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
@@ -25,6 +26,7 @@ import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import com.grayvines.runway.ui.drawer.matching
+import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -59,6 +61,7 @@ data class HomeItem(
     val app: AppEntry?,
     /** For a folder: the apps in it that are available, in order. */
     val folder: List<AppEntry> = emptyList(),
+    val folderId: Long? = null,
 ) {
     val footprint: Footprint
         get() = Footprint(x, y, spanX, spanY)
@@ -230,6 +233,19 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())
+
+    /** What an open folder's sheet can do. Renaming applies to whichever folder is open. */
+    val folderActions =
+        FolderActions(
+            launch = { app -> launch(app) },
+            close = ::closeFolder,
+            rename = { name ->
+                val folderId = _openFolder.value?.let { state.value.item(it.itemId)?.folderId }
+                if (folderId != null) {
+                    viewModelScope.launch { graph.workspace.renameFolder(folderId, name) }
+                }
+            },
+        )
 
     init {
         viewModelScope.launch { graph.workspace.ensureInitialised() }

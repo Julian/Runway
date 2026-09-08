@@ -41,6 +41,14 @@ suspend fun WorkspaceRepository.foldInto(targetId: Long, dropped: Dropped): Bool
     folderId != null
 }
 
+/** Gives the folder a new name, trimmed; a blank one is no name at all and changes nothing. */
+suspend fun WorkspaceRepository.renameFolder(folderId: Long, name: String): Boolean {
+    val trimmed = name.trim()
+    if (trimmed.isEmpty()) return false
+    write { dao.renameFolder(folderId, trimmed) }
+    return true
+}
+
 /** The folder [item] is, or becomes (an app turns into a new folder holding it); else null. */
 private suspend fun WorkspaceDao.folderOf(item: ItemEntity): Long? =
     when (item.kind) {

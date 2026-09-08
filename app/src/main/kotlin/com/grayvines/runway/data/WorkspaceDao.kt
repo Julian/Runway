@@ -66,6 +66,9 @@ interface WorkspaceDao {
 
     @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
 
+    @Query("UPDATE folders SET name = :name WHERE id = :id")
+    suspend fun renameFolder(id: Long, name: String)
+
     @Query(
         "DELETE FROM folder_apps WHERE profile = :profile " +
             "AND substr(component, 1, length(:packageName) + 1) = :packageName || '/'"

@@ -37,6 +37,7 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drawer.AppDrawer
 import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.drawer.releasesAbandonedPull
+import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.folder.FolderSheet
 import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
@@ -70,8 +71,7 @@ fun HomeScreen(
     itemMenuActions: ItemMenuActions,
     onDismissItemMenu: () -> Unit,
     openFolder: OpenFolder?,
-    onLaunchFromFolder: (AppEntry) -> Unit,
-    onCloseFolder: () -> Unit,
+    folderActions: FolderActions,
     drawerOpen: Boolean,
     drawerActions: DrawerActions,
     drawerQuery: DrawerQuery,
@@ -117,7 +117,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
-        openFolder?.let { OpenFolder(state, it, iconSize, onLaunchFromFolder, onCloseFolder) }
+        openFolder?.let { OpenFolder(state, it, iconSize, folderActions) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
             shown = drawer.motion.shown,
@@ -253,11 +253,10 @@ private fun OpenFolder(
     state: HomeState,
     open: OpenFolder,
     iconSize: Dp,
-    onLaunch: (AppEntry) -> Unit,
-    onClose: () -> Unit,
+    actions: FolderActions,
 ) {
     val folder = state.item(open.itemId) ?: return
-    FolderSheet(folder, open.from, iconSize, onLaunch, onClose)
+    FolderSheet(folder, open.from, iconSize, actions)
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */
@@ -309,6 +308,6 @@ private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
         }
     }
 
-private fun HomeState.item(id: Long?): HomeItem? = id?.let {
+internal fun HomeState.item(id: Long?): HomeItem? = id?.let {
     (homePages + dockPages).flatMap { p -> p.items }.firstOrNull { it.id == id }
 }

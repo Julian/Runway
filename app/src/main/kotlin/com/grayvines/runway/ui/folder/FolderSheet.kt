@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,10 +19,14 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,10 +35,16 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -46,6 +57,10 @@ import com.grayvines.runway.ui.home.HomeItem
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
+const val FOLDER_NAME_TAG = "folder-name"
+
+/** Long enough for any name that fits a tile's label; short enough to stay a name. */
+private const val MAX_NAME_LENGTH = 40
 
 private val SURFACE = Color(0xFF202124)
 private val CORNER = 24.dp
@@ -65,21 +80,22 @@ private val SHADOW = 16.dp
 /**
  * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
  * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; a tap anywhere else, or back, closes the folder.
+ * when closed. Tapping an app launches it; tapping the name edits it; a tap anywhere else, or back,
+ * closes the folder.
  */
 @Composable
 fun FolderSheet(
     folder: HomeItem,
     from: Bounds,
     iconSize: Dp,
-    onLaunch: (AppEntry) -> Unit,
-    onClose: () -> Unit,
+    actions: FolderActions,
 ) {
-    val motion = rememberSheetMotion(onClose)
+    val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
     var room by remember { mutableStateOf(IntSize.Zero) }
+    // Above the keyboard while the name is being typed, centred otherwise.
     Box(
-        Modifier.fillMaxSize().onSizeChanged { room = it },
+        Modifier.fillMaxSize().imePadding().onSizeChanged { room = it },
         contentAlignment = Alignment.Center,
     ) {
         // A sibling, not a parent: a clickable parent would merge the sheet's semantics into it.
@@ -109,16 +125,10 @@ fun FolderSheet(
             shadowElevation = SHADOW * solid,
         ) {
             Column(Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress }) {
-                Text(
-                    folder.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 12.dp),
-                )
+                FolderName(folder.label, actions.rename)
                 LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
                     items(folder.folder, key = { it.key }) { app ->
-                        FolderApp(app, iconSize, onClick = { onLaunch(app) })
+                        FolderApp(app, iconSize, onClick = { actions.launch(app) })
                     }
                 }
             }
@@ -166,6 +176,53 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
         }
     }
     return SheetMotion(progress.value) { closing = true }
+}
+
+/**
+ * The folder's name; a tap turns it into a field with the keyboard up. Done, or leaving the field,
+ * keeps what was typed (a blank name is not kept).
+ */
+@Composable
+private fun FolderName(name: String, onRename: (String) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
+    var text by remember(name) { mutableStateOf(name) }
+    val modifier = Modifier.padding(bottom = 12.dp).testTag(FOLDER_NAME_TAG)
+    if (!editing) {
+        Text(
+            name,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier.clickable { editing = true },
+        )
+        return
+    }
+    val commit = {
+        editing = false
+        if (text != name) onRename(text)
+    }
+    val focus = remember { FocusRequester() }
+    var hadFocus by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it.take(MAX_NAME_LENGTH) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.titleMedium.copy(color = Color.White),
+        cursorBrush = SolidColor(Color.White),
+        keyboardOptions =
+            KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = ImeAction.Done,
+            ),
+        keyboardActions = KeyboardActions(onDone = { commit() }),
+        modifier =
+            modifier.focusRequester(focus).onFocusChanged {
+                if (it.isFocused) hadFocus = true else if (hadFocus) commit()
+            },
+    )
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    // Closing the folder mid-edit (a tap outside, back) keeps the name too.
+    DisposableEffect(Unit) { onDispose { if (editing) commit() } }
 }
 
 @Composable
