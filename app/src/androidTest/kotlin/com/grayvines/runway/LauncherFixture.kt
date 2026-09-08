@@ -461,6 +461,12 @@ open class LauncherFixture {
 }
 
 const val TIMEOUT_MS = 5_000L
+
+/**
+ * The stand-in app Gradle installs beside the launcher for these tests (the fixture module): the
+ * one app that can always be uninstalled, and always a web-search handler.
+ */
+const val FIXTURE_PACKAGE = "com.grayvines.runway.fixture"
 const val LONG_PRESS_MS = 1_000L
 /** Longer than the dwell that adds a page, in real time. */
 const val EDGE_ADD_MS = 2_500L

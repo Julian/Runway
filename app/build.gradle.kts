@@ -274,6 +274,8 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.room3.testing)
+    // Installed beside the launcher before the instrumented tests run.
+    androidTestUtil(project(mapOf("path" to ":fixture", "configuration" to "fixtureApk")))
 
     constraints {
         // Lifecycle pulls in kotlinx.serialization 1.7; Room's testing artifact reads the

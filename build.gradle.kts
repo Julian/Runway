@@ -31,7 +31,7 @@ spotless {
 }
 
 detekt {
-    source.setFrom("app/src", "baselineprofile/src")
+    source.setFrom("app/src", "baselineprofile/src", "fixture/src")
     config.setFrom("config/detekt/detekt.yml")
     buildUponDefaultConfig = true
     allRules = true

@@ -18,8 +18,8 @@ import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -55,7 +55,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun tappingTheSearchBarHandsOffToTheTargetApp() {
         val target = graph.searchTargets.resolve(null)
-        assumeTrue("no web-search handler installed", target != null)
+        assertNotNull(NO_HANDLER, target)
         compose.onNodeWithTag(SEARCH_BAR_TAG).performClick()
         assertTrue(
             "${target!!.label} did not come to the front",
@@ -70,7 +70,7 @@ class LauncherShellTest : LauncherFixture() {
         // A handler other than the automatic choice, or the setting changes nothing.
         val automatic = graph.searchTargets.resolve(null)?.packageName
         val picked = graph.searchTargets.handlers().firstOrNull { it.packageName != automatic }
-        assumeTrue("needs a second web-search handler to pick", picked != null)
+        assertNotNull(ONE_HANDLER, picked)
         picked!!
         runBlocking { graph.settings.update { it.copy(searchTarget = picked.packageName) } }
         compose.waitUntil(TIMEOUT_MS) {
@@ -84,16 +84,37 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun pickingASearchTargetInSettingsIsSaved() {
         val handlers = graph.searchTargets.handlers()
-        assumeTrue("needs two web-search handlers to pick between", handlers.size >= 2)
-        val current = graph.searchTargets.resolve(null)!!
-        val other = handlers.first { it.packageName != current.packageName }
+        val current = graph.searchTargets.resolve(null)
+        assertNotNull(NO_HANDLER, current)
+        val other = handlers.firstOrNull { it.packageName != current!!.packageName }
+        assertNotNull(ONE_HANDLER, other)
+        other!!
         icon(firstHomeApp).performClick()
-        // Nothing picked yet, so the dropdown button reads Automatic.
         assertTrue(
             "settings did not open",
-            device.wait(Until.hasObject(By.text("Automatic")), TIMEOUT_MS),
+            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
         )
-        device.findObject(By.text("Automatic")).click()
+        // Nothing picked yet, so the dropdown button reads Automatic. On a short screen the
+        // "Search with" row starts below the fold: swipe the page up, then let it draw (the
+        // Compose rule owns the frame clock, so nothing moves until the test idles).
+        val automatic = By.text("Automatic")
+        if (!device.hasObject(automatic)) {
+            device.findObject(By.scrollable(true))?.visibleBounds?.let { page ->
+                device.swipe(
+                    page.centerX(),
+                    page.bottom - SWIPE_INSET_PX,
+                    page.centerX(),
+                    page.top + SWIPE_INSET_PX,
+                    SWIPE_STEPS,
+                )
+            }
+            compose.waitForIdle()
+        }
+        assertTrue(
+            "no Automatic search target in settings",
+            device.wait(Until.hasObject(automatic), TIMEOUT_MS),
+        )
+        device.findObject(automatic).click()
         // The Compose rule owns the frame clock for every composition in the process, including
         // the settings screen: nothing there recomposes after a UiAutomator tap until it idles.
         compose.waitForIdle()
@@ -122,8 +143,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun searchBarShowsTheHandoffTarget() {
         val target = graph.searchTargets.resolve(null)
-        // Bare CI images may have no browser at all; that is not a launcher bug.
-        assumeTrue("no web-search handler installed", target != null)
+        assertNotNull(NO_HANDLER, target)
         compose
             .onNodeWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
             .assertIsDisplayed()
@@ -136,5 +156,14 @@ class LauncherShellTest : LauncherFixture() {
         val dock = icon(firstDockApp).fetchSemanticsNode().size
         assertEquals(grid, dock)
         assertTrue(grid.width > 0)
+    }
+
+    private companion object {
+        const val SWIPE_INSET_PX = 100
+        const val SWIPE_STEPS = 20
+        const val NO_HANDLER =
+            "no web-search handler: the fixture app is one, and Gradle installs it for the tests"
+        const val ONE_HANDLER =
+            "only one web-search handler: picking needs a browser on the image beside the fixture app"
     }
 }

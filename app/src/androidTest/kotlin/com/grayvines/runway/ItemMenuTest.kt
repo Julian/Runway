@@ -1,6 +1,5 @@
 package com.grayvines.runway
 
-import android.content.pm.ApplicationInfo
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
@@ -16,16 +15,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import java.util.regex.Pattern
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -99,16 +97,20 @@ class ItemMenuTest : LauncherFixture() {
 
     @Test
     fun uninstallAsksTheSystemToConfirm() {
-        // System apps cannot be uninstalled, so this needs a user-installed one in the first cell.
+        // System apps cannot be uninstalled: the fixture app goes in the first cell instead.
         val removable = runBlocking {
             graph.appRepository.apps.first { it.isNotEmpty() }
         }
-            .firstOrNull { it.isUserInstalled() && it.component.packageName != app.packageName }
-        assumeTrue("no user-installed app on this device", removable != null)
+            .firstOrNull { it.component.packageName == FIXTURE_PACKAGE }
+        assertNotNull(
+            "the fixture app is not installed; Gradle installs it for the tests",
+            removable,
+        )
+        removable!!
         runBlocking {
             graph.workspace.removeItem(placementOf(firstHomeApp)!!.id)
             graph.workspace.moveItem(
-                placementOf(removable!!.label)!!.id,
+                placementOf(removable.label)!!.id,
                 Container.HOME,
                 0,
                 0,
@@ -116,8 +118,8 @@ class ItemMenuTest : LauncherFixture() {
                 emptyMap(),
             )
         }
-        compose.waitUntil(TIMEOUT_MS) { homeCellOf(removable!!.label) == 0 to 0 }
-        longPress(removable!!.label)
+        compose.waitUntil(TIMEOUT_MS) { homeCellOf(removable.label) == 0 to 0 }
+        longPress(removable.label)
         release()
         menuRow("Uninstall").performClick()
         assertTrue(
@@ -128,10 +130,6 @@ class ItemMenuTest : LauncherFixture() {
         compose.waitUntil(TIMEOUT_MS) { icon(removable.label).isDisplayedOrFalse() }
         assertEquals(0 to 0, homeCellOf(removable.label)) // declined: still there
     }
-
-    private fun AppEntry.isUserInstalled() =
-        app.packageManager.getApplicationInfo(component.packageName, 0).flags and
-            ApplicationInfo.FLAG_SYSTEM == 0
 
     private fun longPress(label: String) {
         val start = icon(label).fetchSemanticsNode().boundsInRoot.center

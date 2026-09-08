@@ -24,6 +24,7 @@ ln -s "/Applications/Android Studio.app/Contents/jbr" ~/Library/Java/JavaVirtual
 Unit tests run on the host.
 Instrumented tests drive the real launcher on an emulator, and replace its layout.
 Gradle can create the emulators itself, from the devices declared in the build, which is what CI does.
+It also installs the `fixture` module's app beside the launcher first: a stand-in that can be uninstalled and takes a web search, so those paths are tested on every image.
 
 ```sh
 ./gradlew :app:testDebugUnitTest
