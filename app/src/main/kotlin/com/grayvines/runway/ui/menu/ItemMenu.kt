@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
@@ -68,14 +70,26 @@ class ItemMenuActions(
     val appInfo: () -> Unit,
     val uninstall: () -> Unit,
     val remove: () -> Unit,
+    /** A drawer app: a new drawer folder holding it. */
+    val newFolder: () -> Unit,
+    /** A drawer app: into the drawer folder of this id. */
+    val addToFolder: (folderId: Long) -> Unit,
+    /** A drawer folder: gone, its apps loose again. */
+    val deleteFolder: () -> Unit,
 )
 
 /**
  * A small menu beside a long-pressed cell, in root coordinates: below the cell, or above it when
- * there is no room below. A tap anywhere else dismisses it.
+ * there is no room below. A tap anywhere else dismisses it. What it offers depends on where the
+ * item lives; [drawerFolders] are what a drawer app can be added to.
  */
 @Composable
-fun ItemMenu(state: ItemMenuState, actions: ItemMenuActions, onDismiss: () -> Unit) {
+fun ItemMenu(
+    state: ItemMenuState,
+    actions: ItemMenuActions,
+    drawerFolders: List<HomeItem>,
+    onDismiss: () -> Unit,
+) {
     var room by remember { mutableStateOf(IntSize.Zero) }
     Box(Modifier.fillMaxSize().onSizeChanged { room = it }) {
         // A sibling, not a parent: a clickable parent would merge the menu's semantics into itself.
@@ -113,15 +127,41 @@ fun ItemMenu(state: ItemMenuState, actions: ItemMenuActions, onDismiss: () -> Un
             contentColor = Color.White,
             shadowElevation = 12.dp,
         ) {
-            Column(Modifier.padding(vertical = 6.dp)) {
-                state.item.app?.let { app ->
-                    Header(app, state.item.label)
-                    HorizontalDivider(color = Color.White.copy(alpha = DIVIDER_ALPHA))
-                    MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
-                    MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
+            Column(Modifier.padding(vertical = 6.dp)) { Rows(state, actions, drawerFolders) }
+        }
+    }
+}
+
+/** The rows for this item: an app's, a drawer folder's, or a home or dock placement's. */
+@Composable
+private fun Rows(state: ItemMenuState, actions: ItemMenuActions, drawerFolders: List<HomeItem>) {
+    val app = state.item.app
+    val inDrawer = state.container == Container.DRAWER
+    if (app != null) {
+        Header(app, state.item.label)
+        HorizontalDivider(color = Color.White.copy(alpha = DIVIDER_ALPHA))
+    }
+    when {
+        inDrawer && app != null -> {
+            MenuRow("New folder", Icons.Outlined.Add, actions.newFolder)
+            val targets = drawerFolders.mapNotNull { f -> f.folderId?.let { f.label to it } }
+            targets.forEach { (label, id) ->
+                MenuRow("Add to $label", Icons.AutoMirrored.Outlined.KeyboardArrowRight) {
+                    actions.addToFolder(id)
                 }
-                MenuRow("Remove", Icons.Outlined.Clear, actions.remove)
             }
+            MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
+            MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
+        }
+        inDrawer -> {
+            MenuRow("Delete folder", Icons.Outlined.Delete, actions.deleteFolder)
+        }
+        else -> {
+            if (app != null) {
+                MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
+                MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
+            }
+            MenuRow("Remove", Icons.Outlined.Clear, actions.remove)
         }
     }
 }

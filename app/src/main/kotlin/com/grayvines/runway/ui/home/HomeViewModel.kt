@@ -8,8 +8,10 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ContainerContent
 import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.FolderContent
+import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.foldInto
+import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
@@ -45,7 +47,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Every placed item on every page, home and dock. */
-fun HomeState.allItems(): List<HomeItem> = (homePages + dockPages).flatMap { it.items }
+fun HomeState.allItems(): List<HomeItem> =
+    (homePages + dockPages).flatMap { it.items } + drawerFolders
 
 /** A folder placement that is open, and the cell it opened out of. */
 data class OpenFolder(val itemId: Long, val from: Bounds)
@@ -63,6 +66,8 @@ data class HomeItem(
     /** For a folder: the apps in it that are available, in order. */
     val folder: List<AppEntry> = emptyList(),
     val folderId: Long? = null,
+    /** A drawer folder: it lives in the drawer, and its apps stay out of the drawer's grid. */
+    val inDrawer: Boolean = false,
 ) {
     val footprint: Footprint
         get() = Footprint(x, y, spanX, spanY)
@@ -83,8 +88,10 @@ data class HomeState(
     val homePages: List<HomePage> = emptyList(),
     val dockPages: List<HomePage> = emptyList(),
     val searchTarget: SearchTarget? = null,
-    /** Every launchable app, alphabetically: what the drawer shows. */
+    /** Every launchable app, alphabetically: what the drawer shows and searches. */
     val apps: List<AppEntry> = emptyList(),
+    /** The folders atop the drawer, by name. */
+    val drawerFolders: List<HomeItem> = emptyList(),
     val loaded: Boolean = false,
 )
 
@@ -216,6 +223,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.appRepository.apps,
                 graph.workspace.observeFolders(),
                 searchTarget,
+                graph.workspace.observeDrawerPlacements(),
             ) { flows ->
                 @Suppress("UNCHECKED_CAST") val settings = flows[0] as Settings
                 @Suppress("UNCHECKED_CAST") val home = flows[1] as ContainerContent
@@ -223,12 +231,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 @Suppress("UNCHECKED_CAST") val apps = flows[3] as List<AppEntry>
                 @Suppress("UNCHECKED_CAST") val folders = flows[4] as List<FolderContent>
                 val target = flows[5] as SearchTarget?
+                @Suppress("UNCHECKED_CAST") val drawer = flows[6] as List<ItemEntity>
                 val byKey = apps.associateBy { it.key }
                 val byFolder = folders.associateBy { it.id }
                 HomeState(
                     settings = settings,
                     homePages = home.toHomePages(byKey, byFolder),
                     dockPages = dock.toHomePages(byKey, byFolder),
+                    drawerFolders = drawer.toDrawerFolders(byKey, byFolder),
                     searchTarget = target,
                     apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
                     // Not before the app list: with it empty every icon would be hidden and
@@ -277,6 +287,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
      * closes under it, and the drop places it.
      */
     fun startDragOfApp(app: AppEntry, fromFolder: Long?, pointer: Point, grab: Point) {
+        itemMenu.dismiss()
         closeDrawer()
         closeFolder()
         val source =

@@ -13,7 +13,7 @@ sealed interface Dropped {
     data class App(val ref: AppRef) : Dropped
 }
 
-private const val NEW_FOLDER_NAME = "Folder"
+internal const val NEW_FOLDER_NAME = "Folder"
 
 fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
     combine(dao.observeFolders(), dao.observeFolderApps()) { folders, apps ->
@@ -125,7 +125,7 @@ private suspend fun WorkspaceDao.take(dropped: Dropped, notOnto: ItemEntity): Ap
     return app?.takeIf { it != notOnto.appRef() }
 }
 
-private suspend fun WorkspaceDao.addToFolder(folderId: Long, app: AppRef) {
+internal suspend fun WorkspaceDao.addToFolder(folderId: Long, app: AppRef) {
     val position = nextFolderPosition(folderId)
     insertFolderApp(FolderAppEntity(folderId, app.component, app.profile, position))
 }

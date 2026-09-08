@@ -136,7 +136,11 @@ fun FolderSheet(
                             app,
                             iconSize,
                             onClick = { actions.launch(app) },
-                            drag = folder.folderId?.let { drag?.handlersForFolder(app, it) },
+                            drag =
+                                drag?.handlersForFolder(
+                                    app,
+                                    leaving = folder.folderId.takeUnless { folder.inDrawer },
+                                ),
                         )
                     }
                 }

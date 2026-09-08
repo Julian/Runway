@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
@@ -501,13 +500,6 @@ class DrawerTest : LauncherFixture() {
         }
     }
 
-    private fun openDrawer() {
-        compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
-        }
-    }
-
     /** With the keyboard up the first back only hides that, as in any app; then back closes. */
     private fun closeDrawerWithBack() {
         device.pressBack()
@@ -527,9 +519,6 @@ class DrawerTest : LauncherFixture() {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
         }
     }
-
-    private fun drawerApp(label: String) =
-        compose.onNode(hasTestTag(DRAWER_ITEM_TAG) and hasContentDescription(label))
 
     private companion object {
         const val PULL_STEPS = 10

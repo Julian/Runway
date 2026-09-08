@@ -218,6 +218,31 @@ class WorkspaceRepositoryTest {
             )
         }
 
+    @Test
+    fun `a drawer folder is a folder placed in the drawer, and an app is in one at most`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+            val a = AppRef("pkg1/.Main", 0)
+            val b = AppRef("pkg2/.Main", 0)
+
+            val first = repo.createDrawerFolder(a)
+            assertEquals(listOf(first), repo.observeDrawerPlacements().first().map { it.folderId })
+            repo.addToDrawerFolder(first, b)
+            assertEquals(listOf(a, b), folderApps(first))
+
+            val second = repo.createDrawerFolder(b)
+            assertEquals(listOf(a), folderApps(first))
+            assertEquals(listOf(b), folderApps(second))
+
+            repo.addToDrawerFolder(second, a) // empties the first, which goes
+            assertEquals(listOf(second), repo.observeDrawerPlacements().first().map { it.folderId })
+            assertEquals(listOf(b, a), folderApps(second))
+
+            repo.deleteFolder(second)
+            assertTrue(repo.observeFolders().first().isEmpty())
+            assertTrue(repo.observeDrawerPlacements().first().isEmpty())
+        }
+
     private suspend fun folderApps(folderId: Long) =
         repo.observeFolders().first().single { it.id == folderId }.apps
 

@@ -3,6 +3,7 @@ package com.grayvines.runway.ui.home
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
@@ -59,18 +60,28 @@ class DragSession(
 
     fun cancel() = onCancel()
 
-    /** Drawer apps have no menu on hold; moving after the hold pulls a new placement out. */
+    /** A drawer app: a hold shows its menu; moving after the hold pulls a new placement out. */
     fun handlersForDrawer(app: AppEntry) =
         DragHandlers(
-            onHold = {},
+            onHold = { cell -> onHold(app.asItem(), Container.DRAWER, 0, cell) },
             onStart = { pointer, grab -> onStartApp(app, null, pointer, grab) },
         )
 
-    /** Likewise for an app in an open folder, which it leaves when the drop lands. */
-    fun handlersForFolder(app: AppEntry, folderId: Long) =
+    /** A drawer folder: a hold shows its menu. Dragging one onto a page is not yet a thing. */
+    fun handlersForDrawerFolder(folder: HomeItem) =
+        DragHandlers(
+            onHold = { cell -> onHold(folder, Container.DRAWER, 0, cell) },
+            onStart = { _, _ -> },
+        )
+
+    /**
+     * An app in an open folder, which it leaves when the drop lands if [leaving] names the folder;
+     * out of a drawer folder it is copied, and stays.
+     */
+    fun handlersForFolder(app: AppEntry, leaving: Long?) =
         DragHandlers(
             onHold = {},
-            onStart = { pointer, grab -> onStartApp(app, folderId, pointer, grab) },
+            onStart = { pointer, grab -> onStartApp(app, leaving, pointer, grab) },
         )
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
@@ -79,3 +90,6 @@ class DragSession(
             onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
         )
 }
+
+/** A drawer app as the menu sees it: no placement of its own. */
+internal fun AppEntry.asItem() = HomeItem(0, ItemKind.APP, 0, 0, 1, 1, label, this)

@@ -3,9 +3,6 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -131,23 +128,13 @@ class ItemMenuTest : LauncherFixture() {
         assertEquals(0 to 0, homeCellOf(removable.label)) // declined: still there
     }
 
-    private fun longPress(label: String) {
-        val start = icon(label).fetchSemanticsNode().boundsInRoot.center
-        compose.onRoot().performTouchInput { down(start) }
-        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
-        }
-    }
+    private fun longPress(label: String) = hold(icon(label))
 
     private fun awaitMenuGone() {
         waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isEmpty()
         }
     }
-
-    private fun menuRow(text: String) =
-        compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)))
 
     private companion object {
         val SETTINGS_PKG: Pattern = Pattern.compile("com\\.android\\.settings")

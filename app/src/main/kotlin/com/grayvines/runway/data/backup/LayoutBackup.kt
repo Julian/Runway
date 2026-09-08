@@ -15,12 +15,18 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout {
     val pages = dao.allPages()
     val folderApps = dao.folderApps().groupBy { it.folderId }
     val folders = dao.folders().associateBy { it.id }
-    val placements = dao.items().mapNotNull { it.placement(folders, folderApps) }
+    val items = dao.items()
+    val placements = items.mapNotNull { it.placement(folders, folderApps) }
+    val drawerFolders =
+        items
+            .filter { it.container == Container.DRAWER }
+            .mapNotNull { item -> item.folderId?.let { folders[it] }?.backup(folderApps) }
     return Layout(
         homePages = pages.count { it.container == Container.HOME },
         dockPages = pages.count { it.container == Container.DOCK },
         placements =
             placements.sortedWith(compareBy({ it.container }, { it.page }, { it.y }, { it.x })),
+        drawerFolders = drawerFolders.sortedBy { it.name },
     )
 }
 
@@ -84,6 +90,23 @@ suspend fun WorkspaceRepository.restoreLayout(layout: Layout, installed: Set<App
                     skipped++
                 }
             }
+        }
+        for (folder in layout.drawerFolders) {
+            val apps = folder.apps.mapNotNull(match::find)
+            skipped += folder.apps.size - apps.size
+            if (apps.isEmpty()) continue
+            val folderId = dao.insertFolder(FolderEntity(name = folder.name))
+            apps.forEachIndexed { i, ref ->
+                dao.insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
+            }
+            dao.insertItem(
+                ItemEntity(
+                    kind = ItemKind.FOLDER,
+                    container = Container.DRAWER,
+                    folderId = folderId,
+                )
+            )
+            placed++
         }
         Restored(placed, skipped)
     }

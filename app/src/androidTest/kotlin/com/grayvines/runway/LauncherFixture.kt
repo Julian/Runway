@@ -8,14 +8,17 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -28,11 +31,14 @@ import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
+import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.ICON_INSET
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
+import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -110,6 +116,30 @@ open class LauncherFixture {
             throw AssertionError("the launcher never got window focus; ${windowFocus()}", e)
         }
     }
+
+    /** Swipes the pages up and waits for the drawer. */
+    protected fun openDrawer() {
+        compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    protected fun drawerApp(label: String) =
+        compose.onNode(hasTestTag(DRAWER_ITEM_TAG) and hasContentDescription(label))
+
+    /** A long press on [node] without moving: the menu for it comes up. */
+    protected fun hold(node: SemanticsNodeInteraction) {
+        val start = node.fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    protected fun menuRow(text: String) =
+        compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)))
 
     /** The window manager's word on what has focus, for a failure message. */
     private fun windowFocus(): String =

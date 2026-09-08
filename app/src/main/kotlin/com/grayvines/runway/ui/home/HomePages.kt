@@ -37,6 +37,30 @@ private fun ItemEntity.placed(drawn: Boolean): Placed? {
     )
 }
 
+/** The drawer's folders as tiles, by name; a placement whose folder is gone is nothing. */
+internal fun List<ItemEntity>.toDrawerFolders(
+    apps: Map<String, AppEntry>,
+    folders: Map<Long, FolderContent>,
+): List<HomeItem> = mapNotNull { item ->
+    item.folderId?.let { folders[it] }?.tile(item.id, apps)
+}
+    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+
+private fun FolderContent.tile(placementId: Long, apps: Map<String, AppEntry>) =
+    HomeItem(
+        id = placementId,
+        kind = ItemKind.FOLDER,
+        x = 0,
+        y = 0,
+        spanX = 1,
+        spanY = 1,
+        label = name,
+        app = null,
+        folder = this.apps.mapNotNull { apps["${it.profile}/${it.component}"] },
+        folderId = id,
+        inDrawer = true,
+    )
+
 /** Null when the item has no cell or its app is absent; those are not drawn. */
 private fun ItemEntity.toHomeItem(
     apps: Map<String, AppEntry>,

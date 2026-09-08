@@ -8,7 +8,9 @@ import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.RunwayDatabase
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.autoFill
+import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.foldInto
+import com.grayvines.runway.data.observeDrawerPlacements
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -91,6 +93,19 @@ class LayoutBackupTest {
         )
         assertEquals(listOf(0), repo.observe(Container.HOME).first().pages.map { it.index })
         assertEquals(listOf(0), repo.observe(Container.DOCK).first().pages.map { it.index })
+    }
+
+    @Test
+    fun `drawer folders travel too`() = runTest {
+        seed()
+        repo.createDrawerFolder(app(5))
+        val layout = repo.layoutBackup()
+        assertEquals(listOf(Folder("Folder", listOf(app(5)))), layout.drawerFolders)
+
+        repo.restoreLayout(layout, apps.toSet())
+
+        assertEquals(layout, repo.layoutBackup())
+        assertEquals(1, repo.observeDrawerPlacements().first().size)
     }
 
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()

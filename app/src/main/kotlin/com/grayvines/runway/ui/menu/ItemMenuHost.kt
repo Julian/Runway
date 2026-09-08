@@ -4,6 +4,10 @@ import android.util.Log
 import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.addToDrawerFolder
+import com.grayvines.runway.data.createDrawerFolder
+import com.grayvines.runway.data.deleteFolder
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.HomeItem
 import kotlinx.coroutines.CoroutineScope
@@ -28,15 +32,22 @@ class ItemMenuHost(private val graph: AppGraph, private val scope: CoroutineScop
         ItemMenuActions(
             appInfo = { withItem { it.app?.let(graph.appRepository::showAppInfo) } },
             uninstall = { withItem { it.app?.let(graph.appRepository::uninstall) } },
-            remove = {
+            remove = { withItem { item -> write("remove the item") { removeItem(item.id) } } },
+            newFolder = {
                 withItem { item ->
-                    scope.launch {
-                        try {
-                            graph.workspace.removeItem(item.id)
-                        } catch (e: SQLiteException) {
-                            Log.e(TAG, "could not remove the item", e)
-                        }
+                    item.app?.let { app -> write("make a folder") { createDrawerFolder(app.ref) } }
+                }
+            },
+            addToFolder = { folderId ->
+                withItem { item ->
+                    item.app?.let { app ->
+                        write("add to the folder") { addToDrawerFolder(folderId, app.ref) }
                     }
+                }
+            },
+            deleteFolder = {
+                withItem { item ->
+                    item.folderId?.let { id -> write("delete the folder") { deleteFolder(id) } }
                 }
             },
         )
@@ -47,6 +58,17 @@ class ItemMenuHost(private val graph: AppGraph, private val scope: CoroutineScop
 
     fun dismiss() {
         _state.value = null
+    }
+
+    /** A layout write off the main thread; a failure is logged, and the launcher stays up. */
+    private fun write(what: String, block: suspend WorkspaceRepository.() -> Unit) {
+        scope.launch {
+            try {
+                graph.workspace.block()
+            } catch (e: SQLiteException) {
+                Log.e(TAG, "could not $what", e)
+            }
+        }
     }
 
     private inline fun withItem(block: (HomeItem) -> Unit) {

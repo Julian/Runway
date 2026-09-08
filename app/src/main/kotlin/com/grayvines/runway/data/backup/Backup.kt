@@ -56,6 +56,8 @@ data class Layout(
     @SerialName("home_pages") val homePages: Int,
     @SerialName("dock_pages") val dockPages: Int,
     val placements: List<Placement>,
+    /** The folders atop the drawer, which have no cell. */
+    @SerialName("drawer_folders") val drawerFolders: List<Folder> = emptyList(),
 )
 
 /** One cell's content: an [app], or a [folder] of apps. */

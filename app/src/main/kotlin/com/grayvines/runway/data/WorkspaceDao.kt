@@ -84,6 +84,16 @@ interface WorkspaceDao {
     )
     suspend fun removeFromFolder(folderId: Long, component: String, profile: Long)
 
+    /** An app is in at most one drawer folder: this takes it out of whichever it is in. */
+    @Query(
+        "DELETE FROM folder_apps WHERE component = :component AND profile = :profile " +
+            "AND folder_id IN (SELECT folder_id FROM items WHERE container = 'DRAWER')"
+    )
+    suspend fun leaveDrawerFolders(component: String, profile: Long)
+
+    /** The folder, its apps and (by cascade) every placement of it. */
+    @Query("DELETE FROM folders WHERE id = :id") suspend fun deleteFolder(id: Long)
+
     /** A folder with nothing in it is gone, and (by cascade) so is every placement of it. */
     @Query("DELETE FROM folders WHERE id NOT IN (SELECT DISTINCT folder_id FROM folder_apps)")
     suspend fun deleteEmptyFolders()

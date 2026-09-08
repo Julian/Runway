@@ -117,25 +117,23 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
-        openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
-        itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
-        AppDrawer(
-            shown = drawer.motion.shown,
+        DrawerOverlay(
+            state = state,
+            drawer = drawer,
             open = drawerOpen,
-            apps = state.apps,
             query = drawerQuery,
-            keyboard = settings.drawerKeyboard,
-            index = settings.drawerIndex,
-            columns = settings.drawerColumnsOrHome,
             iconSize = iconSize,
-            labels = settings.drawerLabels,
             insets = insets,
-            onPull = drawer.motion::dragBy,
-            onPullEnd = drawer.release,
-            onLaunch = onLaunchApp,
-            onClose = drawerActions.close,
+            actions = drawerActions,
             drag = drag,
+            onLaunchApp = onLaunchApp,
+            onOpenFolder = onLaunch,
         )
+        // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
+        openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
+        itemMenu?.let {
+            ItemMenu(it, itemMenuActions, state.drawerFolders, onDismiss = onDismissItemMenu)
+        }
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
@@ -247,6 +245,43 @@ private fun Modifier.dragTracking(drag: DragSession): Modifier {
     return this.then(remember { Modifier.tracksDrag { current.value } })
 }
 
+/** The drawer over the pages, with what it lists and what it can do. */
+@Composable
+@Suppress("LongParameterList") // the drawer's inputs, passed once
+private fun DrawerOverlay(
+    state: HomeState,
+    drawer: DrawerControls,
+    open: Boolean,
+    query: DrawerQuery,
+    iconSize: Dp,
+    insets: PaddingValues,
+    actions: DrawerActions,
+    drag: DragSession,
+    onLaunchApp: (AppEntry) -> Unit,
+    onOpenFolder: (HomeItem, Bounds) -> Unit,
+) {
+    val settings = state.settings
+    AppDrawer(
+        shown = drawer.motion.shown,
+        open = open,
+        apps = state.apps,
+        folders = state.drawerFolders,
+        query = query,
+        keyboard = settings.drawerKeyboard,
+        index = settings.drawerIndex,
+        columns = settings.drawerColumnsOrHome,
+        iconSize = iconSize,
+        labels = settings.drawerLabels,
+        insets = insets,
+        onPull = drawer.motion::dragBy,
+        onPullEnd = drawer.release,
+        onLaunch = onLaunchApp,
+        onOpenFolder = onOpenFolder,
+        onClose = actions.close,
+        drag = drag,
+    )
+}
+
 /** The open folder's sheet, for as long as the folder's placement exists. */
 @Composable
 private fun OpenFolder(
@@ -310,5 +345,5 @@ private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
     }
 
 internal fun HomeState.item(id: Long?): HomeItem? = id?.let {
-    (homePages + dockPages).flatMap { p -> p.items }.firstOrNull { it.id == id }
+    allItems().firstOrNull { it.id == id }
 }
