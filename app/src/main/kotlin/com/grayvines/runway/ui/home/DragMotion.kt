@@ -31,6 +31,4 @@ internal object DragMotion {
 
     /** Landing does not bounce. */
     val settle = spring<Float>(stiffness = Spring.StiffnessMediumLow)
-
-    fun lerp(from: Float, to: Float, t: Float) = from + (to - from) * t
 }

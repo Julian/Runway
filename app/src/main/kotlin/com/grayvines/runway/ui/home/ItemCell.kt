@@ -9,7 +9,6 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,7 +24,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,8 +42,6 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.ItemKind
@@ -67,8 +63,6 @@ private const val RECEIVING_SCALE = 0.55f
 private const val HINT_MS = 150
 
 const val FOLD_HINT_TAG = "fold-hint"
-
-/** Icons shrink a little under a finger, whether or not a drag follows. */
 
 /** How long a finger must rest on an icon before it lifts; longer than the platform default. */
 private const val LIFT_HOLD_MS = 550L
@@ -95,9 +89,7 @@ fun ItemCell(
     lifted: Boolean = false,
     receiving: Boolean = false,
 ) {
-    // The gesture coroutine outlives recompositions: both of these must always be current.
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val handlers by rememberUpdatedState(drag)
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val pressScale by
@@ -110,7 +102,9 @@ fun ItemCell(
             label = "press",
         )
     CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        Column(
+        AppTile(
+            item.label,
+            labelled = labels && !lifted,
             modifier =
                 modifier
                     .fillMaxSize()
@@ -118,8 +112,7 @@ fun ItemCell(
                     .clickable(interactionSource = interactions, indication = null) {
                         onClick(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
                     }
-                    .dragAfterLongPress(item.id, { coords }, { handlers }),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                    .liftable(item.id, drag),
         ) {
             // Invisible while being dragged: removing the cell would cancel its own gesture.
             Box(
@@ -133,17 +126,6 @@ fun ItemCell(
                         scaleX = pressScale
                         scaleY = pressScale
                     },
-                )
-            }
-            if (labels && !lifted) {
-                Text(
-                    text = item.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
                 )
             }
         }

@@ -36,7 +36,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,21 +51,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
-import com.grayvines.runway.ui.home.AppIcon
+import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
-import com.grayvines.runway.ui.home.dragAfterLongPress
+import com.grayvines.runway.ui.home.liftable
 import kotlinx.coroutines.launch
 
 const val DRAWER_TAG = "drawer"
@@ -292,32 +287,15 @@ private fun DrawerApp(
     onClick: () -> Unit,
     drag: DragHandlers?,
 ) {
-    // The gesture coroutine outlives recompositions: both of these must always be current.
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val handlers by rememberUpdatedState(drag)
-    Column(
-        modifier =
-            Modifier.fillMaxWidth()
-                .onGloballyPositioned { coords = it }
-                .clickable(onClick = onClick)
-                .dragAfterLongPress(app.key, { coords }, { handlers })
-                .padding(vertical = 8.dp)
-                .testTag(DRAWER_ITEM_TAG),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        AppIcon(app, Modifier.size(iconSize))
-        if (labels) {
-            Text(
-                text = app.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
-            )
-        }
-    }
+    AppTile(
+        app,
+        iconSize,
+        labels,
+        Modifier.clickable(onClick = onClick)
+            .liftable(app.key, drag)
+            .padding(vertical = 8.dp)
+            .testTag(DRAWER_ITEM_TAG),
+    )
 }
 
 /**

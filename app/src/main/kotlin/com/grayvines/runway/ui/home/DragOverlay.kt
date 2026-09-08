@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.util.lerp
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 
@@ -60,8 +61,7 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
                 cell,
                 iconSize,
                 {
-                    DragMotion.lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift()) *
-                        folding
+                    lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift()) * folding
                 },
             )
         }
@@ -103,10 +103,10 @@ private fun Settle(
         if (target == null) {
             from
         } else {
-            Point(DragMotion.lerp(from.x, target.x, t), DragMotion.lerp(from.y, target.y, t))
+            Point(lerp(from.x, target.x, t), lerp(from.y, target.y, t))
         }
     val at = Point(centre.x - half.x, centre.y - half.y)
-    val scale = DragMotion.lerp(DragMotion.LIFTED_SCALE, 1f, t)
+    val scale = lerp(DragMotion.LIFTED_SCALE, 1f, t)
     OverlayCell(item, { at }, cell, iconSize) { scale }
 }
 

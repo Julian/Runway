@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,14 +34,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
-import com.grayvines.runway.ui.home.AppIcon
+import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.HomeItem
 
 const val FOLDER_TAG = "folder"
@@ -150,8 +149,6 @@ private fun Modifier.growingFrom(
     }
 }
 
-private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
-
 /** Opens on arrival; closing runs the motion back before telling [onClose]. */
 private class SheetMotion(val progress: Float, val close: () -> Unit)
 
@@ -173,22 +170,10 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
 
 @Composable
 private fun FolderApp(app: AppEntry, iconSize: Dp, onClick: () -> Unit) {
-    Column(
-        modifier =
-            Modifier.fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(vertical = 8.dp)
-                .testTag(FOLDER_ITEM_TAG),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        AppIcon(app, Modifier.size(iconSize))
-        Text(
-            text = app.label,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 2.dp, end = 2.dp),
-        )
-    }
+    AppTile(
+        app,
+        iconSize,
+        labelled = true,
+        Modifier.clickable(onClick = onClick).padding(vertical = 8.dp).testTag(FOLDER_ITEM_TAG),
+    )
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import androidx.compose.ui.util.lerp
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
@@ -292,7 +293,7 @@ private fun liftProgress(drag: DragSession): State<Float> {
 
 /** Pulled back by [lift] (0 at rest, 1 fully lifted) behind a faint rounded border. */
 private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
-    val zoom = DragMotion.lerp(1f, DragMotion.ZOOM, lift())
+    val zoom = lerp(1f, DragMotion.ZOOM, lift())
     scaleX = zoom
     scaleY = zoom
 }
