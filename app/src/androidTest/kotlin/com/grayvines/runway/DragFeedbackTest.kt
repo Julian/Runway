@@ -145,7 +145,7 @@ class DragFeedbackTest : LauncherFixture() {
         holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
         // Once the neighbour has slid over for the hover (a rest on the real clock)...
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             val at = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
             grid.dockSlotAt(at) == settings.dockSlots - 2
         }
@@ -160,7 +160,7 @@ class DragFeedbackTest : LauncherFixture() {
         assertSettlesTowards(firstDockApp, grid.dockSlot(settings.dockSlots - 1))
         // And it stays there while the database catches up.
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots - 1 }
+        waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots - 1 }
         assertEquals(
             settings.dockSlots - 2,
             grid.dockSlotAt(icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center),
@@ -198,7 +198,7 @@ class DragFeedbackTest : LauncherFixture() {
         // Neighbours hold still until the finger has rested on the slot a moment (the
         // coordinator's unit test times that; here the rest runs on the real clock, so a slow
         // device may already be past it), then slide over while the finger is still down.
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
             grid.dockSlotAt(shown) == settings.dockSlots - 2
         }

@@ -115,7 +115,7 @@ class DrawerTest : LauncherFixture() {
             }
             cancel()
         }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             val drawer = compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()
             drawer == null || abs(drawer.boundsInRoot.top - root.top) < 1f
         }
@@ -124,7 +124,7 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun theHomeIntentClosesTheDrawerAndStaysOnTheCurrentPage() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
-        compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
         openDrawer()
         sendHomeIntent()
         awaitDrawerClosed()
@@ -155,7 +155,7 @@ class DrawerTest : LauncherFixture() {
                 ?.boundsInRoot
                 ?.top
         runCatching {
-            compose.waitUntil(TIMEOUT_MS) {
+            waitUntil(TIMEOUT_MS) {
                 drawerTop()?.let { abs(it - finger) < AT_FINGER_PX } ?: false
             }
         }
@@ -178,7 +178,7 @@ class DrawerTest : LauncherFixture() {
             }
             up()
         }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
                 abs(it.boundsInRoot.top - root.top) < 1f
             } ?: false
@@ -206,7 +206,7 @@ class DrawerTest : LauncherFixture() {
         runBlocking { graph.settings.update { it.copy(drawerSwipe = DrawerSwipe.HIGH) } }
         compose.waitForIdle()
         pull()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
                 abs(it.boundsInRoot.top - root.top) < 1f
             } ?: false
@@ -222,7 +222,7 @@ class DrawerTest : LauncherFixture() {
         dragOn(to = grid.homeCell(4, 4))
         awaitDrawerClosed() // it went as soon as the app lifted
         release()
-        compose.waitUntil(TIMEOUT_MS) { placementsOf(label).any { it.x == 4 && it.y == 4 } }
+        waitUntil(TIMEOUT_MS) { placementsOf(label).any { it.x == 4 && it.y == 4 } }
     }
 
     @Test
@@ -236,7 +236,7 @@ class DrawerTest : LauncherFixture() {
         dragOn(to = grid.dockSlot(0))
         release()
         awaitDrawerClosed()
-        compose.waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
+        waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
         assertEquals(listOf(firstDockApp, label), dockFolderAt(0))
         assertEquals(before, placementsOf(label).size) // in the folder, not on a cell of its own
     }
@@ -249,7 +249,7 @@ class DrawerTest : LauncherFixture() {
         compose.onRoot().performTouchInput { down(start) }
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
         compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose
                 .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
@@ -271,7 +271,7 @@ class DrawerTest : LauncherFixture() {
             }
             up()
         }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()?.let {
                 abs(it.boundsInRoot.top - root.top) < 1f
             } ?: false
@@ -281,7 +281,7 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun aSwipeUpFromTheSearchBarOpensTheDrawerToo() {
         compose.onNodeWithTag(SEARCH_BAR_TAG).performTouchInput { swipeUp() }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
@@ -291,7 +291,7 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         searchField().assertIsFocused() // the keyboard comes up with the drawer
         searchField().performTextInput(firstHomeApp)
-        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
         drawerApp(firstHomeApp).assertIsDisplayed()
     }
 
@@ -299,7 +299,7 @@ class DrawerTest : LauncherFixture() {
     fun enterInTheDrawerLaunchesTheMatchAndClosesTheDrawer() {
         openDrawer()
         searchField().performTextInput(firstHomeApp)
-        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
         searchField().performImeAction()
         assertTrue(
             "settings did not open",
@@ -313,11 +313,11 @@ class DrawerTest : LauncherFixture() {
     fun reopeningTheDrawerStartsWithAnEmptySearch() {
         openDrawer()
         searchField().performTextInput(firstHomeApp)
-        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
         sendHomeIntent()
         awaitDrawerClosed()
         openDrawer()
-        compose.waitUntil(TIMEOUT_MS) { drawerItems().size > 1 }
+        waitUntil(TIMEOUT_MS) { drawerItems().size > 1 }
     }
 
     @Test
@@ -342,7 +342,7 @@ class DrawerTest : LauncherFixture() {
         val target = labels.first { listOf(it).index { l -> l }.single().letter == letter }
         compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
         compose.onNode(hasContentDescription("Jump to $letter")).performTouchInput { click() }
-        compose.waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
         // At the top of the list, not merely somewhere on the screen; unless the list ran out
         // first, on a device with few apps, in which case its end is showing.
         val list = compose.onNodeWithTag(DRAWER_LIST_TAG).fetchSemanticsNode().boundsInRoot
@@ -361,7 +361,7 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
         searchField().performTextInput(firstHomeApp)
-        compose.waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
+        waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
         compose.onAllNodesWithTag(DRAWER_INDEX_TAG).assertCountEquals(0)
     }
 
@@ -382,7 +382,7 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         assertEquals(settings.columns, drawerRowLength())
         runBlocking { graph.settings.update { it.copy(drawerColumns = DRAWER_COLUMNS) } }
-        compose.waitUntil(TIMEOUT_MS) { drawerRowLength() == DRAWER_COLUMNS }
+        waitUntil(TIMEOUT_MS) { drawerRowLength() == DRAWER_COLUMNS }
         // Six across a 4-column screen: the icons shrink to fit rather than overlap.
         val first = drawerItems().first().boundsInRoot
         val second = drawerItems()[1].boundsInRoot
@@ -503,7 +503,7 @@ class DrawerTest : LauncherFixture() {
 
     private fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
@@ -516,14 +516,14 @@ class DrawerTest : LauncherFixture() {
     }
 
     private fun drawerGoneWithin(ms: Long) = runCatching {
-        compose.waitUntil(ms) {
+        waitUntil(ms) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
         }
     }
         .isSuccess
 
     private fun awaitDrawerClosed() {
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
         }
     }

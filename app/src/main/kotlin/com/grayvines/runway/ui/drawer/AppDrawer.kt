@@ -2,7 +2,6 @@ package com.grayvines.runway.ui.drawer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -291,10 +290,8 @@ private fun DrawerApp(
         app,
         iconSize,
         labels,
-        Modifier.clickable(onClick = onClick)
-            .liftable(app.key, drag)
-            .padding(vertical = 8.dp)
-            .testTag(DRAWER_ITEM_TAG),
+        onClick,
+        Modifier.liftable(app.key, drag).padding(vertical = 8.dp).testTag(DRAWER_ITEM_TAG),
     )
 }
 

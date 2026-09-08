@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
@@ -102,15 +103,35 @@ open class LauncherFixture {
         awaitGrid(settings.columns, settings.pageRows)
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
-        compose.waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
+        try {
+            waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
+        } catch (e: ComposeTimeoutException) {
+            // Whatever holds focus instead is the clue; the exception alone says nothing.
+            throw AssertionError("the launcher never got window focus; ${windowFocus()}", e)
+        }
     }
+
+    /** The window manager's word on what has focus, for a failure message. */
+    private fun windowFocus(): String =
+        device
+            .executeShellCommand("dumpsys window")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { line ->
+                line.startsWith("mCurrentFocus") ||
+                    line.startsWith("mFocusedApp") ||
+                    line.startsWith("mFocusedWindow") ||
+                    line.contains("KeyguardShowing", ignoreCase = true)
+            }
+            .joinToString(" | ")
+            .ifEmpty { "dumpsys window said nothing about focus" }
 
     /**
      * Waits until the first home icon is the size the grid [columns] × [pageRows] gives it: the
      * sign that settings and layout have both reached the screen.
      */
     private fun awaitGrid(columns: Int, pageRows: Int) {
-        compose.waitUntil(LONG_TIMEOUT_MS) {
+        waitUntil(LONG_TIMEOUT_MS) {
             val page = compose.onAllNodesWithTag(WORKSPACE_TAG).fetchSemanticsNodes().firstOrNull()
             val icon =
                 icon(firstHomeApp).let { runCatching { it.fetchSemanticsNode() }.getOrNull() }
@@ -319,8 +340,24 @@ open class LauncherFixture {
     }
 
     /** Waits until no node carries [tag]. */
+    /**
+     * [compose]'s `waitUntil`, except that a moment with no composition at all counts as "not yet"
+     * rather than an error. The previous test's teardown starts a bootstrap activity of the test
+     * package; on a slow device it can land on top of this test's launcher seconds later, and the
+     * launcher is finished and recreated under the test. Its state comes back with it.
+     */
+    protected fun waitUntil(timeoutMillis: Long = TIMEOUT_MS, condition: () -> Boolean) {
+        compose.waitUntil(timeoutMillis) {
+            try {
+                condition()
+            } catch (e: IllegalStateException) {
+                if (e.message?.startsWith(NO_COMPOSITION) == true) false else throw e
+            }
+        }
+    }
+
     protected fun awaitGone(tag: String) {
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
         }
     }
@@ -461,6 +498,9 @@ open class LauncherFixture {
 }
 
 const val TIMEOUT_MS = 5_000L
+
+/** How Compose's test rule words a moment with no composition anywhere in the process. */
+const val NO_COMPOSITION = "No compose hierarchies found"
 
 /**
  * The stand-in app Gradle installs beside the launcher for these tests (the fixture module): the

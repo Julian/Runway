@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,8 +36,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalViewConfiguration
-import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -63,9 +60,6 @@ private const val RECEIVING_SCALE = 0.55f
 private const val HINT_MS = 150
 
 const val FOLD_HINT_TAG = "fold-hint"
-
-/** How long a finger must rest on an icon before it lifts; longer than the platform default. */
-private const val LIFT_HOLD_MS = 550L
 
 /**
  * Long-press callbacks; positions are root pixels. [onHold] fires when the finger has rested long
@@ -101,33 +95,31 @@ fun ItemCell(
             },
             label = "press",
         )
-    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        AppTile(
-            item.label,
-            labelled = labels && !lifted,
-            modifier =
-                modifier
-                    .fillMaxSize()
-                    .onGloballyPositioned { coords = it }
-                    .clickable(interactionSource = interactions, indication = null) {
-                        onClick(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
-                    }
-                    .liftable(item.id, drag),
+    AppTile(
+        item.label,
+        labelled = labels && !lifted,
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onGloballyPositioned { coords = it }
+                .clickable(interactionSource = interactions, indication = null) {
+                    onClick(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
+                }
+                .liftable(item.id, drag),
+    ) {
+        // Invisible while being dragged: removing the cell would cancel its own gesture.
+        Box(
+            Modifier.weight(1f).fillMaxWidth().alpha(if (lifted) 0f else 1f),
+            contentAlignment = Alignment.Center,
         ) {
-            // Invisible while being dragged: removing the cell would cancel its own gesture.
-            Box(
-                Modifier.weight(1f).fillMaxWidth().alpha(if (lifted) 0f else 1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                FoldHint(receiving, Modifier.size(iconSize))
-                ItemIcon(
-                    item,
-                    Modifier.size(iconSize).graphicsLayer {
-                        scaleX = pressScale
-                        scaleY = pressScale
-                    },
-                )
-            }
+            FoldHint(receiving, Modifier.size(iconSize))
+            ItemIcon(
+                item,
+                Modifier.size(iconSize).graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                },
+            )
         }
     }
 }
@@ -196,18 +188,6 @@ internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Bo
         contentDescription = app.label.takeIf { described },
         modifier = modifier,
     )
-}
-
-/** The platform's touch settings with a longer long press: a lift is deliberate. */
-@Composable
-private fun rememberLiftConfiguration(): ViewConfiguration {
-    val viewConfiguration = LocalViewConfiguration.current
-    return remember(viewConfiguration) {
-        object : ViewConfiguration by viewConfiguration {
-            override val longPressTimeoutMillis: Long
-                get() = LIFT_HOLD_MS
-        }
-    }
 }
 
 @Composable

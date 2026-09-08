@@ -78,6 +78,12 @@ interface WorkspaceDao {
     @Query("DELETE FROM folder_apps WHERE component = :component AND profile = :profile")
     suspend fun deleteFolderApp(component: String, profile: Long)
 
+    @Query(
+        "DELETE FROM folder_apps WHERE folder_id = :folderId " +
+            "AND component = :component AND profile = :profile"
+    )
+    suspend fun removeFromFolder(folderId: Long, component: String, profile: Long)
+
     /** A folder with nothing in it is gone, and (by cascade) so is every placement of it. */
     @Query("DELETE FROM folders WHERE id NOT IN (SELECT DISTINCT folder_id FROM folder_apps)")
     suspend fun deleteEmptyFolders()

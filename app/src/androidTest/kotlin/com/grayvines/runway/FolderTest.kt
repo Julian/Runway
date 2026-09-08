@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -45,7 +46,7 @@ class FolderTest : LauncherFixture() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
         assertEquals(listOf(neighbour, firstHomeApp), folderAt(1, 0))
         assertNull("the dropped icon's own placement is gone", placementOf(firstHomeApp))
         compose.onNodeWithContentDescription("Folder", useUnmergedTree = true).assertIsDisplayed()
@@ -56,23 +57,23 @@ class FolderTest : LauncherFixture() {
     fun hoveringOverAnIconShowsItTurningIntoAFolder() {
         val grid = useGrid(columns = 5, rows = 7)
         holdDrag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose
                 .onAllNodesWithTag(FOLD_HINT_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
         // And the lifted icon has shrunk, so the tile and the icon it would join stay in view.
-        compose.waitUntil(TIMEOUT_MS) { overlayWidth() < grid.cellWidth() * SHRUNK }
+        waitUntil(TIMEOUT_MS) { overlayWidth() < grid.cellWidth() * SHRUNK }
         // Off to the side, over an empty cell: the hint goes and the icon is lifted large again.
         dragOn(grid.homeCell(3, 3))
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose
                 .onAllNodesWithTag(FOLD_HINT_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
-        compose.waitUntil(TIMEOUT_MS) { overlayWidth() > grid.cellWidth() * SHRUNK }
+        waitUntil(TIMEOUT_MS) { overlayWidth() > grid.cellWidth() * SHRUNK }
         release()
     }
 
@@ -80,10 +81,10 @@ class FolderTest : LauncherFixture() {
     fun droppingAnIconOntoAFolderAddsItToTheFolder() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
         val third = labelAtHomeCell(2, 0)
         drag(from = third, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0)?.size == 3 }
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0)?.size == 3 }
         assertEquals(third, folderAt(1, 0)?.last())
         assertNull(placementOf(third))
     }
@@ -92,7 +93,7 @@ class FolderTest : LauncherFixture() {
     fun droppingAHomeIconOntoADockIconMakesAFolderInTheDock() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstHomeApp, to = grid.dockSlot(0))
-        compose.waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
+        waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
         assertEquals(listOf(firstDockApp, firstHomeApp), dockFolderAt(0))
         assertNull(placementOf(firstHomeApp))
     }
@@ -113,7 +114,7 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Tools")
         compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
-        compose.waitUntil(TIMEOUT_MS) { folderName() == "Tools" }
+        waitUntil(TIMEOUT_MS) { folderName() == "Tools" }
         compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Tools")
         compose.onRoot().performTouchInput { click(bottomCenter - Offset(0f, 20f)) }
         awaitFolderClosed()
@@ -126,11 +127,60 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(FOLDER_NAME_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Folder")
         assertEquals("Folder", folderName())
+    }
+
+    @Test
+    fun draggingAnAppOutOfAnOpenFolderPutsItInTheCellItIsDroppedOn() {
+        val neighbour = makeFolder()
+        val grid = useGrid(columns = 5, rows = 7)
+        liftFromFolder(firstHomeApp)
+        dragOn(to = grid.homeCell(0, 0)) // its old cell, empty since it folded away
+        awaitFolderClosed() // the sheet went as soon as the app lifted
+        release()
+        waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 0 to 0 }
+        assertEquals(listOf(neighbour), folderAt(1, 0))
+    }
+
+    @Test
+    fun draggingTheLastAppOutOfAFolderDissolvesIt() {
+        val neighbour = makeFolder()
+        val grid = useGrid(columns = 5, rows = 7)
+        liftFromFolder(firstHomeApp)
+        dragOn(to = grid.homeCell(0, 0))
+        release()
+        waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 0 to 0 }
+
+        tap(compose.onNodeWithContentDescription("Folder", useUnmergedTree = true))
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        val (x, y) = freeHomeCell(columns = 5, pageRows = 5)
+        liftFromFolder(neighbour)
+        dragOn(to = grid.homeCell(x, y))
+        release()
+        waitUntil(TIMEOUT_MS) { homeCellOf(neighbour) == x to y }
+        assertNull("the emptied folder is gone", folderAt(1, 0))
+        assertEquals(
+            emptyList<FolderContent>(),
+            runBlocking { graph.workspace.observeFolders().first() },
+        )
+    }
+
+    @Test
+    fun droppingAnAppBackOntoItsOwnFolderLeavesItThere() {
+        val neighbour = makeFolder()
+        val grid = useGrid(columns = 5, rows = 7)
+        liftFromFolder(firstHomeApp)
+        dragOn(to = grid.homeCell(1, 0))
+        release()
+        awaitGone(DRAG_OVERLAY_TAG)
+        assertEquals(listOf(neighbour, firstHomeApp), folderAt(1, 0))
+        assertNull(placementOf(firstHomeApp))
     }
 
     @Test
@@ -184,7 +234,7 @@ class FolderTest : LauncherFixture() {
     fun theFolderGrowsOutOfItsTileAndShrinksBackIntoIt() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
         val tile = grid.homeCell(1, 0)
         // Finger down with the clock running, up with it held: the tap lands on the up, and from
         // then on frames are stepped by hand so the motion can be watched.
@@ -233,12 +283,38 @@ class FolderTest : LauncherFixture() {
         val grid = useGrid(columns = 5, rows = 7)
         val neighbour = labelAtHomeCell(1, 0)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
-        compose.waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
         tap(compose.onNodeWithContentDescription("Folder", useUnmergedTree = true))
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         return neighbour
+    }
+
+    /** Long-presses [label] in the open folder and nudges it, so the drag has begun. */
+    private fun liftFromFolder(label: String) {
+        val start = folderApp(label).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
+        waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    /** The first cell of the first home page nothing sits on. */
+    private fun freeHomeCell(columns: Int, pageRows: Int): Pair<Int, Int> {
+        val taken = runBlocking {
+            graph.workspace.observe(Container.HOME).first().pages.first().items.map {
+                it.x to it.y
+            }
+        }
+        return (0 until pageRows)
+            .flatMap { y -> (0 until columns).map { x -> x to y } }
+            .first { it !in taken }
     }
 
     private fun folderName() = runBlocking {
@@ -249,7 +325,7 @@ class FolderTest : LauncherFixture() {
         compose.onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(label))
 
     private fun awaitFolderClosed() {
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty()
         }
         compose.onAllNodesWithTag(FOLDER_TAG).assertCountEquals(0)

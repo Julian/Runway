@@ -117,7 +117,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
-        openFolder?.let { OpenFolder(state, it, iconSize, folderActions) }
+        openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
         itemMenu?.let { ItemMenu(it, itemMenuActions, onDismiss = onDismissItemMenu) }
         AppDrawer(
             shown = drawer.motion.shown,
@@ -254,9 +254,10 @@ private fun OpenFolder(
     open: OpenFolder,
     iconSize: Dp,
     actions: FolderActions,
+    drag: DragSession,
 ) {
     val folder = state.item(open.itemId) ?: return
-    FolderSheet(folder, open.from, iconSize, actions)
+    FolderSheet(folder, open.from, iconSize, actions, drag)
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */

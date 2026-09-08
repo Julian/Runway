@@ -27,10 +27,10 @@ class PageFlipTest : LauncherFixture() {
         val onPageTwo = labelOnPage(1)
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
         // The dwell timer runs on real time, so wait rather than advance the test clock.
-        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
         compose.waitForIdle() // let the page scroll settle before dropping
         release()
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
     }
 
     @Test
@@ -40,14 +40,14 @@ class PageFlipTest : LauncherFixture() {
         val onLastPage = labelOnPage(pagesBefore - 1)
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row = 0))
         // Flips to the last page first, then after the longer hold a new page appears and shows.
-        compose.waitUntil(LONG_TIMEOUT_MS) {
+        waitUntil(LONG_TIMEOUT_MS) {
             runBlocking { graph.workspace.observe(Container.HOME).first().pages.size } ==
                 pagesBefore + 1
         }
-        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(onLastPage).isDisplayedOrFalse() }
+        waitUntil(LONG_TIMEOUT_MS) { !icon(onLastPage).isDisplayedOrFalse() }
         compose.waitForIdle()
         release()
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == pagesBefore }
+        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == pagesBefore }
     }
 
     @Test
@@ -56,11 +56,11 @@ class PageFlipTest : LauncherFixture() {
         val onPageTwo = labelOnPage(1)
         val row = settings.pageRows - 1
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row))
-        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
         compose.waitForIdle()
         release()
         assertSettlesTowards(firstHomeApp, grid.homeCell(settings.columns - 1, row))
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
     }
 
     @Test
@@ -68,10 +68,10 @@ class PageFlipTest : LauncherFixture() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         val onPageTwo = labelOnPage(1)
         holdDrag(from = firstDockApp, to = grid.rightEdge(row = settings.pageRows - 1))
-        compose.waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
         compose.waitForIdle()
         release()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             placementOf(firstDockApp)?.let { it.container == Container.HOME && it.pageIndex == 1 }
                 ?: false
         }
@@ -81,11 +81,11 @@ class PageFlipTest : LauncherFixture() {
     fun aLongHoldAtTheDocksEdgeAddsADockPageAndDropsThere() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
-        compose.waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
-        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
+        waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
+        waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
         compose.waitForIdle()
         release()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             placementOf(firstHomeApp)?.let { it.container == Container.DOCK && it.pageIndex == 1 }
                 ?: false
         }
@@ -97,23 +97,23 @@ class PageFlipTest : LauncherFixture() {
         // One spare slot on the first dock page, to come back to.
         val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
         runBlocking { graph.workspace.addPage(Container.DOCK, 1) }
-        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 2 }
+        waitUntil(TIMEOUT_MS) { dockPageCount() == 2 }
         // Put an icon on the second dock page, then lift it and hold at the dock's left edge.
         holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
-        compose.waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
+        waitUntil(LONG_TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() }
         compose.waitForIdle()
         release()
-        compose.waitUntil(LONG_TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+        waitUntil(LONG_TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
         holdDrag(from = firstHomeApp, to = grid.dockLeftEdge())
-        compose.waitUntil(LONG_TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
+        waitUntil(LONG_TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
         // Back on the first page: carry it to the spare slot, entering from inside the edge zone.
         dragOn(to = grid.dockSlot(settings.dockSlots) - Offset(grid.dockSlotWidth() / 3, 0f))
         release()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             placementOf(firstHomeApp)?.let { it.pageIndex == 0 && it.x == settings.dockSlots }
                 ?: false
         }
-        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 1 } // the emptied page is pruned
+        waitUntil(TIMEOUT_MS) { dockPageCount() == 1 } // the emptied page is pruned
     }
 
     @Test
@@ -137,11 +137,11 @@ class PageFlipTest : LauncherFixture() {
     fun aPageAddedDuringADragGoesAwayIfNothingLandsOnIt() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         holdDrag(from = firstHomeApp, to = grid.dockRightEdge())
-        compose.waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
+        waitUntil(LONG_TIMEOUT_MS) { dockPageCount() == 2 }
         // Change of mind: back to where it came from.
         dragOn(to = grid.homeCell(0, 0))
         release()
-        compose.waitUntil(TIMEOUT_MS) { dockPageCount() == 1 }
+        waitUntil(TIMEOUT_MS) { dockPageCount() == 1 }
         assertUnmoved(firstHomeApp)
     }
 
@@ -159,7 +159,7 @@ class PageFlipTest : LauncherFixture() {
         compose.waitForIdle()
         assertEquals(1, dockPageCount())
         release()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             placementOf(firstHomeApp)?.let {
                 it.container == Container.DOCK && it.pageIndex == 0 && it.x == settings.dockSlots
             } ?: false
@@ -182,7 +182,7 @@ class PageFlipTest : LauncherFixture() {
                 emptyMap(),
             )
         }
-        compose.waitUntil(TIMEOUT_MS) { placementOf(onPageTwo)?.pageIndex == 2 }
+        waitUntil(TIMEOUT_MS) { placementOf(onPageTwo)?.pageIndex == 2 }
         val onPageOne = labelOnPage(1)
         // Page 0's marker is a neighbour, not the dragged icon: its cell goes when the page does.
         val pages = listOf(labelAtHomeCell(1, 0), onPageOne, onPageTwo)

@@ -53,7 +53,10 @@ import androidx.compose.ui.util.lerp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.AppTile
+import com.grayvines.runway.ui.home.DragHandlers
+import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
+import com.grayvines.runway.ui.home.liftable
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -80,8 +83,8 @@ private val SHADOW = 16.dp
 /**
  * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
  * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; tapping the name edits it; a tap anywhere else, or back,
- * closes the folder.
+ * when closed. Tapping an app launches it; a long press lifts it out; tapping the name edits it; a
+ * tap anywhere else, or back, closes the folder.
  */
 @Composable
 fun FolderSheet(
@@ -89,6 +92,7 @@ fun FolderSheet(
     from: Bounds,
     iconSize: Dp,
     actions: FolderActions,
+    drag: DragSession?,
 ) {
     val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
@@ -128,7 +132,12 @@ fun FolderSheet(
                 FolderName(folder.label, actions.rename)
                 LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
                     items(folder.folder, key = { it.key }) { app ->
-                        FolderApp(app, iconSize, onClick = { actions.launch(app) })
+                        FolderApp(
+                            app,
+                            iconSize,
+                            onClick = { actions.launch(app) },
+                            drag = folder.folderId?.let { drag?.handlersForFolder(app, it) },
+                        )
                     }
                 }
             }
@@ -226,11 +235,12 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
 }
 
 @Composable
-private fun FolderApp(app: AppEntry, iconSize: Dp, onClick: () -> Unit) {
+private fun FolderApp(app: AppEntry, iconSize: Dp, onClick: () -> Unit, drag: DragHandlers?) {
     AppTile(
         app,
         iconSize,
         labelled = true,
-        Modifier.clickable(onClick = onClick).padding(vertical = 8.dp).testTag(FOLDER_ITEM_TAG),
+        onClick,
+        Modifier.liftable(app.key, drag).padding(vertical = 8.dp).testTag(FOLDER_ITEM_TAG),
     )
 }

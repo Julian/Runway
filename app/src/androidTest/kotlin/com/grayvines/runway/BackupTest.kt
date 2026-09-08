@@ -22,14 +22,14 @@ class BackupTest : LauncherFixture() {
         val allBefore = labels.sumOf { placementsOf(it).size }
         val columns = settings.columns + 1
         runBlocking { graph.settings.update { it.copy(columns = columns) } }
-        compose.waitUntil(TIMEOUT_MS) { currentColumns() == columns }
+        waitUntil(TIMEOUT_MS) { currentColumns() == columns }
         val backup = runBlocking { graph.backup.export() }
 
         runBlocking {
             graph.workspace.clear()
             graph.settings.update { Settings() }
         }
-        compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
 
         val installed = runBlocking {
             graph.appRepository.apps.first()
@@ -39,7 +39,7 @@ class BackupTest : LauncherFixture() {
 
         assertEquals(0, restored.skipped)
         assertEquals(allBefore, restored.placed)
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
         val after = placementsOf(firstHomeApp).single()
         assertEquals(
             Triple(before.container, before.pageIndex, before.x to before.y),

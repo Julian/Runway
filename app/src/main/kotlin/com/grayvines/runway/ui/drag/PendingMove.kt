@@ -21,4 +21,6 @@ data class PendingMove(
     val newApp: AppRef? = null,
     /** Set when the drop folds the app into the item of this id at the target cell. */
     val foldInto: Long? = null,
+    /** Set with [newApp] when the drop also takes the app out of this folder. */
+    val fromFolder: Long? = null,
 )

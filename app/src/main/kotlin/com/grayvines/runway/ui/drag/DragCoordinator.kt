@@ -162,7 +162,13 @@ class DragCoordinator(
             return
         }
         val pendingMove =
-            plan.asPendingMove(state.source.itemId).copy(from = from, newApp = state.source.newApp)
+            plan
+                .asPendingMove(state.source.itemId)
+                .copy(
+                    from = from,
+                    newApp = state.source.newApp,
+                    fromFolder = state.source.fromFolder,
+                )
         _pending.value = pendingMove
         scope.launch {
             try {

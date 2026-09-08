@@ -27,7 +27,7 @@ class DragSession(
     val onSettled: (itemId: Long) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
-    private val onStartFromDrawer: (AppEntry, Point, Point) -> Unit,
+    private val onStartApp: (AppEntry, fromFolder: Long?, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
@@ -63,7 +63,14 @@ class DragSession(
     fun handlersForDrawer(app: AppEntry) =
         DragHandlers(
             onHold = {},
-            onStart = { pointer, grab -> onStartFromDrawer(app, pointer, grab) },
+            onStart = { pointer, grab -> onStartApp(app, null, pointer, grab) },
+        )
+
+    /** Likewise for an app in an open folder, which it leaves when the drop lands. */
+    fun handlersForFolder(app: AppEntry, folderId: Long) =
+        DragHandlers(
+            onHold = {},
+            onStart = { pointer, grab -> onStartApp(app, folderId, pointer, grab) },
         )
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =

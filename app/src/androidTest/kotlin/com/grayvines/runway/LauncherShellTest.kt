@@ -40,16 +40,16 @@ class LauncherShellTest : LauncherFixture() {
     fun columnsSettingRelaysOutTheGridLive() {
         val before = icon(firstHomeApp).fetchSemanticsNode().size
         runBlocking { graph.settings.update { it.copy(columns = it.columns + 2) } }
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
     }
 
     @Test
     fun homeIntentReturnsToTheFirstPage() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeLeft() }
-        compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
 
         sendHomeIntent()
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
     @Test
@@ -62,7 +62,7 @@ class LauncherShellTest : LauncherFixture() {
             device.wait(Until.hasObject(By.pkg(target.packageName)), TIMEOUT_MS),
         )
         sendHomeIntent()
-        compose.waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
     @Test
@@ -73,7 +73,7 @@ class LauncherShellTest : LauncherFixture() {
         assertNotNull(ONE_HANDLER, picked)
         picked!!
         runBlocking { graph.settings.update { it.copy(searchTarget = picked.packageName) } }
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose
                 .onAllNodesWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
@@ -124,7 +124,7 @@ class LauncherShellTest : LauncherFixture() {
         )
         device.findObject(By.text(other.label)).click()
         compose.waitForIdle()
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             runBlocking { graph.settings.settings.first().searchTarget } == other.packageName
         }
         device.pressBack()

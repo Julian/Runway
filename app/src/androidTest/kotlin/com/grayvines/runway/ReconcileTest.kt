@@ -25,9 +25,9 @@ class ReconcileTest : LauncherFixture() {
                 settings.dockSlots,
             )
         }
-        compose.waitUntil(TIMEOUT_MS) { placed(ghost) }
+        waitUntil(TIMEOUT_MS) { placed(ghost) }
         graph.appRepository.refresh()
-        compose.waitUntil(TIMEOUT_MS) { !placed(ghost) }
+        waitUntil(TIMEOUT_MS) { !placed(ghost) }
     }
 
     private fun placed(ref: AppRef) = runBlocking {

@@ -32,13 +32,55 @@ fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
  * there takes the app in. A dropped placement is gone afterwards (its page is left for the drop to
  * prune). Anything else there, a dropped side that no longer exists, or an app dropped onto itself
  * (which only loses the extra placement) leaves the target as it was. True when the app went in.
+ *
+ * An app lifted [outOf] a folder leaves it as it goes in, and the folder goes too if that empties
+ * it; dropped back onto its own folder, it simply stays.
  */
-suspend fun WorkspaceRepository.foldInto(targetId: Long, dropped: Dropped): Boolean = write {
+suspend fun WorkspaceRepository.foldInto(
+    targetId: Long,
+    dropped: Dropped,
+    outOf: Long? = null,
+): Boolean = write {
     val target = dao.item(targetId)?.takeIf { it.folderId != null || it.appRef() != null }
     val app = target?.let { dao.take(dropped, notOnto = it) }
     val folderId = if (target != null && app != null) dao.folderOf(target) else null
-    if (folderId != null && app != null) dao.addToFolder(folderId, app)
+    if (folderId != null && app != null && folderId != outOf) {
+        dao.addToFolder(folderId, app)
+        if (outOf != null) dao.leave(outOf, app)
+    }
     folderId != null
+}
+
+/**
+ * Takes [app] out of the folder [folderId] and places it in a cell of its own; the folder goes,
+ * with its placement, if that empties it.
+ */
+suspend fun WorkspaceRepository.unfold(
+    folderId: Long,
+    app: AppRef,
+    container: Container,
+    page: Int,
+    x: Int,
+    y: Int,
+) = write {
+    dao.insertItem(
+        ItemEntity(
+            kind = ItemKind.APP,
+            container = container,
+            pageIndex = page,
+            x = x,
+            y = y,
+            component = app.component,
+            profile = app.profile,
+        )
+    )
+    dao.leave(folderId, app)
+}
+
+/** [app] leaves [folderId]; a folder left empty is gone, with every placement of it. */
+private suspend fun WorkspaceDao.leave(folderId: Long, app: AppRef) {
+    removeFromFolder(folderId, app.component, app.profile)
+    deleteEmptyFolders()
 }
 
 /** Gives the folder a new name, trimmed; a blank one is no name at all and changes nothing. */

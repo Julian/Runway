@@ -111,7 +111,7 @@ class LauncherActivity : ComponentActivity() {
                 onSettled = viewModel.dragging::settled,
                 onHold = viewModel.itemMenu::hold,
                 onStart = viewModel::startDrag,
-                onStartFromDrawer = viewModel::startDragFromDrawer,
+                onStartApp = viewModel::startDragOfApp,
                 onMove = viewModel.dragging::dragTo,
                 onEnd = viewModel.dragging::endDrag,
                 onCancel = viewModel.dragging::cancelDrag,

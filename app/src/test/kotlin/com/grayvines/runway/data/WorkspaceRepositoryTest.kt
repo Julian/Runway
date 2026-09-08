@@ -162,6 +162,66 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `unfolding puts the app in a cell of its own and takes it out of the folder`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+        val folder = repo.observeFolders().first().single()
+
+        repo.unfold(folder.id, AppRef("pkg2/.Main", 0), Container.HOME, 0, 0, 0)
+
+        assertEquals(listOf(AppRef("pkg3/.Main", 0)), repo.observeFolders().first().single().apps)
+        val out = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 0 }
+        assertEquals(ItemKind.APP to "pkg2/.Main", out.kind to out.component)
+    }
+
+    @Test
+    fun `unfolding the last app dissolves the folder and its placement`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+        val folder = repo.observeFolders().first().single()
+
+        repo.unfold(folder.id, AppRef("pkg2/.Main", 0), Container.HOME, 0, 0, 0)
+        repo.unfold(folder.id, AppRef("pkg3/.Main", 0), Container.HOME, 0, 2, 0)
+
+        assertTrue(repo.observeFolders().first().isEmpty())
+        val items = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(setOf(ItemKind.APP), items.map { it.kind }.toSet())
+        assertEquals(setOf(0, 2), items.map { it.x }.toSet())
+    }
+
+    @Test
+    fun `folding out of one folder into another moves the app, and back onto its own it stays`() =
+        runTest {
+            repo.autoFill(apps(5), columns = 4, pageRows = 1, dockSlots = 1)
+            val items = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            val (b, d) = items[1] to items[3]
+            repo.foldInto(targetId = b.id, dropped = Dropped.Item(items[0].id))
+            repo.foldInto(targetId = d.id, dropped = Dropped.Item(items[2].id))
+            val (first, second) = repo.observeFolders().first().sortedBy { it.id }
+            val app = AppRef("pkg2/.Main", 0)
+
+            assertTrue(repo.foldInto(targetId = d.id, dropped = Dropped.App(app), outOf = first.id))
+            assertEquals(listOf(AppRef("pkg3/.Main", 0)), folderApps(first.id))
+            assertEquals(
+                listOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) },
+                folderApps(second.id),
+            )
+
+            assertTrue(
+                repo.foldInto(targetId = d.id, dropped = Dropped.App(app), outOf = second.id)
+            )
+            assertEquals(
+                listOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) },
+                folderApps(second.id),
+            )
+        }
+
+    private suspend fun folderApps(folderId: Long) =
+        repo.observeFolders().first().single { it.id == folderId }.apps
+
+    @Test
     fun `an uninstalled app leaves every folder, and an emptied folder goes with its placement`() =
         runTest {
             // The dock takes the first app; a, b and c are the three on the home page.

@@ -339,6 +339,21 @@ class DragCoordinatorTest {
         }
 
     @Test
+    fun `an app lifted out of a folder says so in the move, so the drop can take it out`() =
+        runTest {
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            c.layOut()
+            val app = AppRef("new/.Main", 0)
+            val source = DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app)
+            c.startDrag(source.copy(fromFolder = 7L), Point(50f, 50f), grab)
+            c.dragTo(Point(250f, 150f)) // cell (2,1), free
+            c.endDrag()
+            runCurrent()
+            assertEquals(7L, workspace.moves.single().fromFolder)
+        }
+
+    @Test
     fun `an app from the drawer is added where it is dropped and does not settle`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)

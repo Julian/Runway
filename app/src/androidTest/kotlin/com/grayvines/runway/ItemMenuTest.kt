@@ -50,7 +50,7 @@ class ItemMenuTest : LauncherFixture() {
         awaitMenuGone()
         compose.onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true).assertIsDisplayed()
         release()
-        compose.waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 3 to 3 }
+        waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 3 to 3 }
     }
 
     @Test
@@ -67,9 +67,9 @@ class ItemMenuTest : LauncherFixture() {
         longPress(firstHomeApp)
         release()
         menuRow("Remove").performClick()
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp) == null }
+        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp) == null }
         awaitMenuGone()
-        compose.waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { !icon(firstHomeApp).isDisplayedOrFalse() }
     }
 
     @Test
@@ -77,7 +77,7 @@ class ItemMenuTest : LauncherFixture() {
         longPress(firstDockApp)
         release()
         menuRow("Remove").performClick()
-        compose.waitUntil(TIMEOUT_MS) { placementOf(firstDockApp) == null }
+        waitUntil(TIMEOUT_MS) { placementOf(firstDockApp) == null }
         assertNull(placementOf(firstDockApp))
     }
 
@@ -91,7 +91,7 @@ class ItemMenuTest : LauncherFixture() {
             device.wait(Until.hasObject(By.pkg(SETTINGS_PKG)), TIMEOUT_MS),
         )
         device.pressBack()
-        compose.waitUntil(TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
         awaitMenuGone()
     }
 
@@ -118,7 +118,7 @@ class ItemMenuTest : LauncherFixture() {
                 emptyMap(),
             )
         }
-        compose.waitUntil(TIMEOUT_MS) { homeCellOf(removable.label) == 0 to 0 }
+        waitUntil(TIMEOUT_MS) { homeCellOf(removable.label) == 0 to 0 }
         longPress(removable.label)
         release()
         menuRow("Uninstall").performClick()
@@ -127,7 +127,7 @@ class ItemMenuTest : LauncherFixture() {
             device.wait(Until.hasObject(By.pkg(INSTALLER_PKG)), TIMEOUT_MS),
         )
         device.pressBack()
-        compose.waitUntil(TIMEOUT_MS) { icon(removable.label).isDisplayedOrFalse() }
+        waitUntil(TIMEOUT_MS) { icon(removable.label).isDisplayedOrFalse() }
         assertEquals(0 to 0, homeCellOf(removable.label)) // declined: still there
     }
 
@@ -135,13 +135,13 @@ class ItemMenuTest : LauncherFixture() {
         val start = icon(label).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput { down(start) }
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
     private fun awaitMenuGone() {
-        compose.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isEmpty()
         }
     }

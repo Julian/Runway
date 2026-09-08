@@ -13,6 +13,7 @@ import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.unfold
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
@@ -138,16 +139,20 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     with(move) {
                         val app = newApp
                         val into = foldInto
+                        val outOf = fromFolder
                         when {
                             into != null ->
                                 check(
                                     graph.workspace.foldInto(
                                         into,
                                         if (app != null) Dropped.App(app) else Dropped.Item(itemId),
+                                        outOf = outOf,
                                     )
                                 ) {
                                     "nothing to fold: the target or the dropped app is gone"
                                 }
+                            app != null && outOf != null ->
+                                graph.workspace.unfold(outOf, app, container, page, x, y)
                             app != null -> graph.workspace.addApp(app, container, page, x, y)
                             else ->
                                 graph.workspace.moveItem(itemId, container, page, x, y, displaced)
@@ -267,10 +272,24 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         dragging.startDrag(source, pointer, grab)
     }
 
-    /** An app pulled out of the drawer: the drawer closes under it and the drop adds it. */
-    fun startDragFromDrawer(app: AppEntry, pointer: Point, grab: Point) {
+    /**
+     * An app pulled out of the drawer, or out of the open folder [fromFolder]: whichever was open
+     * closes under it, and the drop places it.
+     */
+    fun startDragOfApp(app: AppEntry, fromFolder: Long?, pointer: Point, grab: Point) {
         closeDrawer()
-        val source = DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app.ref)
+        closeFolder()
+        val source =
+            DragSource(
+                0,
+                ItemKind.APP,
+                Container.DRAWER,
+                0,
+                0,
+                0,
+                newApp = app.ref,
+                fromFolder = fromFolder,
+            )
         dragging.startDrag(source, pointer, grab)
     }
 
