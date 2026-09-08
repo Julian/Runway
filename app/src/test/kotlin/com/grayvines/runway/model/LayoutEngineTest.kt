@@ -31,10 +31,9 @@ class LayoutEngineTest {
         }
 
         @Test
-        fun `rejects overlap unless the overlapping item is ignored`() {
+        fun `rejects an overlap`() {
             val items = listOf(at(1, 1, 1, 2, 2))
             assertFalse(LayoutEngine.canPlace(grid, items, Footprint(2, 2)))
-            assertTrue(LayoutEngine.canPlace(grid, items, Footprint(2, 2), ignoring = setOf(1)))
             assertTrue(LayoutEngine.canPlace(grid, items, Footprint(0, 0)))
         }
     }
@@ -106,23 +105,6 @@ class LayoutEngineTest {
             val moves = LayoutEngine.displaceFor(grid, items, 1, Footprint(2, 1, 2, 1))
             assertEquals(setOf(2L, 3L), moves?.keys)
             assertEquals(setOf(Footprint(0, 0), Footprint(1, 0)), moves?.values?.toSet())
-        }
-    }
-
-    @Nested
-    inner class ResizeBounds {
-        @Test
-        fun `grows until the grid edge or a neighbour`() {
-            val items = listOf(at(1, 0, 0), at(2, 2, 0), at(3, 0, 2))
-            assertEquals(
-                ResizeBounds(maxWidth = 2, maxHeight = 2),
-                LayoutEngine.resizeBounds(grid, items, 1),
-            )
-        }
-
-        @Test
-        fun `unknown id gives null`() {
-            assertNull(LayoutEngine.resizeBounds(grid, emptyList(), 7))
         }
     }
 

@@ -29,12 +29,11 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         dao.insertPage(PageEntity(container, index))
     }
 
-    /** Drops empty pages after the last used one; the first page always stays. */
-    suspend fun pruneTrailingEmptyPages(container: Container) = write {
-        val pages = dao.pages(container)
-        val keep = LayoutEngine.pageCountAfterPrune(pages.size, dao.usedPages(container).toSet())
-        pages.drop(keep).forEach { dao.deletePage(container, it.index) }
-    }
+    /**
+     * Drops the empty pages after the last used one of the home screen and of the dock, in one
+     * transaction; the first page of each always stays.
+     */
+    suspend fun pruneEmptyPages() = write { dao.dropTrailingEmptyPages() }
 
     /** Guarantees the first home and dock page exist. */
     suspend fun ensureInitialised() = write {
@@ -77,13 +76,10 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * Takes one placement off its page; a page left empty at the end goes with it, and so does a
      * folder that this was the last placement of.
      */
-    suspend fun removeItem(id: Long) {
-        write {
-            dao.deleteItem(id)
-            dao.deleteUnplacedFolders()
-        }
-        pruneTrailingEmptyPages(Container.HOME)
-        pruneTrailingEmptyPages(Container.DOCK)
+    suspend fun removeItem(id: Long) = write {
+        dao.deleteItem(id)
+        dao.deleteUnplacedFolders()
+        dao.dropTrailingEmptyPages()
     }
 
     /**
@@ -109,9 +105,8 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
             dao.deleteItems(stale.map { it.id })
             gone.forEach { dao.deleteFolderApp(it.component, it.profile) }
             dao.deleteEmptyFolders()
+            dao.dropTrailingEmptyPages()
         }
-        pruneTrailingEmptyPages(Container.HOME)
-        pruneTrailingEmptyPages(Container.DOCK)
     }
 
     /**
@@ -127,4 +122,13 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction { block() }
         }
+}
+
+/** Within a transaction: the empty pages after the last used one go, on home and in the dock. */
+internal suspend fun WorkspaceDao.dropTrailingEmptyPages() {
+    for (container in listOf(Container.HOME, Container.DOCK)) {
+        val pages = pages(container)
+        val keep = LayoutEngine.pageCountAfterPrune(pages.size, usedPages(container).toSet())
+        pages.drop(keep).forEach { deletePage(container, it.index) }
+    }
 }

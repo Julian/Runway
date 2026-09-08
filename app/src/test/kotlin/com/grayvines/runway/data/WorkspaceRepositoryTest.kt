@@ -134,7 +134,7 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `a page emptied by folding its last item away is pruned`() = runTest {
+    fun `folding the last item of a page away leaves the page for the drop to prune`() = runTest {
         repo.autoFill(apps(3), columns = 1, pageRows = 1, dockSlots = 1)
         val pages = repo.observe(Container.HOME).first().pages
         assertEquals(2, pages.size)
@@ -142,7 +142,9 @@ class WorkspaceRepositoryTest {
         val onSecond = pages[1].items.single()
 
         repo.foldInto(targetId = onFirst.id, dropped = Dropped.Item(onSecond.id))
+        assertEquals(2, repo.observe(Container.HOME).first().pages.size)
 
+        repo.pruneEmptyPages()
         assertEquals(1, repo.observe(Container.HOME).first().pages.size)
     }
 
@@ -218,26 +220,28 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `pruneTrailingEmptyPages drops only the empty pages after the last used one`() = runTest {
-        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
-        repo.addPage(Container.HOME, 1) // empty, in the middle
-        repo.addPage(Container.HOME, 2)
-        repo.moveItem(2, Container.HOME, 2, 0, 0, emptyMap())
-        repo.addPage(Container.HOME, 3) // trailing
-        repo.addPage(Container.HOME, 4)
-        repo.addPage(Container.DOCK, 1) // the dock is untouched by a home prune
-        repo.pruneTrailingEmptyPages(Container.HOME)
-        assertEquals(listOf(0, 1, 2), repo.observe(Container.HOME).first().pages.map { it.index })
-        assertEquals(listOf(0, 1), repo.observe(Container.DOCK).first().pages.map { it.index })
-        repo.pruneTrailingEmptyPages(Container.DOCK)
-        assertEquals(listOf(0), repo.observe(Container.DOCK).first().pages.map { it.index })
-    }
+    fun `pruning drops only the empty pages after the last used one, on home and in the dock`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+            repo.addPage(Container.HOME, 1) // empty, in the middle
+            repo.addPage(Container.HOME, 2)
+            repo.moveItem(2, Container.HOME, 2, 0, 0, emptyMap())
+            repo.addPage(Container.HOME, 3) // trailing
+            repo.addPage(Container.HOME, 4)
+            repo.addPage(Container.DOCK, 1) // trailing too
+            repo.pruneEmptyPages()
+            assertEquals(
+                listOf(0, 1, 2),
+                repo.observe(Container.HOME).first().pages.map { it.index },
+            )
+            assertEquals(listOf(0), repo.observe(Container.DOCK).first().pages.map { it.index })
+        }
 
     @Test
     fun `pruning never removes the first page`() = runTest {
         repo.ensureInitialised()
         repo.addPage(Container.HOME, 1)
-        repo.pruneTrailingEmptyPages(Container.HOME)
+        repo.pruneEmptyPages()
         assertEquals(listOf(0), repo.observe(Container.HOME).first().pages.map { it.index })
     }
 

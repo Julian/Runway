@@ -3,14 +3,9 @@ package com.grayvines.runway.model
 /** Placement rules for one page. Pure Kotlin. */
 object LayoutEngine {
 
-    /** True if [footprint] is inside [grid] and overlaps no item except those in [ignoring]. */
-    fun canPlace(
-        grid: GridSize,
-        items: List<Placed>,
-        footprint: Footprint,
-        ignoring: Set<Long> = emptySet(),
-    ): Boolean =
-        footprint in grid && items.all { it.id in ignoring || !it.footprint.overlaps(footprint) }
+    /** True if [footprint] is inside [grid] and overlaps no item. */
+    fun canPlace(grid: GridSize, items: List<Placed>, footprint: Footprint): Boolean =
+        footprint in grid && items.none { it.footprint.overlaps(footprint) }
 
     /** First free top-left cell for a [width]×[height] item, scanning rows top to bottom. */
     fun findFreeCell(grid: GridSize, items: List<Placed>, width: Int = 1, height: Int = 1): Cell? {
@@ -47,19 +42,6 @@ object LayoutEngine {
             occupied = occupied + Placed(blocker.id, footprint)
         }
         return moves.takeIf { it.size == blockers.size }
-    }
-
-    /** How far [id] can grow along each axis independently, keeping its top-left corner. */
-    fun resizeBounds(grid: GridSize, items: List<Placed>, id: Long): ResizeBounds? {
-        val item = items.firstOrNull { it.id == id } ?: return null
-        val f = item.footprint
-        var maxWidth = f.width
-        while (canPlace(grid, items, f.copy(width = maxWidth + 1), ignoring = setOf(id))) maxWidth++
-        var maxHeight = f.height
-        while (
-            canPlace(grid, items, f.copy(height = maxHeight + 1), ignoring = setOf(id))
-        ) maxHeight++
-        return ResizeBounds(maxWidth, maxHeight)
     }
 
     /**

@@ -169,10 +169,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 }
 
             override suspend fun pruneEmptyPages() {
-                logged("could not remove empty pages") {
-                    graph.workspace.pruneTrailingEmptyPages(Container.HOME)
-                    graph.workspace.pruneTrailingEmptyPages(Container.DOCK)
-                }
+                logged("could not remove empty pages") { graph.workspace.pruneEmptyPages() }
             }
 
             // Anything at all: a save that fails must snap the icon back, never take the
