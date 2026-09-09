@@ -122,14 +122,12 @@ class FolderTest : LauncherFixture() {
     }
 
     @Test
-    fun aBlankNameIsNotKept() {
+    fun doneOnABlankNamePutsTheOldOneBackAndKeepsTheFieldOpen() {
         makeFolder()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(FOLDER_NAME_TAG).fetchSemanticsNodes().isNotEmpty()
-        }
+        compose.onNodeWithTag(FOLDER_NAME_TAG).assertIsFocused() // still editing
         compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Folder")
         assertEquals("Folder", folderName())
     }

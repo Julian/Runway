@@ -23,6 +23,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
@@ -110,6 +111,7 @@ open class LauncherFixture {
         awaitGrid(settings.columns, settings.pageRows)
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
+        dismissNotRespondingDialog()
         try {
             waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
         } catch (e: ComposeTimeoutException) {
@@ -157,6 +159,17 @@ open class LauncherFixture {
                 (hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)) or
                     hasAnyAncestor(hasTestTag(HOME_MENU_TAG)))
         )
+
+    /**
+     * On a starved CI emulator the stock launcher can hang, and the system's "isn't responding"
+     * dialog then sits over everything for the rest of the run, keeping focus from the launcher
+     * under test. Closing that app clears it; the system starts it again when it is wanted.
+     */
+    private fun dismissNotRespondingDialog() {
+        val close = device.findObject(By.text("Close app")) ?: return
+        close.click()
+        device.wait(Until.gone(By.text("Close app")), TIMEOUT_MS)
+    }
 
     /** The window manager's word on what has focus, for a failure message. */
     private fun windowFocus(): String =

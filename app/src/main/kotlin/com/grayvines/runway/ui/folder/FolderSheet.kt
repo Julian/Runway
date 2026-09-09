@@ -193,7 +193,8 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
 
 /**
  * The folder's name; a tap turns it into a field with the keyboard up. Done, or leaving the field,
- * keeps what was typed (a blank name is not kept).
+ * keeps what was typed. A blank name is no name: Done puts the old one back and leaves the field
+ * open, so the refusal is seen rather than guessed at.
  */
 @Composable
 private fun FolderName(name: String, onRename: (String) -> Unit) {
@@ -227,7 +228,8 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
                 capitalization = KeyboardCapitalization.Sentences,
                 imeAction = ImeAction.Done,
             ),
-        keyboardActions = KeyboardActions(onDone = { commit() }),
+        keyboardActions =
+            KeyboardActions(onDone = { if (text.isBlank()) text = name else commit() }),
         modifier =
             modifier.focusRequester(focus).onFocusChanged {
                 if (it.isFocused) hadFocus = true else if (hadFocus) commit()
