@@ -39,7 +39,7 @@ interface DragWorkspace {
  */
 class DragCoordinator(
     private val scope: CoroutineScope,
-    lookup: WorkspaceLookup,
+    private val lookup: WorkspaceLookup,
     private val workspace: DragWorkspace,
 ) {
     private val controller = DragController(lookup)
@@ -113,9 +113,11 @@ class DragCoordinator(
     }
 
     fun dragTo(pointer: Point) {
-        val current = drag.value ?: return
+        val arrived = drag.value ?: return
         val target =
-            areas.areas.targetFor(pointer, current.grab, current.source.spanX, current.source.spanY)
+            areas.areas.targetFor(pointer, arrived.grab, arrived.source.spanX, arrived.source.spanY)
+        pickUpIfPlaced(arrived, target)
+        val current = drag.value ?: return
         val edge = areas.areas.edgeAt(pointer)
         if (edge == null) edgesArmed = true
         val hovered = edge.takeIf { edgesArmed }
@@ -180,6 +182,41 @@ class DragCoordinator(
             }
             workspace.pruneEmptyPages()
         }
+    }
+
+    /**
+     * A drag of something with no cell yet (out of the drawer, or a folder) that reaches a page
+     * already holding the same app or folder becomes a drag of that placement: it lifts out of its
+     * cell into the finger, and the user is moving it. A page holds a thing once.
+     */
+    private fun pickUpIfPlaced(state: DragState, target: DropTarget?) {
+        val source = state.source
+        val identity = source.identity ?: return
+        if (source.itemId != 0L || target == null) return
+        val (container, page, items) =
+            when (target) {
+                is DropTarget.HomeCell ->
+                    Triple(Container.HOME, target.page, lookup.homeItems(target.page))
+                is DropTarget.DockSlot ->
+                    Triple(Container.DOCK, target.page, lookup.dockItems(target.page))
+            }
+        val placed = items.firstOrNull { it.identity == identity } ?: return
+        val from = areas.areas.centreOf(container, placed.footprint) ?: return
+        val f = placed.footprint
+        controller.adopt(
+            DragSource(
+                placed.id,
+                source.kind,
+                container,
+                page,
+                f.x,
+                f.y,
+                f.width,
+                f.height,
+                identity = identity,
+            ),
+            from,
+        )
     }
 
     /** The UI finished animating [itemId] into its cell. */

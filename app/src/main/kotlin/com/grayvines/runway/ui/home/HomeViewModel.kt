@@ -11,6 +11,7 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.foldInto
+import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
@@ -76,6 +77,10 @@ data class HomeItem(
 ) {
     val footprint: Footprint
         get() = Footprint(x, y, spanX, spanY)
+
+    /** What this is a placement of; see [com.grayvines.runway.model.Placed.identity]. */
+    val identity: String?
+        get() = app?.ref?.identity ?: folderId?.let(::folderIdentity)
 }
 
 /**
@@ -290,7 +295,17 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         itemMenu.dismiss()
         homeMenu.dismiss()
         val source =
-            DragSource(item.id, item.kind, container, page, item.x, item.y, item.spanX, item.spanY)
+            DragSource(
+                item.id,
+                item.kind,
+                container,
+                page,
+                item.x,
+                item.y,
+                item.spanX,
+                item.spanY,
+                identity = item.identity,
+            )
         dragging.startDrag(source, pointer, grab)
     }
 

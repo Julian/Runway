@@ -225,10 +225,40 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun anAppPulledOutOfTheDrawerOntoAPageThatHasItPicksUpTheOneAlreadyThere() {
+        val grid = useGrid(columns = 5, rows = 7)
+        val label = labelAtHomeCell(1, 0) // on the first page already
+        val before = placementsOf(label).size
+        openDrawer()
+        liftFromDrawer(label)
+        dragOn(to = grid.homeCell(4, 4))
+        // The one already there is what is being carried now: its cell has emptied.
+        waitUntil { icon(label).isDisplayedOrFalse().not() || homeCellOf(label) == 1 to 0 }
+        release()
+        waitUntil { homeCellOf(label) == 4 to 4 }
+        assertEquals(before, placementsOf(label).size) // moved, not added
+    }
+
+    @Test
+    fun lettingGoOffAnyTargetAfterPickingUpPutsItBackWhereItWas() {
+        useGrid(columns = 5, rows = 7)
+        val label = labelAtHomeCell(1, 0)
+        openDrawer()
+        liftFromDrawer(label)
+        val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot.center
+        dragOn(to = bar) // over the search bar: no cell or slot there
+        release()
+        awaitGone(DRAG_OVERLAY_TAG)
+        Thread.sleep(WRITE_GRACE_MS) // a write that was going to land has had time to
+        assertEquals(1 to 0, homeCellOf(label))
+    }
+
+    @Test
     fun anAppPulledOutOfTheDrawerOntoATakenDockSlotJoinsItInAFolder() {
         val grid = useGrid(columns = 5, rows = 7)
-        // Not the app already in that slot: an app is in a folder once, so that would add nothing.
-        val label = sortedDrawerLabels().first { it != firstDockApp }
+        // One from a home page: an app already in the dock would be picked up and reordered
+        // instead, and the one in that slot is in a folder once, so that would add nothing.
+        val label = labelAtHomeCell(1, 0)
         val before = placementsOf(label).size
         openDrawer()
         liftFromDrawer(label)
@@ -237,7 +267,9 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed()
         waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
         assertEquals(listOf(firstDockApp, label), dockFolderAt(0))
-        assertEquals(before, placementsOf(label).size) // in the folder, not on a cell of its own
+        // The page picked its own placement up as the drag crossed it, so that one went into the
+        // folder: the app is in the folder now, not on a cell of its own.
+        assertEquals(before - 1, placementsOf(label).size)
     }
 
     private fun firstDrawerLabel() = labels.first()

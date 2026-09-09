@@ -29,6 +29,8 @@ data class DragSource(
     val fromFolder: Long? = null,
     /** A drawer folder lifted out of the drawer: the drop places it again, in a cell. */
     val newFolder: Long? = null,
+    /** What this is a placement of, as [Placed.identity]; a page holding one refuses another. */
+    val identity: String? = null,
 )
 
 sealed interface DropTarget {
@@ -67,6 +69,12 @@ data class DragState(
      * applies on a drop regardless; this only holds the preview back while passing over.
      */
     val rested: Boolean = false,
+    /**
+     * Root-pixel centre of the cell this item was picked up from mid-drag, when a fresh drag met a
+     * page that already held the same thing and took that placement over instead; the icon slides
+     * from there into the finger.
+     */
+    val pickedUpFrom: Point? = null,
 )
 
 /** What the controller needs to know about the workspace to plan a drop. */
@@ -92,6 +100,15 @@ class DragController(private val lookup: WorkspaceLookup) {
      * [target] is where the item's corner snaps; [over] is the cell the finger itself is well
      * inside, if any, which is where a dropped app folds with what is there.
      */
+    /**
+     * The drag becomes one of [source] instead, an item already placed, picked up out of its cell
+     * at [from] (root px centre). The finger and its grab stay as they are.
+     */
+    fun adopt(source: DragSource, from: Point) {
+        val current = _state.value ?: return
+        _state.value = current.copy(source = source, pickedUpFrom = from, plan = null)
+    }
+
     fun move(
         pointer: Point,
         target: DropTarget?,
@@ -161,6 +178,7 @@ class DragController(private val lookup: WorkspaceLookup) {
         val footprint = Footprint(target.x, target.y, source.spanX, source.spanY)
         if (source.isAt(Container.HOME, target.page, footprint)) return DropPlan.Invalid
         val others = lookup.homeItems(target.page).filter { it.id != source.itemId }
+        if (source.isAlreadyAmong(others)) return DropPlan.Invalid
         val displaced =
             LayoutEngine.displaceFor(lookup.grid, others, source.itemId, footprint)
                 ?: return DropPlan.Invalid
@@ -180,13 +198,18 @@ class DragController(private val lookup: WorkspaceLookup) {
         val others = lookup.dockItems(target.page).filter { it.id != source.itemId }
         val reordering = source.container == Container.DOCK && source.page == target.page
         return when {
+            source.isAlreadyAmong(others) -> DropPlan.Invalid
             reordering ->
                 DropPlan.Move(target, LayoutEngine.shiftFor(others, source.x, target.slot))
             others.any { it.footprint.x == target.slot } -> DropPlan.Invalid
             else -> DropPlan.Move(target, emptyMap())
         }
     }
-
-    private fun DragSource.isAt(container: Container, page: Int, footprint: Footprint) =
-        this.container == container && this.page == page && x == footprint.x && y == footprint.y
 }
+
+/** The same app or folder is placed on that page already: once per page is enough. */
+internal fun DragSource.isAlreadyAmong(others: List<Placed>) =
+    identity != null && others.any { it.identity == identity }
+
+internal fun DragSource.isAt(container: Container, page: Int, footprint: Footprint) =
+    this.container == container && this.page == page && x == footprint.x && y == footprint.y

@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.drag
 
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.model.Footprint
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -61,6 +62,28 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
 }
 
 /**
+ * The root-pixel centre of [footprint] on the shown page of [container], if that page is laid out.
+ */
+fun DropAreas.centreOf(container: Container, footprint: Footprint): Point? =
+    when (container) {
+        Container.HOME ->
+            home?.let { area ->
+                val cellW = area.width / columns
+                val cellH = area.height / rows
+                Point(
+                    area.left + (footprint.x + footprint.width / 2f) * cellW,
+                    area.top + (footprint.y + footprint.height / 2f) * cellH,
+                )
+            }
+        Container.DOCK ->
+            dock?.let { area ->
+                val slotW = area.width / dockSlots
+                Point(area.left + (footprint.x + HALF) * slotW, area.top + area.height / 2f)
+            }
+        Container.DRAWER -> null
+    }
+
+/**
  * The middle of a cell, this share of it each way, is where a dropped app folds with what is there;
  * the ring around it still displaces, so an icon can be pushed aside without folding.
  */
@@ -111,6 +134,7 @@ private fun Float.wellInside(zone: Float): Boolean {
 }
 
 private const val EPSILON = 0.001f
+private const val HALF = 0.5f
 
 /** Which side of an area a drag is hovering at. */
 enum class Edge(val pageDelta: Int) {

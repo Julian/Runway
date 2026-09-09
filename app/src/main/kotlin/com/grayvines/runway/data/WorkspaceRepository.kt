@@ -4,12 +4,21 @@ import androidx.room3.immediateTransaction
 import androidx.room3.useWriterConnection
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
+import com.grayvines.runway.model.Placed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.Serializable
 
 /** An app identity as stored: flattened component name plus profile serial. */
-@Serializable data class AppRef(val component: String, val profile: Long)
+@Serializable
+data class AppRef(val component: String, val profile: Long) {
+    /** What a placement of this app is a placement of; see [Placed.identity]. */
+    val identity: String
+        get() = "app:$profile/$component"
+}
+
+/** What a placement of the folder [folderId] is a placement of; see [Placed.identity]. */
+fun folderIdentity(folderId: Long) = "folder:$folderId"
 
 /** Pages of one container with their items, as the UI consumes them. */
 data class ContainerContent(val pages: List<PageContent>)

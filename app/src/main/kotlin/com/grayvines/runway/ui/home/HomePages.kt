@@ -4,6 +4,8 @@ import com.grayvines.runway.data.ContainerContent
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.appRef
+import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
@@ -34,6 +36,7 @@ private fun ItemEntity.placed(drawn: Boolean): Placed? {
         id,
         Footprint(cellX, cellY, spanX, spanY),
         foldable = kind == ItemKind.FOLDER || kind == ItemKind.APP && drawn,
+        identity = appRef()?.identity ?: folderId?.let(::folderIdentity),
     )
 }
 

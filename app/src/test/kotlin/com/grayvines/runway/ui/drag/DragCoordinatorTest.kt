@@ -353,6 +353,85 @@ class DragCoordinatorTest {
             assertEquals(7L, workspace.moves.single().fromFolder)
         }
 
+    /** Page 0 holds the app in cell (0,0), as item 1. */
+    private fun holding(app: AppRef) =
+        object : WorkspaceLookup {
+            override val grid = GridSize(3, 2)
+            override val dockSlots = 1
+
+            override fun homeItems(page: Int) =
+                if (page == 0) {
+                    listOf(Placed(1, Footprint(0, 0), identity = app.identity))
+                } else {
+                    emptyList()
+                }
+
+            override fun dockItems(page: Int) = emptyList<Placed>()
+        }
+
+    @Test
+    fun `a drag from the drawer over a page that holds the app picks that placement up`() =
+        runTest {
+            val app = AppRef("a/.Main", 0)
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, holding(app), workspace)
+            c.layOut()
+            c.startDrag(
+                DragSource(
+                    0,
+                    ItemKind.APP,
+                    Container.DRAWER,
+                    0,
+                    0,
+                    0,
+                    newApp = app,
+                    identity = app.identity,
+                ),
+                Point(50f, 50f),
+                grab,
+            )
+            c.dragTo(Point(250f, 150f)) // cell (2,1), free
+
+            val state = c.drag.value!!
+            assertEquals(1L, state.source.itemId) // the placement already there, not a new one
+            assertNull(state.source.newApp)
+            assertEquals(Point(50f, 50f), state.pickedUpFrom) // the centre of cell (0,0)
+
+            c.endDrag()
+            runCurrent()
+            val move = workspace.moves.single()
+            assertEquals(1L to (2 to 1), move.itemId to (move.x to move.y))
+            assertNull(move.newApp)
+        }
+
+    @Test
+    fun `let go off any target, a picked-up placement settles back where it was`() = runTest {
+        val app = AppRef("a/.Main", 0)
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, holding(app), workspace)
+        c.layOut()
+        c.startDrag(
+            DragSource(
+                0,
+                ItemKind.APP,
+                Container.DRAWER,
+                0,
+                0,
+                0,
+                newApp = app,
+                identity = app.identity,
+            ),
+            Point(50f, 50f),
+            grab,
+        )
+        c.dragTo(Point(250f, 150f)) // over the page: picked up
+        c.dragTo(Point(250f, 400f)) // off every area
+        c.endDrag()
+        runCurrent()
+        assertEquals(emptyList<PendingMove>(), workspace.moves)
+        assertEquals(1L, c.settling.value?.itemId) // snaps back, as any refused move does
+    }
+
     @Test
     fun `an app from the drawer is added where it is dropped and does not settle`() = runTest {
         val workspace = FakeWorkspace()

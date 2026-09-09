@@ -5,6 +5,7 @@ import androidx.compose.runtime.State
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
@@ -120,4 +121,5 @@ internal fun fresh(newApp: AppRef? = null, fromFolder: Long? = null, newFolder: 
         newApp = newApp,
         fromFolder = fromFolder,
         newFolder = newFolder,
+        identity = newApp?.identity ?: newFolder?.let(::folderIdentity),
     )

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.util.lerp
+import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 
@@ -48,16 +49,18 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
                     tween(DragMotion.FOLDING_MS),
                     label = "folding",
                 )
+            // Picked up out of a cell mid-drag: the icon slides from there into the finger.
+            val pickedUpFrom = drag.state?.pickedUpFrom
+            val arrival =
+                remember(pickedUpFrom) { Animatable(if (pickedUpFrom == null) 1f else 0f) }
+            LaunchedEffect(pickedUpFrom) {
+                if (pickedUpFrom != null) arrival.animateTo(1f, DragMotion.lift)
+            }
+            val half =
+                with(LocalDensity.current) { Point(cell.width.toPx() / 2, cell.height.toPx() / 2) }
             OverlayCell(
                 item,
-                at = {
-                    val s = drag.state
-                    if (s == null) {
-                        Point(0f, 0f)
-                    } else {
-                        Point(s.pointer.x - s.grab.x, s.pointer.y - s.grab.y)
-                    }
-                },
+                at = { drag.state?.carried(pickedUpFrom, half, arrival.value) ?: Point(0f, 0f) },
                 cell,
                 iconSize,
                 {
@@ -76,6 +79,17 @@ fun DragOverlay(drag: DragSession, item: HomeItem?, cell: DpSize, iconSize: Dp, 
             )
         }
     }
+}
+
+/**
+ * Where the carried item's cell is drawn: under the finger, less the grab; or, just picked up out
+ * of a cell at [pickedUpFrom] (centre), [arrival] of the way from there to under the finger.
+ */
+private fun DragState.carried(pickedUpFrom: Point?, half: Point, arrival: Float): Point {
+    val under = Point(pointer.x - grab.x, pointer.y - grab.y)
+    if (pickedUpFrom == null || arrival >= 1f) return under
+    val from = Point(pickedUpFrom.x - half.x, pickedUpFrom.y - half.y)
+    return Point(lerp(from.x, under.x, arrival), lerp(from.y, under.y, arrival))
 }
 
 @Composable

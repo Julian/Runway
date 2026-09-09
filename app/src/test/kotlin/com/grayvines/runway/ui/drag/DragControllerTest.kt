@@ -26,8 +26,64 @@ class DragControllerTest {
     private val controller = DragController(lookup)
     private val origin = Point(0f, 0f)
 
-    private fun lift(id: Long, container: Container = Container.HOME, x: Int = 0, y: Int = 0) =
-        controller.start(DragSource(id, ItemKind.APP, container, 0, x, y), origin, origin)
+    private fun lift(
+        id: Long,
+        container: Container = Container.HOME,
+        x: Int = 0,
+        y: Int = 0,
+        identity: String? = null,
+    ) =
+        controller.start(
+            DragSource(id, ItemKind.APP, container, 0, x, y, identity = identity),
+            origin,
+            origin,
+        )
+
+    @Test
+    fun `a page that already holds the app refuses a second placement of it`() {
+        val app = AppRef("a/.Main", 0)
+        home[0] = listOf(Placed(1, Footprint(0, 0), identity = app.identity))
+        home[1] = emptyList()
+        dock[0] = listOf(Placed(9, Footprint(0, 0), identity = app.identity))
+        val fromDrawer =
+            DragSource(
+                0,
+                ItemKind.APP,
+                Container.DRAWER,
+                0,
+                0,
+                0,
+                newApp = app,
+                identity = app.identity,
+            )
+        controller.start(fromDrawer, origin, origin)
+
+        controller.move(origin, DropTarget.HomeCell(0, 2, 1))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        controller.move(origin, DropTarget.DockSlot(0, 1))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        controller.move(origin, DropTarget.HomeCell(1, 0, 0)) // another page: fine
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(1, 0, 0), emptyMap()),
+            controller.state.value?.plan,
+        )
+    }
+
+    @Test
+    fun `moving an item to a page that already holds the same app is refused`() {
+        val app = AppRef("a/.Main", 0)
+        home[0] = listOf(Placed(1, Footprint(0, 0), identity = app.identity))
+        home[1] = listOf(Placed(3, Footprint(0, 0), identity = app.identity))
+        lift(1, identity = app.identity)
+
+        controller.move(origin, DropTarget.HomeCell(1, 2, 1))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        controller.move(origin, DropTarget.HomeCell(0, 2, 1)) // its own page: a plain move
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 2, 1), emptyMap()),
+            controller.state.value?.plan,
+        )
+    }
 
     @Test
     fun `free home cell moves without displacement`() {

@@ -33,8 +33,8 @@ class HomePagesTest {
         assertEquals(emptyList<HomeItem>(), pages.single().items)
         assertEquals(
             listOf(
-                Placed(1, Footprint(0, 0), foldable = false),
-                Placed(2, Footprint(1, 0), foldable = false),
+                Placed(1, Footprint(0, 0), foldable = false, identity = "app:0/pkg1/.Main"),
+                Placed(2, Footprint(1, 0), foldable = false, identity = "app:0/pkg2/.Main"),
             ),
             pages.single().occupied,
         )
@@ -60,7 +60,10 @@ class HomePagesTest {
             emptyList<AppEntry>(),
             item.folder,
         ) // no apps loaded: none drawn, still a folder
-        assertEquals(listOf(Placed(3, Footprint(2, 0))), pages.single().occupied)
+        assertEquals(
+            listOf(Placed(3, Footprint(2, 0), identity = "folder:7")),
+            pages.single().occupied,
+        )
     }
 
     @Test
