@@ -207,7 +207,6 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
     // The whole name selected as the field opens: what is typed replaces it, and a keep is a tap
     // away, which is what a tap on a name usually means.
     var field by remember(name) { mutableStateOf(TextFieldValue(name, TextRange(0, name.length))) }
-    val text = field.text
     val modifier = Modifier.padding(bottom = 12.dp).testTag(FOLDER_NAME_TAG)
     if (!editing) {
         Text(
@@ -219,8 +218,11 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
         )
         return
     }
+    // Reads the field as it is when called, not as it was when this was composed: the dispose
+    // below is set up once, and must still see the final text.
     val commit = {
         editing = false
+        val text = field.text
         if (text != name && text.isNotBlank()) onRename(text)
     }
     val focus = remember { FocusRequester() }
@@ -239,7 +241,7 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
         keyboardActions =
             KeyboardActions(
                 onDone = {
-                    if (text.isBlank()) {
+                    if (field.text.isBlank()) {
                         field = TextFieldValue(name, TextRange(0, name.length))
                     } else {
                         commit()
