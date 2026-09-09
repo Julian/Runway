@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -48,6 +49,20 @@ class PageFlipTest : LauncherFixture() {
         compose.waitForIdle()
         release()
         waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == pagesBefore }
+    }
+
+    @Test
+    fun aDropRefusedAfterAPageFlipComesBackToItsCellOnTheOldPage() {
+        val grid = useGrid(columns = 5, rows = 7)
+        holdDrag(firstHomeApp, to = grid.rightEdge(0))
+        waitUntil(FLIP_WATCH_MS) { !icon(firstHomeApp).isDisplayedOrFalse() } // page 2 shown
+        val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot.center
+        dragOn(to = bar) // over the search bar: nowhere to drop
+        release()
+        // Back on page 1, with the icon settled in its cell, well inside the settle timeout.
+        waitUntil(SETTLE_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        awaitGone(DRAG_OVERLAY_TAG)
+        assertEquals(0 to 0, homeCellOf(firstHomeApp))
     }
 
     @Test
@@ -233,5 +248,10 @@ class PageFlipTest : LauncherFixture() {
             "page 1 rested only ${leftOne - settledOnOne} ms: $trace",
             leftOne - settledOnOne >= MIN_REST_MS,
         )
+    }
+
+    private companion object {
+        /** Less than the overlay's two-second safety net: the icon must come back sooner. */
+        const val SETTLE_MS = 1_500L
     }
 }

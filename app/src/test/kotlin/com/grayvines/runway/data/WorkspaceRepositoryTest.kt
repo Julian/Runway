@@ -79,6 +79,24 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `moveItem refuses a page that is gone, or a neighbour that has left it`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+
+        // The plan said page 1; it was pruned meanwhile.
+        assertEquals(false, repo.moveItem(a.id, Container.HOME, 1, 0, 0, emptyMap()))
+        // The plan pushes b aside; b went to the dock meanwhile (slot 1: slot 0 is taken).
+        assertTrue(repo.moveItem(b.id, Container.DOCK, 0, 1, 0, emptyMap()))
+        val refused =
+            repo.moveItem(a.id, Container.HOME, 0, 1, 0, displaced = mapOf(b.id to Footprint(2, 0)))
+        assertEquals(false, refused)
+
+        val home = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(0 to 0, home.single { it.id == a.id }.let { it.x to it.y }) // untouched
+        assertTrue(repo.observe(Container.DOCK).first().pages.single().items.any { it.id == b.id })
+    }
+
+    @Test
     fun `moveItem relocates the item and its displaced neighbours together`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val page = repo.observe(Container.HOME).first().pages.single()

@@ -51,7 +51,11 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         dao.insertPage(PageEntity(Container.DOCK, 0))
     }
 
-    /** Moves one item and, in the same transaction, the items it displaces on the target page. */
+    /**
+     * Moves one item and, in the same transaction, the items it displaces on the target page. The
+     * plan was made from a picture of the layout that may have changed meanwhile (the page pruned,
+     * a neighbour moved off it): then nothing moves, and this is false.
+     */
     suspend fun moveItem(
         id: Long,
         container: Container,
@@ -59,12 +63,22 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         x: Int,
         y: Int,
         displaced: Map<Long, Footprint>,
-    ) = write {
-        // Every cell has one item at a time, and the moves can chain through each other's old
-        // cells, so all movers leave their cells before any lands.
-        dao.park(displaced.keys.toList() + id)
-        displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
-        dao.place(id, container, page, x, y)
+    ): Boolean = write {
+        val pageExists = dao.pages(container).any { it.index == page }
+        val neighboursThere =
+            displaced.keys.all { otherId ->
+                dao.item(otherId)?.let { it.container == container && it.pageIndex == page } == true
+            }
+        if (pageExists && neighboursThere && dao.item(id) != null) {
+            // Every cell has one item at a time, and the moves can chain through each other's
+            // old cells, so all movers leave their cells before any lands.
+            dao.park(displaced.keys.toList() + id)
+            displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
+            dao.place(id, container, page, x, y)
+            true
+        } else {
+            false
+        }
     }
 
     /** A new placement of [app], as dragging it out of the drawer makes. */

@@ -18,7 +18,12 @@ import kotlinx.coroutines.launch
 /**
  * The item menu's state and what its actions do; one long press opens it, anything else closes it.
  */
-class ItemMenuHost(private val graph: AppGraph, private val scope: CoroutineScope) {
+class ItemMenuHost(
+    private val graph: AppGraph,
+    private val scope: CoroutineScope,
+    /** Whether a menu may open now: not over a live drag, where a second finger would put it. */
+    private val mayOpen: () -> Boolean = { true },
+) {
     private val _state = MutableStateFlow<ItemMenuState?>(null)
 
     /** The menu a long press opened, until it is dismissed, acted on, or turned into a drag. */
@@ -53,7 +58,7 @@ class ItemMenuHost(private val graph: AppGraph, private val scope: CoroutineScop
         )
 
     fun hold(item: HomeItem, container: Container, page: Int, cell: Bounds) {
-        _state.value = ItemMenuState(item, container, page, cell)
+        if (mayOpen()) _state.value = ItemMenuState(item, container, page, cell)
     }
 
     fun dismiss() {

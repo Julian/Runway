@@ -128,10 +128,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     val drawerQuery: StateFlow<String> = _drawerQuery
 
     /** The long-press item menu. */
-    val itemMenu = ItemMenuHost(graph, viewModelScope)
+    // Neither menu opens over a live drag: a second finger's long press changes nothing.
+    val itemMenu = ItemMenuHost(graph, viewModelScope, mayOpen = { dragging.drag.value == null })
 
     val homeMenu =
-        HomeMenuHost(graph, viewModelScope) { count -> state.first { it.homePages.size >= count } }
+        HomeMenuHost(
+            graph,
+            viewModelScope,
+            awaitPages = { count -> state.first { it.homePages.size >= count } },
+            mayOpen = { dragging.drag.value == null },
+        )
 
     private val lookup =
         object : WorkspaceLookup {
@@ -178,7 +184,18 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                                 graph.workspace.unfold(outOf, app, container, page, x, y)
                             app != null -> graph.workspace.addApp(app, container, page, x, y)
                             else ->
-                                graph.workspace.moveItem(itemId, container, page, x, y, displaced)
+                                check(
+                                    graph.workspace.moveItem(
+                                        itemId,
+                                        container,
+                                        page,
+                                        x,
+                                        y,
+                                        displaced,
+                                    )
+                                ) {
+                                    "the page or a displaced neighbour is gone; nothing moved"
+                                }
                         }
                     }
                 }

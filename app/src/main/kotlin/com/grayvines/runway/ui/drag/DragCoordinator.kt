@@ -107,7 +107,9 @@ class DragCoordinator(
     /** Counts down while the finger stays on one target; done, neighbours slide aside. */
     private var resting: Job? = null
 
+    /** Begins a drag; a second finger's long press while one is live changes nothing. */
     fun startDrag(source: DragSource, pointer: Point, grab: Point) {
+        if (drag.value != null) return
         edgesArmed = false
         controller.start(source, pointer, grab)
     }
@@ -161,6 +163,7 @@ class DragCoordinator(
             }
         }
         if (plan == null) {
+            showSourcePage(state.source)
             scope.launch { workspace.pruneEmptyPages() }
             return
         }
@@ -219,6 +222,27 @@ class DragCoordinator(
         )
     }
 
+    /**
+     * A refused or cancelled drag settles the icon back into its cell, which the cell reports once
+     * it is on screen. After a page flip the source page is not: flip back to it, so the icon is
+     * seen to return rather than left hanging until the settle times out.
+     */
+    private fun showSourcePage(source: DragSource) {
+        val shown =
+            when (source.container) {
+                Container.HOME -> areas.areas.homePage
+                Container.DOCK -> areas.areas.dockPage
+                Container.DRAWER -> return
+            }
+        val delta = source.page - shown
+        if (delta == 0) return
+        if (source.container == Container.DOCK) {
+            _flipDockPage.tryEmit(delta)
+        } else {
+            _flipHomePage.tryEmit(delta)
+        }
+    }
+
     /** The UI finished animating [itemId] into its cell. */
     fun settled(itemId: Long) {
         if (_settling.value?.itemId == itemId) _settling.value = null
@@ -227,6 +251,7 @@ class DragCoordinator(
     fun cancelDrag() {
         edgeDwell.stop()
         resting?.cancel()
+        drag.value?.let { showSourcePage(it.source) }
         controller.cancel()
         scope.launch { workspace.pruneEmptyPages() }
     }

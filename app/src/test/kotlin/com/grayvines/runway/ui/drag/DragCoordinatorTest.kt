@@ -78,6 +78,33 @@ class DragCoordinatorTest {
     }
 
     @Test
+    fun `a refused drop after a page flip flips back to the source page`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        val flips = mutableListOf<Int>()
+        backgroundScope.launch { c.flipHomePage.collect { flips += it } }
+        runCurrent() // collecting before anything is emitted
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.areas.homePageShown(1, 3, 2) // flipped to page 1 meanwhile
+        c.dragTo(Point(150f, 400f)) // off every area: no target
+        c.endDrag()
+        runCurrent()
+        assertEquals(listOf(-1), flips) // back to page 0, where the icon settles
+        assertEquals(1L, c.settling.value?.itemId)
+    }
+
+    @Test
+    fun `a second drag while one is live is ignored`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.startDrag(DragSource(2, ItemKind.APP, Container.HOME, 0, 1, 0), Point(150f, 50f), grab)
+        assertEquals(1L, c.drag.value?.source?.itemId)
+        c.dragTo(Point(250f, 150f))
+        assertEquals(1L, c.drag.value?.source?.itemId) // still the first
+    }
+
+    @Test
     fun `a drop shows the pending move until the database reflects it`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)

@@ -23,6 +23,8 @@ class HomeMenuHost(
     private val graph: AppGraph,
     private val scope: CoroutineScope,
     private val awaitPages: suspend (count: Int) -> Unit,
+    /** Whether the menu may open now: not over a live drag, where a second finger would put it. */
+    private val mayOpen: () -> Boolean = { true },
 ) {
     private val _state = MutableStateFlow<Bounds?>(null)
 
@@ -46,7 +48,7 @@ class HomeMenuHost(
         )
 
     fun open(beside: Bounds) {
-        _state.value = beside
+        if (mayOpen()) _state.value = beside
     }
 
     fun dismiss() {

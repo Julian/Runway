@@ -3,6 +3,9 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -90,6 +93,30 @@ class ItemMenuTest : LauncherFixture() {
         device.pressBack()
         waitUntil(TIMEOUT_MS) { icon(firstDockApp).isDisplayedOrFalse() }
         awaitMenuGone()
+    }
+
+    @Test
+    fun aSecondFingersLongPressDuringADragOpensNoMenuAndLeavesTheDragAlone() {
+        val grid = useGrid(columns = 5, rows = 7)
+        holdDrag(firstHomeApp, to = grid.homeCell(3, 3))
+        val other = icon(labelAtHomeCell(1, 0)).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(pointerId = 1, position = other) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.onRoot().performTouchInput {
+            moveBy(pointerId = 1, delta = Offset(0f, -LIFT_NUDGE_PX))
+        }
+        compose.mainClock.advanceTimeBy(FRAME_MS)
+        assertTrue(compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isEmpty())
+        // The overlay still carries the first icon, not the second.
+        compose
+            .onNode(
+                hasTestTag(DRAG_OVERLAY_TAG) and hasContentDescription(firstHomeApp),
+                useUnmergedTree = true,
+            )
+            .assertExists()
+        compose.onRoot().performTouchInput { up(pointerId = 1) }
+        release()
+        awaitGone(DRAG_OVERLAY_TAG)
     }
 
     @Test

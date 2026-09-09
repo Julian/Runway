@@ -83,6 +83,11 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput { swipeDown() }
         awaitDrawerClosed()
+        // The list's fling once slipped through as a second pull, down from the closed drawer.
+        assertTrue(
+            "closing the drawer must not pull the shade",
+            !device.wait(Until.hasObject(SHADE), GRACE_MS),
+        )
     }
 
     @Test

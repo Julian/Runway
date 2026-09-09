@@ -392,9 +392,11 @@ private fun DrawerApp(
 /**
  * A swipe that begins with the list at its top pulls the drawer down instead of scrolling, and back
  * up again while it is part way; letting go reports the velocity. A swipe that merely scrolls the
- * list back to its top stops there: its leftover, and its fling, are not a pull.
+ * list back to its top stops there: its leftover, and its fling, are not a pull. What the pull
+ * takes, it consumes: the list's stretch at its edge is for scrolling past the top, not for this,
+ * and the finger's own movement is the pull, never what a fling leaves over after it lifts.
  */
-private class PullToClose(
+internal class PullToClose(
     private val revealed: () -> Float,
     private val atTop: () -> Boolean,
     private val onPull: (Float) -> Unit,
@@ -418,13 +420,18 @@ private class PullToClose(
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        if (pulling == true && available.y > 0f) onPull(available.y)
-        return Offset.Zero
+        if (pulling != true || available.y <= 0f) return Offset.Zero
+        // Once the finger is up, the list's fling may still have leftover: that is nobody's pull,
+        // but the stretch is not for it either.
+        if (source == NestedScrollSource.UserInput) onPull(available.y)
+        return Offset(0f, available.y)
     }
 
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        if (pulling == true) onPullEnd(available.y)
+        val pulled = pulling == true
         pulling = null
-        return Velocity.Zero
+        if (!pulled) return Velocity.Zero
+        onPullEnd(available.y)
+        return available
     }
 }
