@@ -97,14 +97,18 @@ fun AppTile(
     }
 }
 
-/** The platform's touch settings with a longer long press: a lift is deliberate. */
+/**
+ * The platform's touch settings with a longer long press: a lift is deliberate. Longer, never
+ * shorter: someone who asked the accessibility settings for a long touch and hold gets at least
+ * that here too.
+ */
 @Composable
 internal fun rememberLiftConfiguration(): ViewConfiguration {
     val viewConfiguration = LocalViewConfiguration.current
     return remember(viewConfiguration) {
         object : ViewConfiguration by viewConfiguration {
             override val longPressTimeoutMillis: Long
-                get() = LIFT_HOLD_MS
+                get() = maxOf(LIFT_HOLD_MS, viewConfiguration.longPressTimeoutMillis)
         }
     }
 }

@@ -2,6 +2,7 @@ package com.grayvines.runway
 
 import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -54,14 +55,16 @@ class PageFlipTest : LauncherFixture() {
     @Test
     fun aDropRefusedAfterAPageFlipComesBackToItsCellOnTheOldPage() {
         val grid = useGrid(columns = 5, rows = 7)
+        val onPageTwo = labelOnPage(1)
         holdDrag(firstHomeApp, to = grid.rightEdge(0))
-        waitUntil(FLIP_WATCH_MS) { !icon(firstHomeApp).isDisplayedOrFalse() } // page 2 shown
+        waitUntil(FLIP_WATCH_MS) { icon(onPageTwo).isDisplayedOrFalse() } // page 2 shown
         val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot.center
         dragOn(to = bar) // over the search bar: nowhere to drop
         release()
         // Back on page 1, with the icon settled in its cell, well inside the settle timeout.
-        waitUntil(SETTLE_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        waitUntil(SETTLE_MS) { !icon(onPageTwo).isDisplayedOrFalse() }
         awaitGone(DRAG_OVERLAY_TAG)
+        cellIcon(firstHomeApp).assertIsDisplayed()
         assertEquals(0 to 0, homeCellOf(firstHomeApp))
     }
 

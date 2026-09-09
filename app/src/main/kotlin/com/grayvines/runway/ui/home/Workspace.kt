@@ -38,6 +38,10 @@ fun Workspace(
     Box(modifier.fillMaxSize()) {
         HorizontalPager(
             state = pagerState,
+            // A finger carrying an icon is not swiping pages: were the pager still listening, it
+            // would take the finger's lift as the end of a swipe of its own and snap back,
+            // cutting short a flip the drop had asked for.
+            userScrollEnabled = drag?.state == null,
             modifier = Modifier.fillMaxSize().testTag(WORKSPACE_TAG),
         ) { page ->
             GridPage(

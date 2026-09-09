@@ -33,8 +33,11 @@ fun Dock(
     onPagePositioned: (page: Int, Bounds) -> Unit,
 ) {
     Box(Modifier.fillMaxWidth().height(slot.height)) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag(DOCK_TAG)) {
-            page ->
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = drag?.state == null, // as on the home pages
+            modifier = Modifier.fillMaxSize().testTag(DOCK_TAG),
+        ) { page ->
             GridPage(
                 items = pages[page].items.filter { it.x < slots },
                 cell = slot,

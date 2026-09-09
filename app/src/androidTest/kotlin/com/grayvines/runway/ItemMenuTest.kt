@@ -1,6 +1,8 @@
 package com.grayvines.runway
 
+import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
@@ -60,6 +62,32 @@ class ItemMenuTest : LauncherFixture() {
         compose.onRoot().performTouchInput { click(Offset(centerX, centerY * 1.5f)) }
         awaitMenuGone()
         assertUnmoved(firstHomeApp)
+    }
+
+    @Test
+    fun aLongerTouchAndHoldDelayFromAccessibilityIsHonoured() {
+        // The accessibility setting, as "Long" sets it; the system hands it to running apps.
+        val was = device.executeShellCommand("settings get secure long_press_timeout").trim()
+        device.executeShellCommand("settings put secure long_press_timeout $LONG_DELAY_MS")
+        try {
+            waitUntil(LONG_TIMEOUT_MS) { ViewConfiguration.getLongPressTimeout() == LONG_DELAY_MS }
+            val start = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
+            compose.onRoot().performTouchInput { down(start) }
+            compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+            compose.waitForIdle()
+            compose.onAllNodesWithTag(ITEM_MENU_TAG).assertCountEquals(0) // not yet
+            compose.mainClock.advanceTimeBy(LONG_DELAY_MS - LIFT_HOLD_MS + FRAME_MS)
+            waitUntil(TIMEOUT_MS) {
+                compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
+            }
+            release()
+        } finally {
+            val restore = if (was == "null") "delete" else "put"
+            device.executeShellCommand(
+                "settings $restore secure long_press_timeout ${if (was == "null") "" else was}"
+            )
+            waitUntil(LONG_TIMEOUT_MS) { ViewConfiguration.getLongPressTimeout() != LONG_DELAY_MS }
+        }
     }
 
     @Test
@@ -183,6 +211,8 @@ class ItemMenuTest : LauncherFixture() {
     }
 
     private companion object {
+        /** The accessibility setting's "Long" touch and hold delay. */
+        const val LONG_DELAY_MS = 1_500
         val SETTINGS_PKG: Pattern = Pattern.compile("com\\.android\\.settings")
         val INSTALLER_PKG: Pattern = Pattern.compile(".*packageinstaller.*")
     }

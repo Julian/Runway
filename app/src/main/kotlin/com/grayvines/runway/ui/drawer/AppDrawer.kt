@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -26,10 +25,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.SearchRow
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.DragHandlers
@@ -92,9 +88,6 @@ private val MARGIN = 16.dp
 private const val ICON_SHARE = 0.7f
 
 /** The search field matches the home screen's bar: the same height, glass, and quiet white. */
-private val FIELD_HEIGHT = 48.dp
-private val GLASS = 24.dp
-private const val INK_ALPHA = 0.85f
 private const val HINT_ALPHA = 0.5f
 
 /**
@@ -314,24 +307,13 @@ private fun PaddingValues.aboveKeyboard(keyboard: Dp, indexed: Boolean): Padding
 private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, modifier: Modifier) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(open, keyboard) { if (open && keyboard) focus.requestFocus() }
-    val ink = Color.White.copy(alpha = INK_ALPHA)
-    val style = MaterialTheme.typography.titleMedium.copy(color = ink)
-    Row(
-        modifier = modifier.fillMaxWidth().height(FIELD_HEIGHT).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            Icons.Outlined.Search,
-            contentDescription = null,
-            tint = ink,
-            modifier = Modifier.size(GLASS),
-        )
+    SearchRow(glassDescription = null, modifier = modifier) { ink ->
         BasicTextField(
             value = query.text,
             onValueChange = query.onChange,
             singleLine = true,
-            textStyle = style,
-            cursorBrush = SolidColor(ink),
+            textStyle = ink.style,
+            cursorBrush = SolidColor(ink.color),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = { query.onSubmit() }),
             decorationBox = { field ->
@@ -339,7 +321,7 @@ private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, mo
                     if (query.text.isEmpty()) {
                         Text(
                             "Search apps",
-                            style = style.copy(color = ink.copy(alpha = HINT_ALPHA)),
+                            style = ink.style.copy(color = ink.color.copy(alpha = HINT_ALPHA)),
                         )
                     }
                     field()
