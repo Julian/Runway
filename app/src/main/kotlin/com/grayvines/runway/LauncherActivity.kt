@@ -106,8 +106,11 @@ class LauncherActivity : ComponentActivity() {
 
     @Composable
     private fun drawerQuery(): DrawerQuery {
-        val text by viewModel.drawerQuery.collectAsStateWithLifecycle()
-        return DrawerQuery(text, viewModel::setDrawerQuery, viewModel::launchDrawerMatch)
+        return DrawerQuery(
+            viewModel.drawerQuery,
+            { viewModel.drawerQuery = it },
+            viewModel::launchDrawerMatch,
+        )
     }
 
     /** The one drag session, reading the live drag; nothing here changes while a finger moves. */

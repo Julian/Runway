@@ -1,11 +1,14 @@
 package com.grayvines.runway
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -332,6 +335,17 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun typingQuicklyKeepsEveryCharacter() {
+        openDrawer()
+        searchField().assertIsFocused()
+        // Keystrokes one after another as fast as the system delivers them, not one committed
+        // string: each must land on the field as the last one left it.
+        device.executeShellCommand("input text $TYPED")
+        waitUntil(TIMEOUT_MS) { searchText() == TYPED }
+        searchField().assertTextEquals(TYPED)
+    }
+
+    @Test
     fun enterInTheDrawerLaunchesTheMatchAndClosesTheDrawer() {
         openDrawer()
         searchField().performTextInput(firstHomeApp)
@@ -433,6 +447,9 @@ class DrawerTest : LauncherFixture() {
     }
 
     private fun searchField() = compose.onNodeWithTag(DRAWER_SEARCH_TAG)
+
+    private fun searchText() =
+        searchField().fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text
 
     private fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
 
@@ -559,6 +576,7 @@ class DrawerTest : LauncherFixture() {
 
     private companion object {
         const val PULL_STEPS = 10
+        const val TYPED = "quickbrownfox"
         const val QUICK_SWIPE = 0.08f
         const val QUICK_STEP_MS = 16L
         const val PULL_STEP_MS = 40L // slow enough not to count as a flick

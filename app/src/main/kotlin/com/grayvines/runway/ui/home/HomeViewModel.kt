@@ -1,6 +1,9 @@
 package com.grayvines.runway.ui.home
 
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.grayvines.runway.AppGraph
@@ -123,9 +126,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private val _openFolder = MutableStateFlow<OpenFolder?>(null)
     val openFolder: StateFlow<OpenFolder?> = _openFolder
 
-    /** What is typed in the drawer's search field; every open starts empty. */
-    private val _drawerQuery = MutableStateFlow("")
-    val drawerQuery: StateFlow<String> = _drawerQuery
+    /**
+     * What is typed in the drawer's search field; every open starts empty. Snapshot state rather
+     * than a flow: the field must see each keystroke's result before the next arrives, and a flow
+     * collected into composition lands a frame late, which under fast typing loses characters.
+     */
+    var drawerQuery by mutableStateOf("")
 
     /** The long-press item menu. */
     // Neither menu opens over a live drag: a second finger's long press changes nothing.
@@ -364,22 +370,18 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun openDrawer() {
         homeMenu.dismiss()
-        _drawerQuery.value = ""
+        drawerQuery = ""
         _drawerOpen.value = true
     }
 
     fun closeDrawer() {
         _drawerOpen.value = false
-        _drawerQuery.value = ""
-    }
-
-    fun setDrawerQuery(query: String) {
-        _drawerQuery.value = query
+        drawerQuery = ""
     }
 
     /** Enter in the drawer's search field launches the best match, if there is one. */
     fun launchDrawerMatch() {
-        state.value.apps.matching(_drawerQuery.value).firstOrNull()?.let(::launch)
+        state.value.apps.matching(drawerQuery).firstOrNull()?.let(::launch)
     }
 
     /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */

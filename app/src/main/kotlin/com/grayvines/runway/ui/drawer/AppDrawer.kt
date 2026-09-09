@@ -160,6 +160,7 @@ fun AppDrawer(
         Modifier.fillMaxSize().arriving { shown.value }.background(SURFACE).testTag(DRAWER_TAG)
     ) {
         val icon = fittedIconSize(iconSize, maxWidth, insets, columns)
+        val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
         Column(Modifier.fillMaxSize()) {
             SearchField(
                 query,
@@ -176,7 +177,8 @@ fun AppDrawer(
                 columns = columns,
                 iconSize = icon,
                 labels = labels,
-                contentPadding = insets.aboveKeyboard(indexed = index),
+                contentPadding = insets.aboveKeyboard(keyboardHeight, indexed = index),
+                above = keyboardHeight,
                 pullToClose = pullToClose,
                 onLaunch = onLaunch,
                 onOpenFolder = onOpenFolder,
@@ -199,13 +201,18 @@ private fun DrawerGrid(
     iconSize: Dp,
     labels: Boolean,
     contentPadding: PaddingValues,
+    above: Dp,
     pullToClose: NestedScrollConnection,
     onLaunch: (AppEntry) -> Unit,
     onOpenFolder: (HomeItem, Bounds) -> Unit,
     drag: DragSession?,
     modifier: Modifier,
 ) {
-    IndexedGrid(apps, state, indexed, before = folders.size, modifier) {
+    val entries =
+        remember(apps, folders.size) {
+            apps.index().map { IndexEntry(it.letter, it.position + folders.size) }
+        }
+    IndexedGrid(entries, state, indexed, above, modifier) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = it,
@@ -237,28 +244,27 @@ private fun DrawerGrid(
 }
 
 /**
- * The grid, with the alphabet index over its right edge when [indexed]; [before] items (the folder
- * section) sit in the grid ahead of the apps the index is of.
+ * The grid, with the alphabet index of [entries] over its right edge when [indexed], centred in the
+ * part of the grid not covered from below: [above] is the keyboard's height while it shows, so the
+ * index sits above it, in reach, rather than half under it.
  */
 @Composable
-private fun IndexedGrid(
-    apps: List<AppEntry>,
+internal fun IndexedGrid(
+    entries: List<IndexEntry>,
     state: LazyGridState,
     indexed: Boolean,
-    before: Int,
+    above: Dp,
     modifier: Modifier,
-    grid: @Composable (LazyGridState) -> Unit,
+    content: @Composable (LazyGridState) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val entries =
-        remember(apps, before) { apps.index().map { IndexEntry(it.letter, it.position + before) } }
     Box(modifier.fillMaxWidth()) {
-        grid(state)
+        content(state)
         if (indexed) {
             DrawerIndex(
                 entries,
                 onJump = { position -> scope.launch { state.scrollToItem(position) } },
-                modifier = Modifier.align(Alignment.CenterEnd),
+                modifier = Modifier.align(Alignment.CenterEnd).padding(bottom = above),
             )
         }
     }
@@ -287,12 +293,11 @@ private fun fittedIconSize(iconSize: Dp, width: Dp, insets: PaddingValues, colum
 
 /**
  * The list's padding: the margin inside the system bars at the sides, a little under the field, and
- * at the bottom the keyboard's height while it shows, else the bar's.
+ * at the bottom the [keyboard]'s height while it shows, else the bar's.
  */
 @Composable
-private fun PaddingValues.aboveKeyboard(indexed: Boolean): PaddingValues {
+private fun PaddingValues.aboveKeyboard(keyboard: Dp, indexed: Boolean): PaddingValues {
     val direction = LocalLayoutDirection.current
-    val keyboard = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     return PaddingValues(
         start = calculateStartPadding(direction) + MARGIN,
         top = MARGIN / 2,
