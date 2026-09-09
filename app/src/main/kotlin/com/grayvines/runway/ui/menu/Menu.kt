@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.menu
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -45,7 +46,7 @@ private val SURFACE = Color(0xFF202124)
 /**
  * A small menu of [content] rows beside [anchor] (root px): below it, or above it when there is no
  * room below, and centred on it sideways as far as the screen allows. A tap anywhere else dismisses
- * it.
+ * it, and so does back.
  */
 @Composable
 internal fun Menu(
@@ -54,6 +55,7 @@ internal fun Menu(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    BackHandler(onBack = onDismiss)
     var room by remember { mutableStateOf(IntSize.Zero) }
     Box(Modifier.fillMaxSize().onSizeChanged { room = it }) {
         // A sibling, not a parent: a clickable parent would merge the menu's semantics into itself.

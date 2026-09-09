@@ -63,6 +63,25 @@ class ItemMenuTest : LauncherFixture() {
     }
 
     @Test
+    fun backClosesTheMenuAndNothingElse() {
+        longPress(firstHomeApp)
+        release()
+        device.pressBack()
+        awaitMenuGone()
+        assertUnmoved(firstHomeApp)
+        assertStillOnLauncher()
+    }
+
+    @Test
+    fun aMenuWhoseItemGoesAwayCloses() {
+        longPress(firstHomeApp)
+        release()
+        // As an uninstall, or a removal from elsewhere, leaves it: the placement is gone.
+        runBlocking { graph.workspace.removeItem(placementOf(firstHomeApp)!!.id) }
+        awaitMenuGone()
+    }
+
+    @Test
     fun removeTakesTheIconOffThePage() {
         longPress(firstHomeApp)
         release()

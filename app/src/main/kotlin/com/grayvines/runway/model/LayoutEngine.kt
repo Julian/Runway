@@ -36,12 +36,34 @@ object LayoutEngine {
             items.filter { it.id != movingId && it.id !in blockerIds } + Placed(movingId, target)
         val moves = mutableMapOf<Long, Footprint>()
         for (blocker in blockers) {
-            val cell = findFreeCell(grid, occupied) ?: break
+            val cell = nearestFreeCell(grid, occupied, blocker.footprint) ?: break
             val footprint = Footprint(cell.x, cell.y)
             moves[blocker.id] = footprint
             occupied = occupied + Placed(blocker.id, footprint)
         }
         return moves.takeIf { it.size == blockers.size }
+    }
+
+    /**
+     * The free cell closest to [from], as the crow flies; among equals, the earlier in reading
+     * order. A pushed-aside icon lands next to where it was (the cell the mover just left, as often
+     * as not) rather than in the first hole from the top-left, which on a busy page is anywhere.
+     */
+    private fun nearestFreeCell(grid: GridSize, items: List<Placed>, from: Footprint): Cell? {
+        var best: Cell? = null
+        var bestDistance = Int.MAX_VALUE
+        for (y in 0 until grid.rows) {
+            for (x in 0 until grid.columns) {
+                val dx = x - from.x
+                val dy = y - from.y
+                val distance = dx * dx + dy * dy
+                if (distance < bestDistance && canPlace(grid, items, Footprint(x, y))) {
+                    best = Cell(x, y)
+                    bestDistance = distance
+                }
+            }
+        }
+        return best
     }
 
     /**

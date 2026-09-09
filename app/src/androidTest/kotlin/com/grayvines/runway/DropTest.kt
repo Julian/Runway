@@ -1,10 +1,13 @@
 package com.grayvines.runway
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.autoFill
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -25,6 +28,20 @@ class DropTest : LauncherFixture() {
         // And back: the handler must see the item's new position, not its original one.
         drag(from = firstHomeApp, to = grid.homeCell(0, 0))
         waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 0 to 0 }
+    }
+
+    @Test
+    fun theHomeIntentDuringADragPutsTheIconBackAndLeavesThePageAlone() {
+        val grid = useGrid(columns = 5, rows = 7)
+        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
+        compose.onNodeWithTag(DRAG_OVERLAY_TAG).assertExists()
+        sendHomeIntent()
+        awaitGone(DRAG_OVERLAY_TAG)
+        release() // the finger lifting afterwards drops nothing
+        Thread.sleep(WRITE_GRACE_MS)
+        assertEquals(0 to 0, homeCellOf(firstHomeApp))
+        icon(firstHomeApp).assertIsDisplayed()
+        assertStillOnLauncher()
     }
 
     @Test

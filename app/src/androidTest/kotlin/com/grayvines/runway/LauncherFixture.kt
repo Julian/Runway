@@ -145,12 +145,16 @@ open class LauncherFixture {
             .first { it !in taken }
     }
 
-    /** Swipes the pages up and waits for the drawer. */
+    /** Swipes the pages up and waits for the drawer to be all the way up, not merely on its way. */
     protected fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
         waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
+        // The drawer composes as soon as it starts up the screen. Its reveal runs on the
+        // composition's clock, so idle means it has arrived, and a swipe on a drawer still rising
+        // would be a pull, not a scroll of its list.
+        compose.waitForIdle()
     }
 
     protected fun drawerApp(label: String) =

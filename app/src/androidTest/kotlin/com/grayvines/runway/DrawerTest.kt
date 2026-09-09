@@ -28,6 +28,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.drawer.DRAWER_INDEX_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
@@ -95,10 +96,9 @@ class DrawerTest : LauncherFixture() {
 
     @Test
     fun scrollingTheListBackUpToItsTopLeavesTheDrawerOpen() {
-        // One column, so there is something to scroll.
-        runBlocking { graph.settings.update { it.copy(drawerColumns = 1) } }
-        compose.waitForIdle()
+        tallDrawerList()
         openDrawer()
+        awaitDrawerColumns(Settings.MIN_COLUMNS)
         compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput { swipeUp() }
         compose.waitForIdle()
         // A fast swipe down: the list flies back to its top, and would overshoot into a pull.
@@ -382,10 +382,9 @@ class DrawerTest : LauncherFixture() {
 
     @Test
     fun touchingALetterOfTheIndexJumpsTheListToIt() {
-        // One column, so the list is far taller than the screen and a jump has somewhere to go.
-        runBlocking { graph.settings.update { it.copy(drawerIndex = true, drawerColumns = 1) } }
-        compose.waitForIdle()
+        tallDrawerList(index = true)
         openDrawer()
+        awaitDrawerColumns(Settings.MIN_COLUMNS)
         // The letter of an app a third of the way in, and the first app under that letter: the
         // one a jump brings to the top.
         val letter = listOf(drawerLabelAThirdIn()).index { it }.single().letter
@@ -567,6 +566,36 @@ class DrawerTest : LauncherFixture() {
         }
     }
         .isSuccess
+
+    /**
+     * The fewest columns the settings allow, on a home grid of the same few columns and few rows:
+     * the icons are then as big as they get, and the drawer's list is far taller than the screen,
+     * so there is something to scroll and a jump has somewhere to go.
+     */
+    private fun tallDrawerList(index: Boolean = false) {
+        runBlocking {
+            graph.settings.update {
+                it.copy(
+                    columns = Settings.MIN_COLUMNS,
+                    rows = Settings.MIN_ROWS,
+                    drawerColumns = Settings.MIN_COLUMNS,
+                    drawerIndex = index,
+                )
+            }
+        }
+    }
+
+    /**
+     * A setting written to the store reaches the screen by way of a flow the test clock knows
+     * nothing of; the drawer can open before it lands. [columns] shows as that many distinct left
+     * edges among the apps.
+     */
+    private fun awaitDrawerColumns(columns: Int) {
+        waitUntil(TIMEOUT_MS) {
+            val items = drawerItems()
+            items.size > columns && items.map { it.boundsInRoot.left }.toSet().size == columns
+        }
+    }
 
     private fun awaitDrawerClosed() {
         waitUntil(TIMEOUT_MS) {

@@ -37,13 +37,6 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM items WHERE id = :id") suspend fun deleteItem(id: Long)
 
-    // An exact prefix match: LIKE would treat the underscores in package names as wildcards.
-    @Query(
-        "DELETE FROM items WHERE profile = :profile " +
-            "AND substr(component, 1, length(:packageName) + 1) = :packageName || '/'"
-    )
-    suspend fun deleteItemsOfPackage(packageName: String, profile: Long)
-
     @Query("SELECT * FROM items WHERE kind = :kind")
     suspend fun itemsOfKind(kind: ItemKind): List<ItemEntity>
 
@@ -68,12 +61,6 @@ interface WorkspaceDao {
 
     @Query("UPDATE folders SET name = :name WHERE id = :id")
     suspend fun renameFolder(id: Long, name: String)
-
-    @Query(
-        "DELETE FROM folder_apps WHERE profile = :profile " +
-            "AND substr(component, 1, length(:packageName) + 1) = :packageName || '/'"
-    )
-    suspend fun deleteFolderAppsOfPackage(packageName: String, profile: Long)
 
     @Query("DELETE FROM folder_apps WHERE component = :component AND profile = :profile")
     suspend fun deleteFolderApp(component: String, profile: Long)

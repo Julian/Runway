@@ -15,10 +15,10 @@ import android.util.Log
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
-import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,25 +57,23 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
      */
     private val refreshing = Mutex()
 
-    private val _refreshed = MutableSharedFlow<List<AppEntry>>(extraBufferCapacity = 1)
+    private val _refreshed =
+        MutableSharedFlow<List<AppEntry>>(
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
     /**
      * Every list a refresh produced, including one identical to the last: [apps] only reports
-     * changes, and reconciling the layout must happen on every refresh regardless.
+     * changes, and reconciling the layout must happen on every refresh regardless. Each list is the
+     * whole truth, so a collector that falls behind a burst of refreshes is given the newest and
+     * skips the rest; nothing is ever lost by that.
      */
     val refreshed: SharedFlow<List<AppEntry>> = _refreshed
 
-    private val _removed = MutableSharedFlow<AppRef>(extraBufferCapacity = REMOVAL_BUFFER)
-
-    /** Package name (as [AppRef.component]) and profile of each uninstalled app. */
-    val removed: SharedFlow<AppRef> = _removed
-
     private val callback =
         object : LauncherApps.Callback() {
-            override fun onPackageRemoved(packageName: String, user: UserHandle) {
-                _removed.tryEmit(AppRef(packageName, userManager.getSerialNumberForUser(user)))
-                refresh()
-            }
+            override fun onPackageRemoved(packageName: String, user: UserHandle) = refresh()
 
             override fun onPackageAdded(packageName: String, user: UserHandle) = refresh()
 
@@ -140,7 +138,8 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     }
 
     /**
-     * The system's uninstall confirmation; the layout updates through [removed] if it goes ahead.
+     * The system's uninstall confirmation; if it goes ahead, the package callback refreshes the
+     * list, and the layout is reconciled against it.
      */
     fun uninstall(entry: AppEntry) {
         val intent =
@@ -171,7 +170,6 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         )
 
     private companion object {
-        const val REMOVAL_BUFFER = 16
         const val STALING_CHANGES =
             ActivityInfo.CONFIG_LOCALE or
                 ActivityInfo.CONFIG_LAYOUT_DIRECTION or

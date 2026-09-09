@@ -73,12 +73,30 @@ class LayoutEngineTest {
         }
 
         @Test
-        fun `single-cell blocker moves to the first free cell`() {
+        fun `single-cell blocker moves to the cell the mover vacated beside it`() {
             val items = listOf(at(1, 0, 0), at(2, 1, 0))
             val moves =
                 LayoutEngine.displaceFor(grid, items, movingId = 1, target = Footprint(1, 0))
             // Cell (0,0) is vacated by the mover, so the blocker lands there.
             assertEquals(mapOf(2L to Footprint(0, 0)), moves)
+        }
+
+        @Test
+        fun `a blocker on a busy page goes to the nearest hole, not the first from the top`() {
+            // A 4×3 page full but for (0,0), far top-left, and (3,2), right next to the blocker.
+            val full = (0 until 12).map { at(it.toLong(), it % 4, it / 4) }
+            val items = full.filter {
+                it.footprint != Footprint(0, 0) && it.footprint != Footprint(3, 2)
+            }
+            val mover = at(99, 0, 0) // pretend it stood at (0,0), and drops on (2,2)
+            val moves =
+                LayoutEngine.displaceFor(
+                    grid,
+                    items + mover,
+                    movingId = 99,
+                    target = Footprint(2, 2),
+                )
+            assertEquals(mapOf(10L to Footprint(3, 2)), moves)
         }
 
         @Test
@@ -100,11 +118,11 @@ class LayoutEngineTest {
         }
 
         @Test
-        fun `a moving widget displaces several single cells`() {
+        fun `a moving widget displaces several single cells, each to the cell nearest it`() {
             val items = listOf(at(1, 0, 0, 2, 1), at(2, 2, 1), at(3, 3, 1))
             val moves = LayoutEngine.displaceFor(grid, items, 1, Footprint(2, 1, 2, 1))
-            assertEquals(setOf(2L, 3L), moves?.keys)
-            assertEquals(setOf(Footprint(0, 0), Footprint(1, 0)), moves?.values?.toSet())
+            // Straight up, one cell each; not across to the cells the widget left.
+            assertEquals(mapOf(2L to Footprint(2, 0), 3L to Footprint(3, 0)), moves)
         }
     }
 

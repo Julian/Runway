@@ -51,34 +51,6 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `removePackage drops every placement of that package in that profile only`() = runTest {
-        val lookalike = AppRef("pkg1_x/.Main", 0) // an underscore is a LIKE wildcard
-        repo.autoFill(
-            apps(4) + AppRef("pkg1/.Other", 0) + AppRef("pkg1/.Main", 1) + lookalike,
-            7,
-            2,
-            2,
-        )
-        repo.removePackage("pkg1", profile = 0)
-        val left =
-            (repo.observe(Container.HOME).first().pages +
-                    repo.observe(Container.DOCK).first().pages)
-                .flatMap { it.items }
-                .map { it.component to it.profile }
-                .toSet()
-        assertEquals(
-            setOf(
-                "pkg2/.Main" to 0L,
-                "pkg3/.Main" to 0L,
-                "pkg4/.Main" to 0L,
-                "pkg1/.Main" to 1L,
-                "pkg1_x/.Main" to 0L,
-            ),
-            left,
-        )
-    }
-
-    @Test
     fun `moveItem refuses a page that is gone, or a neighbour that has left it`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
@@ -287,7 +259,7 @@ class WorkspaceRepositoryTest {
                 repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
             repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
 
-            repo.removePackage("pkg2", profile = 0) // a's package
+            repo.retainApps((apps(4) - AppRef("pkg2/.Main", 0)).toSet()) // a's app uninstalled
             assertEquals(
                 listOf(AppRef("pkg3/.Main", 0)),
                 repo.observeFolders().first().single().apps,

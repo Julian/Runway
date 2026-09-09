@@ -10,6 +10,7 @@ import com.grayvines.runway.system.NotificationShade
 import com.grayvines.runway.system.apps.AppRepository
 import com.grayvines.runway.system.search.SearchTargetResolver
 import com.grayvines.runway.system.wallpaper.WallpaperPicker
+import com.grayvines.runway.ui.attempt
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,14 +39,15 @@ class AppGraph(private val context: Context) {
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
     fun start() {
-        appScope.launch {
-            appRepository.removed.collect { workspace.removePackage(it.component, it.profile) }
-        }
         // Every refresh also reconciles the layout, for uninstalls missed while not running.
         appScope.launch {
             appRepository.refreshed
                 .filter { it.isNotEmpty() }
-                .collect { apps -> workspace.retainApps(apps.mapTo(mutableSetOf()) { it.ref }) }
+                .collect { apps ->
+                    attempt("reconcile the layout with the installed apps") {
+                        workspace.retainApps(apps.mapTo(mutableSetOf()) { it.ref })
+                    }
+                }
         }
     }
 }

@@ -2,17 +2,26 @@ package com.grayvines.runway.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-internal val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("settings")
+/**
+ * What to make of a settings file that cannot be read: nothing, and start over. The settings are a
+ * convenience; a launcher that will not come up because of them is not.
+ */
+internal val settingsCorruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+
+internal val Context.settingsStore: DataStore<Preferences> by
+    preferencesDataStore("settings", corruptionHandler = settingsCorruptionHandler)
 
 class SettingsRepository(context: Context) {
     private val store = context.settingsStore
@@ -38,25 +47,27 @@ class SettingsRepository(context: Context) {
         val drawerIndex = booleanPreferencesKey("drawer_index")
     }
 
+    /** What the store holds, within bounds: nothing on disk is trusted to be. */
     private fun Preferences.toSettings(): Settings {
         val defaults = Settings()
         return Settings(
-            columns = this[Keys.columns] ?: defaults.columns,
-            rows = this[Keys.rows] ?: defaults.rows,
-            dockSlots = this[Keys.dockSlots] ?: defaults.dockSlots,
-            homeLabels = this[Keys.homeLabels] ?: defaults.homeLabels,
-            dockLabels = this[Keys.dockLabels] ?: defaults.dockLabels,
-            drawerLabels = this[Keys.drawerLabels] ?: defaults.drawerLabels,
-            searchBarAtTop = this[Keys.searchBarAtTop] ?: defaults.searchBarAtTop,
-            searchTarget = this[Keys.searchTarget],
-            drawerSwipe =
-                this[Keys.drawerSwipe]?.let { name ->
-                    DrawerSwipe.entries.firstOrNull { it.name == name }
-                } ?: defaults.drawerSwipe,
-            drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
-            drawerColumns = this[Keys.drawerColumns],
-            drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
-        )
+                columns = this[Keys.columns] ?: defaults.columns,
+                rows = this[Keys.rows] ?: defaults.rows,
+                dockSlots = this[Keys.dockSlots] ?: defaults.dockSlots,
+                homeLabels = this[Keys.homeLabels] ?: defaults.homeLabels,
+                dockLabels = this[Keys.dockLabels] ?: defaults.dockLabels,
+                drawerLabels = this[Keys.drawerLabels] ?: defaults.drawerLabels,
+                searchBarAtTop = this[Keys.searchBarAtTop] ?: defaults.searchBarAtTop,
+                searchTarget = this[Keys.searchTarget],
+                drawerSwipe =
+                    this[Keys.drawerSwipe]?.let { name ->
+                        DrawerSwipe.entries.firstOrNull { it.name == name }
+                    } ?: defaults.drawerSwipe,
+                drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
+                drawerColumns = this[Keys.drawerColumns],
+                drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
+            )
+            .clamped()
     }
 
     private fun Settings.writeTo(prefs: MutablePreferences) {

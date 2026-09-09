@@ -3,6 +3,7 @@ package com.grayvines.runway.data.backup
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.settings.clamped
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -38,15 +39,6 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
             require(backup.version <= VERSION) { "made by a newer Runway (${backup.version})" }
             return backup.copy(settings = backup.settings.clamped())
         }
-
-        /** Values from a file stay within what the settings screen would allow. */
-        private fun Settings.clamped() =
-            copy(
-                columns = columns.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
-                rows = rows.coerceIn(Settings.MIN_ROWS, Settings.MAX_ROWS),
-                dockSlots = dockSlots.coerceIn(Settings.MIN_DOCK_SLOTS, Settings.MAX_DOCK_SLOTS),
-                drawerColumns = drawerColumns?.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
-            )
     }
 }
 

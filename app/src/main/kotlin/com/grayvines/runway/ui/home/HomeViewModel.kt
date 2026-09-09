@@ -26,6 +26,7 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
+import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.drag.DragSource
@@ -37,6 +38,8 @@ import com.grayvines.runway.ui.drawer.matching
 import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.menu.HomeMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuHost
+import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -167,7 +170,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             override fun pageCount(container: Container) = state.value.pages(container).size
 
             override suspend fun move(move: PendingMove): Boolean =
-                logged("could not save the move; the item snaps back") {
+                attempt("save the move; the item snaps back") {
                     with(move) {
                         val app = newApp
                         val into = foldInto
@@ -217,26 +220,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             }
 
             override suspend fun addPage(container: Container, index: Int): Boolean =
-                logged("could not add a page") {
+                attempt("add a page") {
                     graph.workspace.addPage(container, index)
                     state.first { it.pages(container).size > index }
                 }
 
             override suspend fun pruneEmptyPages() {
-                logged("could not remove empty pages") { graph.workspace.pruneEmptyPages() }
+                attempt("remove empty pages") { graph.workspace.pruneEmptyPages() }
             }
-
-            // Anything at all: a save that fails must snap the icon back, never take the
-            // launcher down with it.
-            @Suppress("TooGenericExceptionCaught")
-            private suspend fun logged(what: String, block: suspend () -> Unit): Boolean =
-                try {
-                    block()
-                    true
-                } catch (e: Exception) {
-                    Log.e(TAG, what, e)
-                    false
-                }
         }
 
     val dragging = DragCoordinator(viewModelScope, lookup, dragWorkspace)
@@ -296,20 +287,25 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             rename = { name ->
                 val folderId = _openFolder.value?.let { state.value.item(it.itemId)?.folderId }
                 if (folderId != null) {
-                    viewModelScope.launch { graph.workspace.renameFolder(folderId, name) }
+                    viewModelScope.writing("rename the folder") {
+                        graph.workspace.renameFolder(folderId, name)
+                    }
                 }
             },
         )
 
     init {
-        viewModelScope.launch { graph.workspace.ensureInitialised() }
-        // A folder whose placement goes (uninstalled away, removed) is no longer open.
+        viewModelScope.writing("set up the layout") { graph.workspace.ensureInitialised() }
+        // A folder whose placement goes (uninstalled away, removed) is no longer open; nor is a
+        // menu whose item goes, which would otherwise keep offering actions on nothing.
         viewModelScope.launch {
             state.collect { s ->
                 val open = _openFolder.value
                 if (open != null && s.loaded && s.allItems().none { it.id == open.itemId }) {
                     closeFolder()
                 }
+                val menu = itemMenu.state.value
+                if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
             }
         }
     }
@@ -387,6 +383,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */
     fun onHomeIntent() {
         when {
+            // A drag is the most open thing there is: the icon goes back where it was, and the
+            // pages stay put under the finger rather than sliding away beneath it.
+            dragging.drag.value != null -> dragging.cancelDrag()
             itemMenu.isOpen -> itemMenu.dismiss()
             homeMenu.isOpen -> homeMenu.dismiss()
             _openFolder.value != null -> closeFolder()
@@ -401,6 +400,17 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         const val TAG = "Runway"
     }
 }
+
+/**
+ * Whether what [menu] opened on is still there: the app, for one held in the drawer's list, which
+ * is no placement; the placement itself for anything else, drawer folder tiles included.
+ */
+internal fun HomeState.stillHas(menu: ItemMenuState): Boolean =
+    if (menu.container == Container.DRAWER && menu.item.folderId == null) {
+        apps.any { it.key == menu.item.app?.key }
+    } else {
+        allItems().any { it.id == menu.item.id }
+    }
 
 /**
  * True once the drawn layout shows [move] applied: the item, or the new app, is in its cell; for a

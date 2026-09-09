@@ -55,3 +55,16 @@ data class Settings(
         const val MAX_DOCK_SLOTS = 10
     }
 }
+
+/**
+ * These settings within what the settings screen would allow. Anything read from outside it (the
+ * store on disk, a backup file) goes through here: a grid with no rows for items would bring the
+ * home screen down on every launch.
+ */
+fun Settings.clamped() =
+    copy(
+        columns = columns.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
+        rows = rows.coerceIn(Settings.MIN_ROWS, Settings.MAX_ROWS),
+        dockSlots = dockSlots.coerceIn(Settings.MIN_DOCK_SLOTS, Settings.MAX_DOCK_SLOTS),
+        drawerColumns = drawerColumns?.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
+    )

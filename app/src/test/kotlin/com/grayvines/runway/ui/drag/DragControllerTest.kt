@@ -247,7 +247,7 @@ class DragControllerTest {
         )
         controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 0, 0))
         assertEquals(
-            mapOf(1L to Footprint(2, 0)),
+            mapOf(1L to Footprint(0, 1)), // the nearest free cell: just below
             (controller.state.value?.plan as DropPlan.Move).displaced,
         )
         controller.move(Point(0f, 0f), DropTarget.DockSlot(0, 0))

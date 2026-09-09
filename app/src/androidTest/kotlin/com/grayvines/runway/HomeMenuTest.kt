@@ -35,6 +35,14 @@ class HomeMenuTest : LauncherFixture() {
     }
 
     @Test
+    fun backClosesTheHomeMenuAndNothingElse() {
+        holdEmptySpace()
+        device.pressBack()
+        waitUntil { compose.onAllNodesWithTag(HOME_MENU_TAG).fetchSemanticsNodes().isEmpty() }
+        assertStillOnLauncher()
+    }
+
+    @Test
     fun aLongPressOnAnIconOpensItsMenuNotTheHomeMenu() {
         hold(icon(firstHomeApp))
         release()

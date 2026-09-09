@@ -1,7 +1,5 @@
 package com.grayvines.runway.ui.menu
 
-import android.util.Log
-import androidx.sqlite.SQLiteException
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.WorkspaceRepository
@@ -10,10 +8,10 @@ import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.deleteFolder
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.HomeItem
+import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
 /**
  * The item menu's state and what its actions do; one long press opens it, anything else closes it.
@@ -67,22 +65,12 @@ class ItemMenuHost(
 
     /** A layout write off the main thread; a failure is logged, and the launcher stays up. */
     private fun write(what: String, block: suspend WorkspaceRepository.() -> Unit) {
-        scope.launch {
-            try {
-                graph.workspace.block()
-            } catch (e: SQLiteException) {
-                Log.e(TAG, "could not $what", e)
-            }
-        }
+        scope.writing(what) { graph.workspace.block() }
     }
 
     private inline fun withItem(block: (HomeItem) -> Unit) {
         val menu = _state.value ?: return
         _state.value = null
         block(menu.item)
-    }
-
-    private companion object {
-        const val TAG = "Runway"
     }
 }

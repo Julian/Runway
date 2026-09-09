@@ -133,15 +133,6 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         }
     }
 
-    /**
-     * An app was uninstalled: its icons go, leaving holes, and it leaves every folder it was in.
-     */
-    suspend fun removePackage(packageName: String, profile: Long) = write {
-        dao.deleteItemsOfPackage(packageName, profile)
-        dao.deleteFolderAppsOfPackage(packageName, profile)
-        dao.deleteEmptyFolders()
-    }
-
     internal suspend fun <T> write(block: suspend () -> T): T =
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction { block() }
