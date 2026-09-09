@@ -82,5 +82,6 @@ private fun ItemEntity.toHomeItem(
         app = app,
         folder = folder?.apps?.mapNotNull { apps["${it.profile}/${it.component}"] }.orEmpty(),
         folderId = folder?.id,
+        inDrawer = folder?.inDrawer == true,
     )
 }

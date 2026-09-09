@@ -7,6 +7,7 @@ import com.grayvines.runway.data.FolderEntity
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.PageEntity
+import com.grayvines.runway.data.WorkspaceDao
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.appRef
 
@@ -16,17 +17,21 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout {
     val folderApps = dao.folderApps().groupBy { it.folderId }
     val folders = dao.folders().associateBy { it.id }
     val items = dao.items()
-    val placements = items.mapNotNull { it.placement(folders, folderApps) }
-    val drawerFolders =
+    // Drawer folders by name, and which index each folder id became.
+    val drawerIds =
         items
             .filter { it.container == Container.DRAWER }
-            .mapNotNull { item -> item.folderId?.let { folders[it] }?.backup(folderApps) }
+            .mapNotNull { it.folderId }
+            .filter { it in folders }
+            .sortedBy { folders.getValue(it).name }
+    val drawerIndex = drawerIds.withIndex().associate { (i, id) -> id to i }
+    val placements = items.mapNotNull { it.placement(folders, folderApps, drawerIndex) }
     return Layout(
         homePages = pages.count { it.container == Container.HOME },
         dockPages = pages.count { it.container == Container.DOCK },
         placements =
             placements.sortedWith(compareBy({ it.container }, { it.page }, { it.y }, { it.x })),
-        drawerFolders = drawerFolders.sortedBy { it.name },
+        drawerFolders = drawerIds.map { folders.getValue(it).backup(folderApps) },
     )
 }
 
@@ -34,13 +39,16 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout {
 private fun ItemEntity.placement(
     folders: Map<Long, FolderEntity>,
     folderApps: Map<Long, List<FolderAppEntity>>,
+    drawerIndex: Map<Long, Int>,
 ): Placement? {
     val page = pageIndex ?: return null
     val x = x ?: return null
     val y = y ?: return null
     val folder = folderId?.let { folders[it] }
+    val inDrawer = folderId?.let { drawerIndex[it] }
     return when {
         kind == ItemKind.APP -> appRef()?.let { Placement(container, page, x, y, app = it) }
+        inDrawer != null -> Placement(container, page, x, y, drawerFolder = inDrawer)
         folder != null -> Placement(container, page, x, y, folder = folder.backup(folderApps))
         else -> null // widgets and shortcuts stay with the device they were made on
     }
@@ -63,14 +71,22 @@ suspend fun WorkspaceRepository.restoreLayout(layout: Layout, installed: Set<App
         dao.deleteAllPages()
         repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
         repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
-        var placed = 0
-        var skipped = 0
+        val counts = Counts()
+        // Drawer folders first: a placement may refer to one by index.
+        val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
+        var placed = counts.placed
+        var skipped = counts.skipped
         for (placement in layout.placements) {
             val folder = placement.folder
             val app = placement.app?.let(match::find)
+            val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
             when {
                 app != null -> {
                     dao.insertItem(placement.entity(ItemKind.APP, app = app))
+                    placed++
+                }
+                drawerFolder != null -> {
+                    dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
                     placed++
                 }
                 folder != null -> {
@@ -90,23 +106,6 @@ suspend fun WorkspaceRepository.restoreLayout(layout: Layout, installed: Set<App
                     skipped++
                 }
             }
-        }
-        for (folder in layout.drawerFolders) {
-            val apps = folder.apps.mapNotNull(match::find)
-            skipped += folder.apps.size - apps.size
-            if (apps.isEmpty()) continue
-            val folderId = dao.insertFolder(FolderEntity(name = folder.name))
-            apps.forEachIndexed { i, ref ->
-                dao.insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
-            }
-            dao.insertItem(
-                ItemEntity(
-                    kind = ItemKind.FOLDER,
-                    container = Container.DRAWER,
-                    folderId = folderId,
-                )
-            )
-            placed++
         }
         Restored(placed, skipped)
     }
@@ -129,4 +128,36 @@ private class AppMatcher(private val installed: Set<AppRef>) {
 
     fun find(ref: AppRef): AppRef? =
         if (ref in installed) ref else byComponent[ref.component]?.singleOrNull()
+}
+
+/** Running totals of a restore. */
+private class Counts(var placed: Int = 0, var skipped: Int = 0)
+
+/** Makes the drawer folders whose apps are installed; each index maps to the folder id it got. */
+private suspend fun WorkspaceDao.restoreDrawerFolders(
+    folders: List<Folder>,
+    match: AppMatcher,
+    counts: Counts,
+): Map<Int, Long> {
+    val ids = mutableMapOf<Int, Long>()
+    folders.forEachIndexed { index, folder ->
+        val apps = folder.apps.mapNotNull(match::find)
+        counts.skipped += folder.apps.size - apps.size
+        if (apps.isNotEmpty()) {
+            val folderId = insertFolder(FolderEntity(name = folder.name))
+            apps.forEachIndexed { i, ref ->
+                insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
+            }
+            insertItem(
+                ItemEntity(
+                    kind = ItemKind.FOLDER,
+                    container = Container.DRAWER,
+                    folderId = folderId,
+                )
+            )
+            ids[index] = folderId
+            counts.placed++
+        }
+    }
+    return ids
 }

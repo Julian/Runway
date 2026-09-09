@@ -243,6 +243,20 @@ class WorkspaceRepositoryTest {
             assertTrue(repo.observeDrawerPlacements().first().isEmpty())
         }
 
+    @Test
+    fun `a drawer folder placed in a cell is the same folder there and in the drawer`() = runTest {
+        repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+        val folderId = repo.createDrawerFolder(AppRef("pkg1/.Main", 0))
+        repo.removeItem(repo.observe(Container.HOME).first().pages.single().items.first().id)
+
+        repo.placeFolder(folderId, Container.HOME, 0, 0, 0)
+
+        val placed = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 0 }
+        assertEquals(ItemKind.FOLDER to folderId, placed.kind to placed.folderId)
+        assertTrue(repo.observeFolders().first().single().inDrawer)
+        assertEquals(listOf(folderId), repo.observeDrawerPlacements().first().map { it.folderId })
+    }
+
     private suspend fun folderApps(folderId: Long) =
         repo.observeFolders().first().single { it.id == folderId }.apps
 

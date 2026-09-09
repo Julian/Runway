@@ -30,6 +30,26 @@ suspend fun WorkspaceRepository.addToDrawerFolder(folderId: Long, app: AppRef) =
     dao.deleteEmptyFolders()
 }
 
+/** A further placement of the drawer folder [folderId], in a cell; the drawer keeps its own. */
+suspend fun WorkspaceRepository.placeFolder(
+    folderId: Long,
+    container: Container,
+    page: Int,
+    x: Int,
+    y: Int,
+) = write {
+    dao.insertItem(
+        ItemEntity(
+            kind = ItemKind.FOLDER,
+            container = container,
+            pageIndex = page,
+            x = x,
+            y = y,
+            folderId = folderId,
+        )
+    )
+}
+
 /** Deletes the folder outright: every placement of it goes, and its apps are loose again. */
 suspend fun WorkspaceRepository.deleteFolder(folderId: Long) = write { dao.deleteFolder(folderId) }
 

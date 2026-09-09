@@ -158,18 +158,18 @@ fun HomeScreen(
 private fun draggedItem(state: HomeState, drag: DragSession): HomeItem? {
     val which by
         remember(drag) {
-            derivedStateOf {
-                val source = drag.state?.source
-                Triple(source?.itemId, source?.newApp, drag.settling?.itemId)
-            }
+            derivedStateOf { drag.state?.source to drag.settling?.itemId }
         }
-    val (draggedId, newApp, settlingId) = which
-    return if (newApp != null) {
-        state.apps
-            .firstOrNull { it.ref == newApp }
-            ?.let { HomeItem(0, ItemKind.APP, 0, 0, 1, 1, it.label, it) }
-    } else {
-        state.item(draggedId ?: settlingId)
+    val (source, settlingId) = which
+    val newApp = source?.newApp
+    val newFolder = source?.newFolder
+    return when {
+        newFolder != null -> state.drawerFolders.firstOrNull { it.folderId == newFolder }
+        newApp != null ->
+            state.apps
+                .firstOrNull { it.ref == newApp }
+                ?.let { HomeItem(0, ItemKind.APP, 0, 0, 1, 1, it.label, it) }
+        else -> state.item(source?.itemId ?: settlingId)
     }
 }
 

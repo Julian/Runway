@@ -13,6 +13,7 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.unfold
@@ -67,7 +68,10 @@ data class HomeItem(
     /** For a folder: the apps in it that are available, in order. */
     val folder: List<AppEntry> = emptyList(),
     val folderId: Long? = null,
-    /** A drawer folder: it lives in the drawer, and its apps stay out of the drawer's grid. */
+    /**
+     * A drawer folder, wherever this placement of it is: its apps stay out of the drawer's grid,
+     * and are copied, not moved, when dragged out of it.
+     */
     val inDrawer: Boolean = false,
 ) {
     val footprint: Footprint
@@ -151,7 +155,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                         val app = newApp
                         val into = foldInto
                         val outOf = fromFolder
+                        val folder = newFolder
                         when {
+                            folder != null ->
+                                graph.workspace.placeFolder(folder, container, page, x, y)
                             into != null ->
                                 check(
                                     graph.workspace.foldInto(
@@ -288,25 +295,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     /**
-     * An app pulled out of the drawer, or out of the open folder [fromFolder]: whichever was open
-     * closes under it, and the drop places it.
+     * A drag of something with no cell yet: an app out of the drawer or an open folder, or a drawer
+     * folder out of the drawer. Whatever was open closes under it, and the drop places it.
      */
-    fun startDragOfApp(app: AppEntry, fromFolder: Long?, pointer: Point, grab: Point) {
+    fun startNewDrag(source: DragSource, pointer: Point, grab: Point) {
         itemMenu.dismiss()
         homeMenu.dismiss()
         closeDrawer()
         closeFolder()
-        val source =
-            DragSource(
-                0,
-                ItemKind.APP,
-                Container.DRAWER,
-                0,
-                0,
-                0,
-                newApp = app.ref,
-                fromFolder = fromFolder,
-            )
         dragging.startDrag(source, pointer, grab)
     }
 
@@ -390,6 +386,7 @@ internal fun HomeState.reflects(move: PendingMove): Boolean {
 private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
     val newApp = move.newApp
     return when {
+        move.newFolder != null -> folderId == move.newFolder
         newApp != null && move.foldInto != null -> folder.any { it.ref == newApp }
         newApp != null -> app?.ref == newApp
         else -> id == move.itemId

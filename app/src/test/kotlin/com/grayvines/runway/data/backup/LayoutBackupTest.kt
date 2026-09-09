@@ -11,6 +11,8 @@ import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeDrawerPlacements
+import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.placeFolder
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -106,6 +108,25 @@ class LayoutBackupTest {
 
         assertEquals(layout, repo.layoutBackup())
         assertEquals(1, repo.observeDrawerPlacements().first().size)
+    }
+
+    @Test
+    fun `a drawer folder placed in a cell too stays one folder through a backup`() = runTest {
+        seed()
+        val folderId = repo.createDrawerFolder(app(5))
+        repo.placeFolder(folderId, Container.HOME, 1, 1, 0)
+        val layout = repo.layoutBackup()
+        assertEquals(1, layout.drawerFolders.size)
+        assertEquals(listOf(0), layout.placements.mapNotNull { it.drawerFolder })
+
+        repo.restoreLayout(layout, apps.toSet())
+
+        assertEquals(layout, repo.layoutBackup())
+        val folders = repo.observeFolders().first()
+        assertEquals(2, folders.size) // the local one from seed, and the drawer one, once
+        val drawer = folders.single { it.inDrawer }
+        val placements = repo.observe(Container.HOME).first().pages.flatMap { it.items }
+        assertEquals(1, placements.count { it.folderId == drawer.id })
     }
 
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()

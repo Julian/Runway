@@ -1,23 +1,32 @@
 package com.grayvines.runway
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.ui.drawer.DRAWER_FOLDER_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -112,6 +121,49 @@ class DrawerFolderTest : LauncherFixture() {
     /**
      * Waits for the drawer folders to hold [expected], and says what they hold if they never do.
      */
+    @Test
+    fun draggingADrawerFolderOntoAPagePlacesItThereAndKeepsItInTheDrawer() {
+        // A free cell first: the first page is full by default. (The grid is measured off the
+        // first home app, so before it goes.)
+        val grid = useGrid(settings.columns, settings.rows)
+        runBlocking { graph.workspace.removeItem(placementOf(firstHomeApp)!!.id) }
+        waitUntil { !icon(firstHomeApp).isDisplayedOrFalse() }
+        makeDrawerFolder(first)
+        val folderId = runBlocking {
+            graph.workspace.observeDrawerPlacements().first().single().folderId
+        }
+
+        val tile = compose.onNodeWithTag(DRAWER_FOLDER_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { down(tile.center) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
+        waitUntil {
+            compose
+                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        dragOn(to = grid.homeCell(0, 0))
+        release()
+
+        waitUntil { folderAt(0, 0) == listOf(first) }
+        val placed = runBlocking {
+            graph.workspace.observe(Container.HOME).first().pages.first().items.single {
+                it.x == 0 && it.y == 0
+            }
+        }
+        assertEquals(ItemKind.FOLDER to folderId, placed.kind to placed.folderId)
+        assertEquals(listOf(listOf(first)), drawerFolders()) // still in the drawer too
+        // One folder in two places: renamed here, it is renamed in the drawer.
+        runBlocking { graph.workspace.renameFolder(folderId!!, "Tools") }
+        waitUntil {
+            compose
+                .onAllNodesWithContentDescription("Tools", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
     private fun awaitFolders(expected: List<List<String>>) {
         runCatching { waitUntil { drawerFolders() == expected } }
         assertEquals(expected, drawerFolders())

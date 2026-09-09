@@ -60,7 +60,10 @@ data class Layout(
     @SerialName("drawer_folders") val drawerFolders: List<Folder> = emptyList(),
 )
 
-/** One cell's content: an [app], or a [folder] of apps. */
+/**
+ * One cell's content: an [app], a [folder] of apps of its own, or [drawerFolder], an index into
+ * [Layout.drawerFolders], for a drawer folder placed in a cell as well.
+ */
 @Serializable
 data class Placement(
     val container: Container,
@@ -69,6 +72,7 @@ data class Placement(
     val y: Int,
     val app: AppRef? = null,
     val folder: Folder? = null,
+    @SerialName("drawer_folder") val drawerFolder: Int? = null,
 )
 
 @Serializable data class Folder(val name: String, val apps: List<AppRef>)

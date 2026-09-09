@@ -3,8 +3,13 @@ package com.grayvines.runway.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
-/** A folder and the apps in it, in order. */
-data class FolderContent(val id: Long, val name: String, val apps: List<AppRef>)
+/** A folder and the apps in it, in order; [inDrawer] when one of its placements is the drawer. */
+data class FolderContent(
+    val id: Long,
+    val name: String,
+    val apps: List<AppRef>,
+    val inDrawer: Boolean = false,
+)
 
 /** What is dropped onto an icon to fold with it: a placement, or an app fresh from the drawer. */
 sealed interface Dropped {
@@ -16,13 +21,18 @@ sealed interface Dropped {
 internal const val NEW_FOLDER_NAME = "Folder"
 
 fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
-    combine(dao.observeFolders(), dao.observeFolderApps()) { folders, apps ->
+    combine(dao.observeFolders(), dao.observeFolderApps(), dao.observeItems(Container.DRAWER)) {
+        folders,
+        apps,
+        drawer ->
         val byFolder = apps.groupBy { it.folderId }
+        val inDrawer = drawer.mapNotNullTo(HashSet()) { it.folderId }
         folders.map { folder ->
             FolderContent(
                 folder.id,
                 folder.name,
                 byFolder[folder.id].orEmpty().map { AppRef(it.component, it.profile) },
+                inDrawer = folder.id in inDrawer,
             )
         }
     }

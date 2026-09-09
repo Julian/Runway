@@ -27,6 +27,8 @@ data class DragSource(
     val newApp: AppRef? = null,
     /** Set with [newApp] when the app was lifted out of this folder rather than the drawer. */
     val fromFolder: Long? = null,
+    /** A drawer folder lifted out of the drawer: the drop places it again, in a cell. */
+    val newFolder: Long? = null,
 )
 
 sealed interface DropTarget {

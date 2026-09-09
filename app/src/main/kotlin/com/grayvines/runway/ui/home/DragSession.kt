@@ -2,11 +2,13 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.DropPlan
 import com.grayvines.runway.ui.drag.Point
@@ -28,7 +30,7 @@ class DragSession(
     val onSettled: (itemId: Long) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
-    private val onStartApp: (AppEntry, fromFolder: Long?, Point, Point) -> Unit,
+    private val onStartNew: (DragSource, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
@@ -64,14 +66,19 @@ class DragSession(
     fun handlersForDrawer(app: AppEntry) =
         DragHandlers(
             onHold = { cell -> onHold(app.asItem(), Container.DRAWER, 0, cell) },
-            onStart = { pointer, grab -> onStartApp(app, null, pointer, grab) },
+            onStart = { pointer, grab -> onStartNew(app.fresh(), pointer, grab) },
         )
 
-    /** A drawer folder: a hold shows its menu. Dragging one onto a page is not yet a thing. */
+    /**
+     * A drawer folder: a hold shows its menu; moving after the hold carries the folder out, and the
+     * drop gives it a second placement in a cell.
+     */
     fun handlersForDrawerFolder(folder: HomeItem) =
         DragHandlers(
             onHold = { cell -> onHold(folder, Container.DRAWER, 0, cell) },
-            onStart = { _, _ -> },
+            onStart = { pointer, grab ->
+                folder.folderId?.let { onStartNew(fresh(newFolder = it), pointer, grab) }
+            },
         )
 
     /**
@@ -81,7 +88,9 @@ class DragSession(
     fun handlersForFolder(app: AppEntry, leaving: Long?) =
         DragHandlers(
             onHold = {},
-            onStart = { pointer, grab -> onStartApp(app, leaving, pointer, grab) },
+            onStart = { pointer, grab ->
+                onStartNew(app.fresh(fromFolder = leaving), pointer, grab)
+            },
         )
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
@@ -93,3 +102,22 @@ class DragSession(
 
 /** A drawer app as the menu sees it: no placement of its own. */
 internal fun AppEntry.asItem() = HomeItem(0, ItemKind.APP, 0, 0, 1, 1, label, this)
+
+/**
+ * A drag of this app with no cell yet, out of the drawer or out of the folder it is [fromFolder].
+ */
+internal fun AppEntry.fresh(fromFolder: Long? = null) = fresh(newApp = ref, fromFolder = fromFolder)
+
+/** A drag of something with no cell yet; its kind follows what is set. */
+internal fun fresh(newApp: AppRef? = null, fromFolder: Long? = null, newFolder: Long? = null) =
+    DragSource(
+        0,
+        if (newFolder != null) ItemKind.FOLDER else ItemKind.APP,
+        Container.DRAWER,
+        0,
+        0,
+        0,
+        newApp = newApp,
+        fromFolder = fromFolder,
+        newFolder = newFolder,
+    )
