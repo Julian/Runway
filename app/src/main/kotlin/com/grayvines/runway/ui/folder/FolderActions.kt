@@ -6,5 +6,6 @@ import com.grayvines.runway.system.apps.AppEntry
 class FolderActions(
     val launch: (AppEntry) -> Unit,
     val close: () -> Unit,
-    val rename: (String) -> Unit,
+    /** Names the folder of this id, whether or not it is still the open one. */
+    val rename: (folderId: Long, name: String) -> Unit,
 )

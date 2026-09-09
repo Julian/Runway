@@ -8,13 +8,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -68,33 +74,50 @@ internal fun Menu(
                 )
         )
         var size by remember { mutableStateOf(IntSize.Zero) }
-        val gap = with(LocalDensity.current) { MENU_GAP.roundToPx() }
+        val density = LocalDensity.current
+        val gap = with(density) { MENU_GAP.roundToPx() }
+        // The keyboard covers the bottom of the room: the menu keeps clear of it, as it does of
+        // the screen's edges, or its rows could not be reached.
+        val keyboard = with(density) { WindowInsets.ime.getBottom(this) }
+        val clear = IntSize(room.width, (room.height - keyboard).coerceAtLeast(0))
         Surface(
             modifier =
-                Modifier.offset {
-                        val x =
-                            (anchor.left.toInt() + (anchor.width.toInt() - size.width) / 2)
-                                .coerceIn(0, (room.width - size.width).coerceAtLeast(0))
-                        val below = anchor.bottom.toInt() + gap
-                        val y =
-                            if (below + size.height <= room.height) {
-                                below
-                            } else {
-                                anchor.top.toInt() - gap - size.height
-                            }
-                        IntOffset(x, y.coerceAtLeast(0))
-                    }
+                Modifier.offset { menuOffset(anchor, size, clear, gap) }
                     .width(MENU_WIDTH)
+                    .heightIn(max = with(density) { clear.height.toDp() })
                     .onSizeChanged { size = it }
+                    // Not yet measured: not yet placed. One frame in the wrong place would show.
+                    .graphicsLayer { alpha = if (size == IntSize.Zero) 0f else 1f }
                     .testTag(tag),
             shape = RoundedCornerShape(CORNER),
             color = SURFACE,
             contentColor = Color.White,
             shadowElevation = 12.dp,
         ) {
-            Column(Modifier.padding(vertical = 6.dp), content = content)
+            // Scrolls when there are more rows than room, as with many drawer folders to add to.
+            Column(
+                Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                content = content,
+            )
         }
     }
+}
+
+/**
+ * Where a menu of [size] goes beside [anchor] within [room] (the part of the screen the keyboard
+ * leaves clear): below the anchor by [gap] when it fits, else above it; centred on it sideways as
+ * far as the room allows; never past the room's edges, top and bottom included.
+ */
+internal fun menuOffset(anchor: Bounds, size: IntSize, room: IntSize, gap: Int): IntOffset {
+    val x =
+        (anchor.left.toInt() + (anchor.width.toInt() - size.width) / 2).coerceIn(
+            0,
+            (room.width - size.width).coerceAtLeast(0),
+        )
+    val below = anchor.bottom.toInt() + gap
+    val y =
+        if (below + size.height <= room.height) below else anchor.top.toInt() - gap - size.height
+    return IntOffset(x, y.coerceIn(0, (room.height - size.height).coerceAtLeast(0)))
 }
 
 @Composable

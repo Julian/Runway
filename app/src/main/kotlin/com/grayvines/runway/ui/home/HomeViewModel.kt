@@ -284,12 +284,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         FolderActions(
             launch = { app -> launch(app) },
             close = ::closeFolder,
-            rename = { name ->
-                val folderId = _openFolder.value?.let { state.value.item(it.itemId)?.folderId }
-                if (folderId != null) {
-                    viewModelScope.writing("rename the folder") {
-                        graph.workspace.renameFolder(folderId, name)
-                    }
+            // By id, not "the open folder": a rename committed as the folder closes arrives
+            // after it is no longer open, and must not be lost for that.
+            rename = { folderId, name ->
+                viewModelScope.writing("rename the folder") {
+                    graph.workspace.renameFolder(folderId, name)
                 }
             },
         )

@@ -107,6 +107,42 @@ class FolderTest : LauncherFixture() {
     }
 
     @Test
+    fun aNameTypedAndThenTappedAwayFromIsKept() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Games")
+        // Straight out of the folder, without Done: what was typed is what the folder is called.
+        // A tap up top, where the keyboard is not.
+        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
+        awaitFolderClosed()
+        waitUntil(TIMEOUT_MS) { folderName() == "Games" }
+        compose.onNodeWithContentDescription("Games", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun aNameTypedAndThenLeftByHomeIsKept() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Work")
+        sendHomeIntent()
+        awaitFolderClosed()
+        waitUntil(TIMEOUT_MS) { folderName() == "Work" }
+    }
+
+    @Test
+    fun aNameClearedAndThenTappedAwayFromKeepsTheOldOne() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
+        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
+        awaitFolderClosed()
+        Thread.sleep(WRITE_GRACE_MS)
+        assertEquals("Folder", folderName())
+    }
+
+    @Test
     fun tappingTheNameOfAnOpenFolderLetsYouRenameIt() {
         makeFolder()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
@@ -319,6 +355,9 @@ class FolderTest : LauncherFixture() {
 
     private companion object {
         const val SETTLE_MS = 1_000L
+
+        /** Below the status bar, above where the sheet sits over a keyboard. */
+        const val ABOVE_SHEET_PX = 200f
 
         /** Of a cell's width: below it the lifted icon is shrunk for a fold, above it lifted. */
         const val SHRUNK = 0.7f

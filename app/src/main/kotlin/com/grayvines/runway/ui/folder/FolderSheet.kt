@@ -129,7 +129,9 @@ fun FolderSheet(
             shadowElevation = SHADOW * solid,
         ) {
             Column(Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress }) {
-                FolderName(folder.label, actions.rename)
+                FolderName(folder.label) { name ->
+                    folder.folderId?.let { actions.rename(it, name) }
+                }
                 LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
                     items(folder.folder, key = { it.key }) { app ->
                         FolderApp(
@@ -192,9 +194,10 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
 }
 
 /**
- * The folder's name; a tap turns it into a field with the keyboard up. Done, or leaving the field,
- * keeps what was typed. A blank name is no name: Done puts the old one back and leaves the field
- * open, so the refusal is seen rather than guessed at.
+ * The folder's name; a tap turns it into a field with the keyboard up. Done, leaving the field, or
+ * closing the folder keeps what was typed. A blank name is no name: Done puts the old one back and
+ * leaves the field open, so the refusal is seen rather than guessed at; closing on a blank keeps
+ * the old name, there being no field left to show the refusal in.
  */
 @Composable
 private fun FolderName(name: String, onRename: (String) -> Unit) {
@@ -213,7 +216,7 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
     }
     val commit = {
         editing = false
-        if (text != name) onRename(text)
+        if (text != name && text.isNotBlank()) onRename(text)
     }
     val focus = remember { FocusRequester() }
     var hadFocus by remember { mutableStateOf(false) }
