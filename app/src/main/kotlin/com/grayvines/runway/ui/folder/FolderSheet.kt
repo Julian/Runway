@@ -43,8 +43,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -202,7 +204,10 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
 @Composable
 private fun FolderName(name: String, onRename: (String) -> Unit) {
     var editing by remember { mutableStateOf(false) }
-    var text by remember(name) { mutableStateOf(name) }
+    // The whole name selected as the field opens: what is typed replaces it, and a keep is a tap
+    // away, which is what a tap on a name usually means.
+    var field by remember(name) { mutableStateOf(TextFieldValue(name, TextRange(0, name.length))) }
+    val text = field.text
     val modifier = Modifier.padding(bottom = 12.dp).testTag(FOLDER_NAME_TAG)
     if (!editing) {
         Text(
@@ -221,8 +226,8 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
     val focus = remember { FocusRequester() }
     var hadFocus by remember { mutableStateOf(false) }
     BasicTextField(
-        value = text,
-        onValueChange = { text = it.take(MAX_NAME_LENGTH) },
+        value = field,
+        onValueChange = { field = it.copy(text = it.text.take(MAX_NAME_LENGTH)) },
         singleLine = true,
         textStyle = MaterialTheme.typography.titleMedium.copy(color = Color.White),
         cursorBrush = SolidColor(Color.White),
@@ -232,7 +237,15 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
                 imeAction = ImeAction.Done,
             ),
         keyboardActions =
-            KeyboardActions(onDone = { if (text.isBlank()) text = name else commit() }),
+            KeyboardActions(
+                onDone = {
+                    if (text.isBlank()) {
+                        field = TextFieldValue(name, TextRange(0, name.length))
+                    } else {
+                        commit()
+                    }
+                }
+            ),
         modifier =
             modifier.focusRequester(focus).onFocusChanged {
                 if (it.isFocused) hadFocus = true else if (hadFocus) commit()

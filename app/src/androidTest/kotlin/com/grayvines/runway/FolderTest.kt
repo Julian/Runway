@@ -1,6 +1,7 @@
 package com.grayvines.runway
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
@@ -104,6 +106,22 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
         folderApp(firstHomeApp).assertIsDisplayed()
         folderApp(neighbour).assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingTheNameSelectsAllOfItSoTypingReplacesIt() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
+        compose.onNodeWithTag(FOLDER_NAME_TAG).assertIsFocused()
+        val selection =
+            compose
+                .onNodeWithTag(FOLDER_NAME_TAG)
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.TextSelectionRange]
+        assertEquals(TextRange(0, "Folder".length), selection)
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Games") // no clearing first
+        compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
+        waitUntil(TIMEOUT_MS) { folderName() == "Games" }
     }
 
     @Test
