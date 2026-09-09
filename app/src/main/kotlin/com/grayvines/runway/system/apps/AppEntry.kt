@@ -4,12 +4,14 @@ import android.content.ComponentName
 import android.graphics.drawable.Drawable
 import android.os.UserHandle
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import com.grayvines.runway.data.AppRef
 
 /**
  * One launchable activity in one user profile. Two entries are the same app when they name the same
- * activity in the same profile with the same label, whatever icon object each carries: a fresh list
- * after a package change must not read as a change to every app in it.
+ * activity in the same profile with the same label and an icon of the same pixels, whatever icon
+ * object each carries: a fresh list after a package change must not read as a change to every app
+ * in it, while an app whose icon was redrawn, or a list rasterised again for a new density, must.
  */
 class AppEntry(
     val component: ComponentName,
@@ -27,7 +29,11 @@ class AppEntry(
     /** Stable identity across processes. */
     val key: String = "$profileSerial/${component.flattenToString()}"
 
-    override fun equals(other: Any?) = other is AppEntry && other.key == key && other.label == label
+    override fun equals(other: Any?) =
+        other is AppEntry &&
+            other.key == key &&
+            other.label == label &&
+            other.bitmap.asAndroidBitmap().sameAs(bitmap.asAndroidBitmap())
 
     override fun hashCode() = key.hashCode() * 31 + label.hashCode()
 

@@ -3,8 +3,10 @@ package com.grayvines.runway.system.apps
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
+import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
@@ -32,8 +34,18 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
 
-    /** Icons are drawn at most about this big; rasterising bigger is wasted memory and time. */
-    private val iconPx = (ICON_DP * context.resources.displayMetrics.density).toInt()
+    /**
+     * Icons are drawn at most about this big; rasterising bigger is wasted memory and time. Read
+     * per refresh: the density can change under a running launcher.
+     */
+    private val iconPx: Int
+        get() = (ICON_DP * context.resources.displayMetrics.density).toInt()
+
+    /**
+     * The configuration the list was last built under. Labels and their order follow the locale,
+     * icons the density; a change to either is rebuilt for, other changes are not.
+     */
+    private var configuration = Configuration(context.resources.configuration)
 
     private val _apps = MutableStateFlow<List<AppEntry>>(emptyList())
     val apps: StateFlow<List<AppEntry>> = _apps
@@ -85,6 +97,13 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     init {
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         refresh()
+    }
+
+    /** The device configuration is now [config]; the list is rebuilt if that made it stale. */
+    fun configurationChanged(config: Configuration) {
+        val changed = configuration.diff(config)
+        configuration = Configuration(config)
+        if (changed and STALING_CHANGES != 0) refresh()
     }
 
     fun refresh() {
@@ -153,6 +172,10 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
 
     private companion object {
         const val REMOVAL_BUFFER = 16
+        const val STALING_CHANGES =
+            ActivityInfo.CONFIG_LOCALE or
+                ActivityInfo.CONFIG_LAYOUT_DIRECTION or
+                ActivityInfo.CONFIG_DENSITY
 
         /** The largest an icon gets on screen (dp): a lifted icon on a wide, few-column grid. */
         const val ICON_DP = 72
