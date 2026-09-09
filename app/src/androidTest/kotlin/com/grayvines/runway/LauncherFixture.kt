@@ -111,12 +111,25 @@ open class LauncherFixture {
         awaitGrid(settings.columns, settings.pageRows)
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
-        dismissNotRespondingDialog()
-        try {
-            waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
-        } catch (e: ComposeTimeoutException) {
-            // Whatever holds focus instead is the clue; the exception alone says nothing.
-            throw AssertionError("the launcher never got window focus; ${windowFocus()}", e)
+        awaitWindowFocus()
+    }
+
+    /**
+     * Waits for the launcher's window to have focus. A hung app's dialog (see
+     * [dismissNotRespondingDialog]) is closed first, and once more if the wait runs out, since it
+     * can come up during the wait; then the failure says what held focus.
+     */
+    private fun awaitWindowFocus() {
+        repeat(FOCUS_ATTEMPTS) { attempt ->
+            dismissNotRespondingDialog()
+            try {
+                compose.waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
+                return
+            } catch (e: ComposeTimeoutException) {
+                if (attempt == FOCUS_ATTEMPTS - 1) {
+                    throw AssertionError("the launcher never got window focus; ${windowFocus()}", e)
+                }
+            }
         }
     }
 
@@ -558,6 +571,9 @@ open class LauncherFixture {
 }
 
 const val TIMEOUT_MS = 5_000L
+
+/** Focus waits per test: one, and one more after closing a dialog that came up meanwhile. */
+const val FOCUS_ATTEMPTS = 2
 
 /** How Compose's test rule words a moment with no composition anywhere in the process. */
 const val NO_COMPOSITION = "No compose hierarchies found"
