@@ -28,10 +28,12 @@ It also installs the `fixture` module's app beside the launcher first: a stand-i
 
 ```sh
 ./gradlew :app:testDebugUnitTest
-./gradlew :app:phonesGroupDebugAndroidTest      # every declared device, each booted and discarded
+./gradlew :app:phonesGroupDebugAndroidTest      # every declared device at once, each booted and discarded
 ./gradlew :app:pixel10ProApi37DebugAndroidTest  # one of them
 ./gradlew :app:connectedDebugAndroidTest        # a connected emulator or device instead
 ```
+
+The managed emulators draw with the host GPU and take about five minutes for the whole suite on both devices; stop any other emulator first, since three at once can run the machine out of memory.
 
 Debug builds use the application id `com.grayvines.runway.debug` so they can be installed alongside a release build without touching its layout.
 
