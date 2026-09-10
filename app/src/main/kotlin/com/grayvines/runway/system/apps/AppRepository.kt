@@ -123,7 +123,7 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                         .awaitAll()
                 }
                     .filterNotNull()
-                    .sortedBy { it.label.lowercase() }
+                    .sortedWith(compareBy(LabelOrder.comparator()) { it.label })
                 _apps.value = fresh
                 _refreshed.tryEmit(fresh)
             }

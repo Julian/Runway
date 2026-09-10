@@ -26,6 +26,7 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.system.apps.LabelOrder
 import com.grayvines.runway.system.search.SearchTarget
 import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.drag.Bounds
@@ -239,7 +240,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     dockPages = dock.toHomePages(byKey, byFolder),
                     drawerFolders = drawer.toDrawerFolders(byKey, byFolder),
                     searchTarget = target,
-                    apps = apps.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }),
+                    apps = apps.sortedWith(compareBy(LabelOrder.comparator()) { it.label }),
                     // Not before the app list: with it empty every icon would be hidden and
                     // every cell would look free.
                     loaded = apps.isNotEmpty(),

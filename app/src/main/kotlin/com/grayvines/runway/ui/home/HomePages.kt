@@ -9,6 +9,7 @@ import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.system.apps.LabelOrder
 
 /**
  * The pages as the UI draws them. An item whose app is not in [apps] (a profile that is off, or the
@@ -47,7 +48,7 @@ internal fun List<ItemEntity>.toDrawerFolders(
 ): List<HomeItem> = mapNotNull { item ->
     item.folderId?.let { folders[it] }?.tile(item.id, apps)
 }
-    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+    .sortedWith(compareBy(LabelOrder.comparator()) { it.label })
 
 private fun FolderContent.tile(placementId: Long, apps: Map<String, AppEntry>) =
     HomeItem(

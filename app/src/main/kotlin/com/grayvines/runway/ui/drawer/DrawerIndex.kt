@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.system.apps.LabelOrder
 
 const val DRAWER_INDEX_TAG = "drawer-index"
 
@@ -39,11 +40,14 @@ class IndexEntry(val letter: Char, val position: Int)
 /** The letters the drawer's apps start with, in list order, each with its first app's position. */
 fun List<AppEntry>.index(): List<IndexEntry> = index { it.label }
 
-/** Anything not a letter files under '#'. Letters are compared in upper case. */
+/**
+ * Each letter once, at its first app, for a list in [LabelOrder]: accented initials file under
+ * their plain letter, and everything that is not a letter comes first, under one '#'.
+ */
 internal fun <T> List<T>.index(label: (T) -> String): List<IndexEntry> {
     val entries = mutableListOf<IndexEntry>()
     forEachIndexed { position, item ->
-        val letter = label(item).firstOrNull()?.uppercaseChar()?.takeIf { it.isLetter() } ?: '#'
+        val letter = LabelOrder.initial(label(item))
         if (entries.lastOrNull()?.letter != letter) entries += IndexEntry(letter, position)
     }
     return entries

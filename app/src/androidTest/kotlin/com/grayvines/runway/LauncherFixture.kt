@@ -32,6 +32,7 @@ import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.system.apps.LabelOrder
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
@@ -90,7 +91,7 @@ open class LauncherFixture {
                     .groupBy { it.label }
                     .values
                     .mapNotNull { it.singleOrNull() }
-                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+                    .sortedWith(compareBy(LabelOrder.comparator()) { it.label })
             apps = all
             // Our own settings app goes in the first home cell so tests can tap it on page 1.
             val ours = all.first { it.component.packageName == app.packageName }
