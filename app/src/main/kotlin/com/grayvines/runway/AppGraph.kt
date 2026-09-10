@@ -10,6 +10,7 @@ import com.grayvines.runway.system.NotificationShade
 import com.grayvines.runway.system.apps.AppRepository
 import com.grayvines.runway.system.search.SearchTargetResolver
 import com.grayvines.runway.system.wallpaper.WallpaperPicker
+import com.grayvines.runway.system.widgets.WidgetHost
 import com.grayvines.runway.ui.attempt
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,7 @@ class AppGraph(private val context: Context) {
     val backup: BackupService by lazy { BackupService(workspace, settings) }
     val wallpapers: WallpaperPicker by lazy { WallpaperPicker(context) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
+    val widgets: WidgetHost by lazy { WidgetHost(context) }
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
     fun start() {

@@ -82,10 +82,12 @@ private fun ItemEntity.toHomeItem(
         y = cellY,
         spanX = spanX,
         spanY = spanY,
-        label = labelOverride ?: app?.label ?: folder?.name ?: "",
+        label = labelOverride ?: app?.label ?: folder?.name ?: provider ?: "",
         app = app,
         folder = folder?.apps?.mapNotNull { apps["${it.profile}/${it.component}"] }.orEmpty(),
         folderId = folder?.id,
         inDrawer = folder?.inDrawer == true,
+        appWidgetId = appWidgetId,
+        provider = provider,
     )
 }

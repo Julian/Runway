@@ -394,6 +394,18 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `addWidget stores a home placement with its span, id and provider`() = runTest {
+        repo.ensureInitialised()
+        val id = repo.addWidget(7, "pkg/.Widget", page = 0, x = 1, y = 2, spanX = 3, spanY = 2)
+        val item = repo.observe(Container.HOME).first().pages.single().items.single()
+        assertEquals(id, item.id)
+        assertEquals(ItemKind.WIDGET, item.kind)
+        assertEquals(Footprint(1, 2, 3, 2), Footprint(item.x!!, item.y!!, item.spanX, item.spanY))
+        assertEquals(7, item.appWidgetId)
+        assertEquals("pkg/.Widget", item.provider)
+    }
+
+    @Test
     fun `retainApps drops placements of apps gone from a reported profile only`() = runTest {
         val work = AppRef("work/.Main", 10)
         repo.autoFill(apps(3) + work, columns = 3, pageRows = 1, dockSlots = 1)

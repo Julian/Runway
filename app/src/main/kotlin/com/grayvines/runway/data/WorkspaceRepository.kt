@@ -132,6 +132,31 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         }
     }
 
+    /** A widget the host has bound, over [spanX] × [spanY] cells of home [page] from ([x], [y]). */
+    suspend fun addWidget(
+        appWidgetId: Int,
+        provider: String,
+        page: Int,
+        x: Int,
+        y: Int,
+        spanX: Int,
+        spanY: Int,
+    ): Long = write {
+        dao.insertItem(
+            ItemEntity(
+                kind = ItemKind.WIDGET,
+                container = Container.HOME,
+                pageIndex = page,
+                x = x,
+                y = y,
+                spanX = spanX,
+                spanY = spanY,
+                appWidgetId = appWidgetId,
+                provider = provider,
+            )
+        )
+    }
+
     /**
      * Takes one placement off its page; a page left empty at the end goes with it, and so does a
      * folder that this was the last placement of.

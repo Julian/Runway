@@ -83,6 +83,9 @@ data class HomeItem(
      * and are copied, not moved, when dragged out of it.
      */
     val inDrawer: Boolean = false,
+    /** For a widget: the host's id for it, and the provider it is (or was) bound to. */
+    val appWidgetId: Int? = null,
+    val provider: String? = null,
 ) {
     val footprint: Footprint
         get() = Footprint(x, y, spanX, spanY)

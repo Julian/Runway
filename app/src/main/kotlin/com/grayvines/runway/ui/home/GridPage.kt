@@ -30,16 +30,18 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.widgets.WidgetCell
 
 /**
  * One page of cells: every item at its footprint, sized by its span. While a drag plans
  * displacement, displaced items are shown at their planned cells, and any change of cell slides
  * rather than jumps. The item being dragged, and the one settling after a drop, are drawn by
  * [DragOverlay] instead; their cells stay invisible here and the settling one reports where it is
- * so the overlay can bring the icon to it.
+ * so the overlay can bring the icon to it. A widget is drawn by its own host view over its cells.
  */
 @Composable
 internal fun GridPage(
@@ -77,28 +79,48 @@ internal fun GridPage(
                             },
                             label = "cell",
                         )
-                    ItemCell(
-                        item,
-                        iconSize = iconSize,
-                        labels = labels,
-                        onClick = { cell -> onLaunch(item, cell) },
-                        drag = handlersFor(item),
-                        lifted = cellDrag.lifted || settlingHere != null,
-                        receiving = cellDrag.receiving,
-                        modifier =
-                            if (settlingHere != null) {
-                                Modifier.onGloballyPositioned {
-                                    val c = it.boundsInRoot().center
-                                    settlingHere.onSettleTargetPositioned(Point(c.x, c.y))
-                                }
-                            } else {
-                                Modifier
-                            },
-                    )
+                    if (item.kind == ItemKind.WIDGET) {
+                        WidgetCell(item, cell)
+                    } else {
+                        IconCell(item, cellDrag, iconSize, labels, onLaunch, handlersFor(item))
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * An app or folder in its cell, lifted or receiving as the drag says; settling reports its cell.
+ */
+@Composable
+private fun IconCell(
+    item: HomeItem,
+    cellDrag: CellDrag,
+    iconSize: Dp,
+    labels: Boolean,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
+    handlers: DragHandlers?,
+) {
+    val settlingHere = cellDrag.settlingHere
+    ItemCell(
+        item,
+        iconSize = iconSize,
+        labels = labels,
+        onClick = { cell -> onLaunch(item, cell) },
+        drag = handlers,
+        lifted = cellDrag.lifted || settlingHere != null,
+        receiving = cellDrag.receiving,
+        modifier =
+            if (settlingHere != null) {
+                Modifier.onGloballyPositioned {
+                    val c = it.boundsInRoot().center
+                    settlingHere.onSettleTargetPositioned(Point(c.x, c.y))
+                }
+            } else {
+                Modifier
+            },
+    )
 }
 
 /** Every item at its footprint, sized by its span; the page itself fills what it is given. */

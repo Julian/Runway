@@ -103,6 +103,17 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    /** Widgets update only while the launcher is on screen. */
+    override fun onStart() {
+        super.onStart()
+        appGraph.widgets.startListening()
+    }
+
+    override fun onStop() {
+        appGraph.widgets.stopListening()
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         viewModel.onHomeIntent()

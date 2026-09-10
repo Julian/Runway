@@ -67,6 +67,33 @@ class HomePagesTest {
     }
 
     @Test
+    fun `a widget is drawn over its span, named by its provider, and cannot be folded into`() {
+        val widget =
+            ItemEntity(
+                4,
+                ItemKind.WIDGET,
+                Container.HOME,
+                0,
+                1,
+                2,
+                spanX = 3,
+                spanY = 2,
+                appWidgetId = 42,
+                provider = "pkg/.Widget",
+            )
+        val page =
+            ContainerContent(listOf(PageContent(0, listOf(widget))))
+                .toHomePages(emptyMap())
+                .single()
+        val drawn = page.items.single()
+        assertEquals(Footprint(1, 2, 3, 2), drawn.footprint)
+        assertEquals(42, drawn.appWidgetId)
+        assertEquals("pkg/.Widget", drawn.provider)
+        assertEquals("pkg/.Widget", drawn.label)
+        assertEquals(listOf(Placed(4, Footprint(1, 2, 3, 2), foldable = false)), page.occupied)
+    }
+
+    @Test
     fun `an item without a cell is neither drawn nor an occupant`() {
         val loose = ItemEntity(3, ItemKind.FOLDER, Container.DRAWER)
         val pages = ContainerContent(listOf(PageContent(0, listOf(loose)))).toHomePages(emptyMap())
