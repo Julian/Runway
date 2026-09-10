@@ -86,6 +86,26 @@ class RunwayDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun anOlderBuildOverANewerDatabaseOpensEmptyRatherThanNotAtAll() = runBlocking {
+        val db = helper.createDatabase(RunwayDatabase.VERSION)
+        try {
+            db.execSQL("INSERT INTO pages (container, page_index) VALUES ('HOME', 0)")
+            db.execSQL("PRAGMA user_version = ${RunwayDatabase.VERSION + 1}") // a build to come
+        } finally {
+            db.close()
+        }
+        val opened = RunwayDatabase.open(instrumentation.targetContext, file.absolutePath)
+        try {
+            assertEquals(
+                emptyList<Long>(),
+                opened.workspaceDao().allPages().map { it.index.toLong() },
+            )
+        } finally {
+            opened.close()
+        }
+    }
+
     private fun SQLiteConnection.ids(sql: String): List<Long> {
         val rows = prepare(sql)
         return try {
