@@ -195,7 +195,8 @@ class DragCoordinator(
     /**
      * A drag of something with no cell yet (out of the drawer, or a folder) that reaches a page
      * already holding the same app or folder becomes a drag of that placement: it lifts out of its
-     * cell into the finger, and the user is moving it. A page holds a thing once.
+     * cell into the finger, and the user is moving it. A page holds a thing once. An app being
+     * taken out of a folder still is: the drop moves the placement and takes it out.
      */
     private fun pickUpIfPlaced(state: DragState, target: DropTarget?) {
         val source = state.source
@@ -221,6 +222,7 @@ class DragCoordinator(
                 f.y,
                 f.width,
                 f.height,
+                fromFolder = source.fromFolder,
                 identity = identity,
             ),
             from,

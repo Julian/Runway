@@ -16,6 +16,7 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
+import com.grayvines.runway.data.moveOutOf
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
@@ -386,8 +387,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
 /**
  * Writes [move] as the drop it is: a drawer folder placed, a fold, an app out of a folder, an app
- * from the drawer, or a placement moved; each with the neighbours it displaced moved aside first.
- * False, and nothing changed, when the layout no longer matches the plan.
+ * from the drawer, a placement moved out of a folder's stead, or a placement moved; each with the
+ * neighbours it displaced moved aside first. False, and nothing changed, when the layout no longer
+ * matches the plan.
  */
 internal suspend fun WorkspaceRepository.apply(move: PendingMove): Boolean =
     with(move) {
@@ -405,6 +407,7 @@ internal suspend fun WorkspaceRepository.apply(move: PendingMove): Boolean =
                 )
             app != null && outOf != null -> unfold(outOf, app, container, page, x, y, displaced)
             app != null -> addApp(app, container, page, x, y, displaced)
+            outOf != null -> moveOutOf(outOf, itemId, container, page, x, y, displaced)
             else -> moveItem(itemId, container, page, x, y, displaced)
         }
     }

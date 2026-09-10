@@ -25,7 +25,10 @@ data class DragSource(
     val spanX: Int = 1,
     val spanY: Int = 1,
     val newApp: AppRef? = null,
-    /** Set with [newApp] when the app was lifted out of this folder rather than the drawer. */
+    /**
+     * The folder the app was lifted out of, rather than the drawer: with [newApp], or for a
+     * placement picked up in the folder app's stead. The drop takes the app out of it.
+     */
     val fromFolder: Long? = null,
     /** A drawer folder lifted out of the drawer: the drop places it again, in a cell. */
     val newFolder: Long? = null,

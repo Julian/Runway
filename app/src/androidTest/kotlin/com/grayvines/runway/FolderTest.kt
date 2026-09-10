@@ -188,6 +188,23 @@ class FolderTest : LauncherFixture() {
     }
 
     @Test
+    fun draggingAnAppOutOfAFolderOntoAPageThatHasItMovesThatIconAndTakesItOutOfTheFolder() {
+        val neighbour = makeFolder()
+        val grid = useGrid(columns = 5, rows = 7)
+        // The app is also placed on its own elsewhere on the page.
+        val ref = apps.first { it.label == firstHomeApp }.ref
+        runBlocking { graph.workspace.addApp(ref, Container.HOME, 0, 4, 4) }
+        waitUntil(TIMEOUT_MS) { placementsOf(firstHomeApp).size == 1 }
+        liftFromFolder(firstHomeApp)
+        dragOn(to = grid.homeCell(3, 3)) // over the page: the placement there is picked up
+        awaitFolderClosed()
+        release()
+        waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 3 to 3 }
+        assertEquals(1, placementsOf(firstHomeApp).size) // moved, not placed again
+        assertEquals(listOf(neighbour), folderAt(1, 0))
+    }
+
+    @Test
     fun draggingAnAppOutOfAnOpenFolderPutsItInTheCellItIsDroppedOn() {
         val neighbour = makeFolder()
         val grid = useGrid(columns = 5, rows = 7)

@@ -97,6 +97,31 @@ suspend fun WorkspaceRepository.unfold(
     }
 }
 
+/**
+ * Moves the placement [itemId] as [WorkspaceRepository.moveItem] does and, in the same transaction,
+ * takes its app out of the folder [folderId]: what dragging an app out of a folder onto a page that
+ * already holds it comes to, once that placement has been picked up in the folder app's stead. The
+ * folder goes if that empties it. False, and nothing changed, if the move could not be made.
+ */
+@Suppress("LongParameterList") // one drop, spelled out
+suspend fun WorkspaceRepository.moveOutOf(
+    folderId: Long,
+    itemId: Long,
+    container: Container,
+    page: Int,
+    x: Int,
+    y: Int,
+    displaced: Map<Long, Footprint> = emptyMap(),
+): Boolean = write {
+    val app = dao.item(itemId)?.appRef()
+    if (app != null && relocate(itemId, container, page, x, y, displaced)) {
+        dao.leave(folderId, app)
+        true
+    } else {
+        false
+    }
+}
+
 /** [app] leaves [folderId]; a folder left empty is gone, with every placement of it. */
 private suspend fun WorkspaceDao.leave(folderId: Long, app: AppRef) {
     removeFromFolder(folderId, app.component, app.profile)

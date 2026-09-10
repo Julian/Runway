@@ -63,13 +63,20 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         x: Int,
         y: Int,
         displaced: Map<Long, Footprint>,
-    ): Boolean = write {
-        if (dao.item(id) != null && makeRoom(container, page, displaced, mover = id)) {
-            dao.place(id, container, page, x, y)
-            true
-        } else {
-            false
-        }
+    ): Boolean = write { relocate(id, container, page, x, y, displaced) }
+
+    /** Inside a write: [moveItem]'s move, false and nothing moved when it cannot be made. */
+    internal suspend fun relocate(
+        id: Long,
+        container: Container,
+        page: Int,
+        x: Int,
+        y: Int,
+        displaced: Map<Long, Footprint>,
+    ): Boolean {
+        if (dao.item(id) == null || !makeRoom(container, page, displaced, mover = id)) return false
+        dao.place(id, container, page, x, y)
+        return true
     }
 
     /**

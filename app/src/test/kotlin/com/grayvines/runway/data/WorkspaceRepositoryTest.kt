@@ -167,6 +167,27 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `moving a placement out of a folder's stead takes the app out of the folder too`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 3, pageRows = 2, dockSlots = 1)
+            val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id)) // a and b in a folder
+            val folder = repo.observeFolders().first().single()
+            // a is placed again elsewhere on the page; that placement is what gets moved.
+            repo.addApp(a.appRef()!!, Container.HOME, 0, 2, 1)
+            val placed =
+                repo.observe(Container.HOME).first().pages.single().items.single { it.x == 2 }
+            assertTrue(repo.moveOutOf(folder.id, placed.id, Container.HOME, 0, 0, 1))
+            val items = repo.observe(Container.HOME).first().pages.single().items
+            assertEquals(0 to 1, items.single { it.id == placed.id }.let { it.x to it.y })
+            assertEquals(listOf(b.appRef()), repo.observeFolders().first().single().apps)
+
+            // A move that cannot be made changes nothing, the folder included.
+            assertFalse(repo.moveOutOf(folder.id, placed.id, Container.HOME, 9, 0, 0))
+            assertEquals(listOf(b.appRef()), repo.observeFolders().first().single().apps)
+        }
+
+    @Test
     fun `unfolding the last app dissolves the folder and its placement`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }

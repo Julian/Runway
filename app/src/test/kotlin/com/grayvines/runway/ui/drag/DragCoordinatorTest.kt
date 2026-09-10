@@ -446,6 +446,38 @@ class DragCoordinatorTest {
         }
 
     @Test
+    fun `a placement picked up in a folder app's stead still leaves the folder on the drop`() =
+        runTest {
+            val app = AppRef("a/.Main", 0)
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, holding(app), workspace)
+            c.layOut()
+            c.startDrag(
+                DragSource(
+                    0,
+                    ItemKind.APP,
+                    Container.DRAWER,
+                    0,
+                    0,
+                    0,
+                    newApp = app,
+                    fromFolder = 7L,
+                    identity = app.identity,
+                ),
+                Point(50f, 50f),
+                grab,
+            )
+            c.dragTo(Point(250f, 150f)) // over the page: the placement there is picked up
+            assertEquals(7L, c.drag.value?.source?.fromFolder)
+            c.endDrag()
+            runCurrent()
+            val move = workspace.moves.single()
+            assertEquals(1L, move.itemId)
+            assertNull(move.newApp)
+            assertEquals(7L, move.fromFolder)
+        }
+
+    @Test
     fun `let go off any target, a picked-up placement settles back where it was`() = runTest {
         val app = AppRef("a/.Main", 0)
         val workspace = FakeWorkspace()
