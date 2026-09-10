@@ -343,8 +343,13 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         drawerQuery = ""
     }
 
-    /** Enter in the drawer's search field launches the best match, if there is one. */
+    /**
+     * Enter in the drawer's search field launches the best match, if there is one. Nothing typed
+     * means nothing asked for: an empty query matches every app, and the first of those is not what
+     * anyone meant.
+     */
     fun launchDrawerMatch() {
+        if (drawerQuery.isBlank()) return
         state.value.apps.matching(drawerQuery).firstOrNull()?.let(::launch)
     }
 

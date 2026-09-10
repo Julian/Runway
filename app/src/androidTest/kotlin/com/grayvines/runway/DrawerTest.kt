@@ -389,6 +389,22 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun enterWithNothingTypedLaunchesNothing() {
+        openDrawer()
+        searchField().assertIsFocused()
+        searchField().performImeAction()
+        compose.waitForIdle()
+        Thread.sleep(WRITE_GRACE_MS) // a launch would have taken the screen by now
+        assertStillOnLauncher()
+        compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
+        searchField().performTextInput("   ")
+        searchField().performImeAction()
+        Thread.sleep(WRITE_GRACE_MS)
+        assertStillOnLauncher()
+        compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
+    }
+
+    @Test
     fun enterInTheDrawerLaunchesTheMatchAndClosesTheDrawer() {
         openDrawer()
         searchField().performTextInput(firstHomeApp)
