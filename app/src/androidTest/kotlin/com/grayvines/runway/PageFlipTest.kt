@@ -69,6 +69,35 @@ class PageFlipTest : LauncherFixture() {
     }
 
     @Test
+    fun aReleaseWhileTheFlipIsStillScrollingLandsUnderTheFingerOnTheNewPage() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        val marker = labelAtHomeCell(1, 0) // on page 1; its cell slides left as page 2 comes in
+        val row = settings.pageRows - 1
+        holdDrag(from = firstHomeApp, to = grid.rightEdge(row))
+        // The dwell runs on real time, the flip's scroll on the composition clock: hold the clock
+        // and step it until the page is seen part-way across, then let go right there.
+        compose.mainClock.autoAdvance = false
+        val restingLeft = cellIcon(marker).fetchSemanticsNode().boundsInRoot.left
+        val pageWidth = grid.cellWidth() * settings.columns
+        try {
+            val deadline = SystemClock.uptimeMillis() + FLIP_WATCH_MS
+            var shift = 0f
+            while (SystemClock.uptimeMillis() < deadline && shift < grid.cellWidth()) {
+                compose.mainClock.advanceTimeByFrame()
+                shift = restingLeft - cellIcon(marker).fetchSemanticsNode().boundsInRoot.left
+            }
+            assertTrue("the page never started scrolling", shift >= grid.cellWidth())
+            assertTrue("the scroll was already over: $shift of $pageWidth", shift < pageWidth / 2)
+            release()
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
+        val placed = placementOf(firstHomeApp)!!
+        assertEquals(settings.columns - 1 to row, placed.x to placed.y)
+    }
+
+    @Test
     fun aDropAfterAPageFlipSettlesIntoItsCellOnTheNewPage() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         val onPageTwo = labelOnPage(1)

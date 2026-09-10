@@ -1,9 +1,9 @@
 package com.grayvines.runway.ui.drag
 
 /**
- * Keeps [DropAreas] current from what the UI reports: every page's bounds as it is laid out, and
- * which page each pager has settled on. [onChange] runs whenever the areas change, so a still
- * finger can be re-evaluated against the page now under it.
+ * Keeps [DropAreas] current from what the UI reports: every page's bounds as it is laid out, which
+ * page each pager shows, and whether it is still scrolling there. [onChange] runs whenever the
+ * areas change, so a still finger can be re-evaluated against the page now under it.
  */
 class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
     var areas = DropAreas()
@@ -16,8 +16,10 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
         if (home.positioned(page, bounds)) refreshHome(columns, rows)
     }
 
-    fun homePageShown(page: Int, columns: Int, rows: Int) {
+    /** The home pager shows [page]; [settled] once it has stopped scrolling there. */
+    fun homePageShown(page: Int, columns: Int, rows: Int, settled: Boolean = true) {
         home.shown = page
+        home.settled = settled
         refreshHome(columns, rows)
     }
 
@@ -25,18 +27,32 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
         if (dock.positioned(page, bounds)) refreshDock(slots)
     }
 
-    fun dockPageShown(page: Int, slots: Int) {
+    fun dockPageShown(page: Int, slots: Int, settled: Boolean = true) {
         dock.shown = page
+        dock.settled = settled
         refreshDock(slots)
     }
 
     private fun refreshHome(columns: Int, rows: Int) =
         update(
-            areas.copy(home = home.bounds, homePage = home.shown, columns = columns, rows = rows)
+            areas.copy(
+                home = home.bounds,
+                homePage = home.shown,
+                columns = columns,
+                rows = rows,
+                homeSettled = home.settled,
+            )
         )
 
     private fun refreshDock(slots: Int) =
-        update(areas.copy(dock = dock.bounds, dockPage = dock.shown, dockSlots = slots))
+        update(
+            areas.copy(
+                dock = dock.bounds,
+                dockPage = dock.shown,
+                dockSlots = slots,
+                dockSettled = dock.settled,
+            )
+        )
 
     private fun update(next: DropAreas) {
         if (next == areas) return
@@ -44,10 +60,11 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
         onChange(next)
     }
 
-    /** One pager's reported page bounds and settled page. */
+    /** One pager's reported page bounds, shown page, and whether it has settled there. */
     private class Pages {
         private val byPage = mutableMapOf<Int, Bounds>()
         var shown = 0
+        var settled = true
         val bounds: Bounds?
             get() = byPage[shown]
 

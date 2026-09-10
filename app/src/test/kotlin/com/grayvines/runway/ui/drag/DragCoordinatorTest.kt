@@ -276,6 +276,46 @@ class DragCoordinatorTest {
     }
 
     @Test
+    fun `a release while the page is still scrolling waits, then lands on the settled page`() =
+        runTest {
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            c.layOut()
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.dragTo(Point(250f, 150f))
+            // A flip is under way: page 1 is the current page but still part-way across.
+            c.areas.homePagePositioned(1, Bounds(150f, 0f, 450f, 200f), 3, 2)
+            c.areas.homePageShown(1, 3, 2, settled = false)
+            c.endDrag()
+            runCurrent()
+            assertEquals(emptyList<PendingMove>(), workspace.moves) // not yet
+            assertEquals(1L, c.drag.value?.source?.itemId) // the item is still held up
+            c.dragTo(Point(0f, 0f)) // a stray finger meanwhile moves nothing
+            assertEquals(Point(250f, 150f), c.drag.value?.pointer)
+            // The page arrives: the still finger is planned against it, then dropped.
+            c.areas.homePagePositioned(1, Bounds(0f, 0f, 300f, 200f), 3, 2)
+            c.areas.homePageShown(1, 3, 2, settled = true)
+            runCurrent()
+            val move = workspace.moves.single()
+            assertEquals(Triple(1, 2, 1), Triple(move.page, move.x, move.y))
+            assertNull(c.drag.value)
+        }
+
+    @Test
+    fun `a release waiting on a page that never settles drops after a while anyway`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.areas.homePageShown(0, 3, 2, settled = false)
+        c.endDrag()
+        advanceTimeBy(DragCoordinator.SETTLE_WAIT_MS + 1)
+        assertEquals(1, workspace.moves.size)
+        assertNull(c.drag.value)
+    }
+
+    @Test
     fun `dwelling at the right edge flips, and past the end adds a page`() = runTest {
         val workspace = FakeWorkspace(pages = 2)
         val c = DragCoordinator(backgroundScope, lookup, workspace)

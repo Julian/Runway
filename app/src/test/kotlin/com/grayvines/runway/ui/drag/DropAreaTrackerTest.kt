@@ -42,6 +42,18 @@ class DropAreaTrackerTest {
     }
 
     @Test
+    fun `a pager mid-scroll is reported as unsettled until it stops`() {
+        tracker.homePagePositioned(0, page0, 4, 3)
+        assertEquals(true, tracker.areas.settled)
+        tracker.homePageShown(1, 4, 3, settled = false)
+        assertEquals(false, tracker.areas.settled)
+        tracker.dockPageShown(0, 3, settled = true) // the other pager does not settle it
+        assertEquals(false, tracker.areas.settled)
+        tracker.homePageShown(1, 4, 3, settled = true)
+        assertEquals(true, tracker.areas.settled)
+    }
+
+    @Test
     fun `changes are reported once each and only when something changed`() {
         tracker.homePagePositioned(0, page0, 4, 3)
         tracker.homePagePositioned(0, page0, 4, 3)

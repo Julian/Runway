@@ -28,7 +28,14 @@ data class DropAreas(
     val dock: Bounds? = null,
     val dockPage: Int = 0,
     val dockSlots: Int = 1,
-)
+    /** False while the home pager is scrolling: [home] is then a page part-way across. */
+    val homeSettled: Boolean = true,
+    val dockSettled: Boolean = true,
+) {
+    /** Neither pager is mid-scroll: what the areas say is where things will stay. */
+    val settled: Boolean
+        get() = homeSettled && dockSettled
+}
 
 /**
  * Maps the dragged item's position to a drop target. The item's top-left corner (pointer minus grab

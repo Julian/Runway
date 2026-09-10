@@ -67,8 +67,20 @@ class DragCoordinator(
     val flipHomePage: SharedFlow<Int> = _flipHomePage
     val flipDockPage: SharedFlow<Int> = _flipDockPage
 
-    /** Where home and dock are on screen; a still finger is re-evaluated when that changes. */
-    val areas = DropAreaTracker { drag.value?.let { dragTo(it.pointer) } }
+    /**
+     * Where home and dock are on screen; a still finger is re-evaluated when that changes, and a
+     * release that was waiting for a page to settle lands once it has.
+     */
+    val areas = DropAreaTracker { areas ->
+        drag.value?.let { follow(it.pointer) }
+        if (released && areas.settled) drop()
+    }
+
+    /**
+     * The finger has lifted but the drop is waiting for a scrolling page to settle: the bounds a
+     * page reports mid-scroll would land the item in the wrong column, or on the wrong page.
+     */
+    private var released = false
 
     private val edgeDwell =
         EdgeDwell(
@@ -120,6 +132,12 @@ class DragCoordinator(
     }
 
     fun dragTo(pointer: Point) {
+        if (released) return // the finger is up: nothing moves the item now
+        follow(pointer)
+    }
+
+    /** Plans for the item at [pointer] against the areas as they are now. */
+    private fun follow(pointer: Point) {
         val arrived = drag.value ?: return
         val target =
             areas.areas.targetFor(pointer, arrived.grab, arrived.source.spanX, arrived.source.spanY)
@@ -146,10 +164,29 @@ class DragCoordinator(
         }
     }
 
-    /** Commits the planned drop, if any; the override shows it until the database catches up. */
+    /**
+     * The finger has lifted. The drop lands now, or, while a page flip is still scrolling under the
+     * item, once the page has settled (and the still finger has been re-planned against it); a
+     * pager that never reports settling is waited on for [SETTLE_WAIT_MS] at most.
+     */
     fun endDrag() {
         edgeDwell.stop()
         resting?.cancel()
+        if (drag.value == null) return
+        if (areas.areas.settled) {
+            drop()
+        } else {
+            released = true
+            scope.launch {
+                delay(SETTLE_WAIT_MS)
+                if (released) drop()
+            }
+        }
+    }
+
+    /** Commits the planned drop, if any; the override shows it until the database catches up. */
+    private fun drop() {
+        released = false
         val state = drag.value ?: return
         val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
@@ -258,6 +295,7 @@ class DragCoordinator(
     fun cancelDrag() {
         edgeDwell.stop()
         resting?.cancel()
+        released = false
         drag.value?.let { showSourcePage(it.source) }
         controller.cancel()
         scope.launch { workspace.pruneEmptyPages() }
@@ -280,6 +318,11 @@ class DragCoordinator(
 
     companion object {
         private const val SETTLE_TIMEOUT_MS = 2_000L
+
+        /**
+         * Longer than a flip's scroll (250 ms) by a margin: a page that never settles still drops.
+         */
+        const val SETTLE_WAIT_MS = 600L
 
         /** How long a finger rests on a cell before its neighbours slide aside. */
         const val REST_MS = 300L

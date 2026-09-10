@@ -80,9 +80,9 @@ fun HomeScreen(
     drawerQuery: DrawerQuery,
     onLaunchApp: (AppEntry) -> Unit,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
-    onHomePageShown: (page: Int) -> Unit,
+    onHomePageShown: (page: Int, settled: Boolean) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
-    onDockPageShown: (page: Int) -> Unit,
+    onDockPageShown: (page: Int, settled: Boolean) -> Unit,
 ) {
     if (!state.loaded) return
     val settings = state.settings

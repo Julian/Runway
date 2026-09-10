@@ -11,22 +11,28 @@ import kotlinx.coroutines.flow.first
 
 private const val FLIP_SCROLL_MS = 250
 
-/** Reports the page a pager has settled on, to whichever callback is current. */
+/**
+ * Reports the page each pager shows, and whether it has settled there or is still scrolling, to
+ * whichever callback is current.
+ */
 @Composable
 internal fun PagesShown(
     home: PagerState,
     dock: PagerState,
-    onHomeShown: (page: Int) -> Unit,
-    onDockShown: (page: Int) -> Unit,
+    onHomeShown: (page: Int, settled: Boolean) -> Unit,
+    onDockShown: (page: Int, settled: Boolean) -> Unit,
 ) {
     PageShown(home, onHomeShown)
     PageShown(dock, onDockShown)
 }
 
 @Composable
-private fun PageShown(pager: PagerState, onShown: (page: Int) -> Unit) {
+private fun PageShown(pager: PagerState, onShown: (page: Int, settled: Boolean) -> Unit) {
     val shown = rememberUpdatedState(onShown)
-    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { shown.value(it) } }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.currentPage to !pager.isScrollInProgress }
+            .collect { (page, settled) -> shown.value(page, settled) }
+    }
 }
 
 /**

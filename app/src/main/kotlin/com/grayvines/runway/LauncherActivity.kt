@@ -158,11 +158,12 @@ private class AreaReports(
     fun homePagePositioned(page: Int, bounds: Bounds) =
         settings().let { areas.homePagePositioned(page, bounds, it.columns, it.pageRows) }
 
-    fun homePageShown(page: Int) =
-        settings().let { areas.homePageShown(page, it.columns, it.pageRows) }
+    fun homePageShown(page: Int, settled: Boolean) =
+        settings().let { areas.homePageShown(page, it.columns, it.pageRows, settled) }
 
     fun dockPagePositioned(page: Int, bounds: Bounds) =
         areas.dockPagePositioned(page, bounds, settings().dockSlots)
 
-    fun dockPageShown(page: Int) = areas.dockPageShown(page, settings().dockSlots)
+    fun dockPageShown(page: Int, settled: Boolean) =
+        areas.dockPageShown(page, settings().dockSlots, settled)
 }
