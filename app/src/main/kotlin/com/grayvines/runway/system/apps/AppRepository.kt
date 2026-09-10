@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -118,9 +119,10 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                 val fresh = coroutineScope {
                     userManager.userProfiles
                         .flatMap { user -> launcherApps.getActivityList(null, user) }
-                        .map { info -> async { info.toEntry() } }
+                        .map { info -> async { info.toEntryOrNull() } }
                         .awaitAll()
                 }
+                    .filterNotNull()
                     .sortedBy { it.label.lowercase() }
                 _apps.value = fresh
                 _refreshed.tryEmit(fresh)
@@ -164,6 +166,22 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         Log.w(TAG, "could not launch ${entry.component}", e)
         refresh()
     }
+
+    /**
+     * The entry for this activity, or null if the package cannot be read (its resources broken, or
+     * gone since the list was asked for): one such app must not keep the whole list, and with it
+     * the launcher, from ever loading.
+     */
+    @Suppress("TooGenericExceptionCaught") // whatever a broken package throws, it is left out
+    private fun LauncherActivityInfo.toEntryOrNull(): AppEntry? =
+        try {
+            toEntry()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not read $componentName; left out of the list", e)
+            null
+        }
 
     private fun LauncherActivityInfo.toEntry() =
         AppEntry(
