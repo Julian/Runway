@@ -102,6 +102,10 @@ const val FOLD_ZONE = 0.6f
  */
 const val FOLD_KEEP_ZONE = 0.9f
 
+/** The home cell under [pointer], anywhere within it; null off the pages. */
+fun DropAreas.homeCellAt(pointer: Point): DropTarget.HomeCell? =
+    cellUnder(pointer, zone = 1f) as? DropTarget.HomeCell
+
 /**
  * The cell the pointer itself is in, when it is well inside it (the middle [zone] of it): a drop
  * there means "onto what is here" rather than "next to it".

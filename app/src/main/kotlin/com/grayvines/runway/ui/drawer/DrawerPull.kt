@@ -1,6 +1,9 @@
 package com.grayvines.runway.ui.drawer
 
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,6 +13,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -23,15 +27,22 @@ import kotlinx.coroutines.launch
  * gesture, which threw away every move after the first frame.
  */
 @Composable
-fun Modifier.drawerPull(motion: DrawerMotion, onRelease: (Float) -> Unit): Modifier {
+fun Modifier.drawerPull(
+    motion: DrawerMotion,
+    onRelease: (Float) -> Unit,
+    /** Whether a finger landing at this root point belongs to a widget, which keeps it. */
+    startsOnWidget: (Offset) -> Boolean = { false },
+): Modifier {
     val release = rememberUpdatedState(onRelease)
+    val ignores = rememberUpdatedState(startsOnWidget)
     val coords = remember { mutableStateOf<LayoutCoordinates?>(null) }
     return this.onGloballyPositioned { coords.value = it }
         .then(
             remember(motion) {
                 Modifier.pullsDrawer(
                     motion,
-                    rootY = { local -> coords.value?.localToRoot(local)?.y },
+                    rootOf = { local -> coords.value?.localToRoot(local) },
+                    startsOnWidget = { ignores.value(it) },
                 ) {
                     release.value(it)
                 }
@@ -55,34 +66,50 @@ fun Modifier.releasesAbandonedPull(motion: DrawerMotion, onRelease: (Float) -> U
     )
 }
 
+/**
+ * A vertical drag pulls the drawer (or, downward, the shade) unless it began on a widget: a
+ * widget's vertical drags are its own (a list in it scrolls), and Compose would otherwise claim
+ * them at touch slop, before the widget's view has had a chance to ask for them.
+ */
 private fun Modifier.pullsDrawer(
     motion: DrawerMotion,
-    rootY: (local: Offset) -> Float?,
+    rootOf: (local: Offset) -> Offset?,
+    startsOnWidget: (root: Offset) -> Boolean,
     onRelease: (velocity: Float) -> Unit,
 ) =
     pointerInput(motion) {
         val tracker = VelocityTracker()
-        var started = false
         try {
-            detectVerticalDragGestures(
-                onDragStart = {
-                    tracker.resetTracking()
-                    started = false
-                },
-                onDragEnd = { onRelease(tracker.calculateVelocity().y) },
-                onDragCancel = { onRelease(0f) },
-                onVerticalDrag = { change, dy ->
-                    tracker.addPosition(change.uptimeMillis, change.position)
-                    if (!started) {
-                        started = true
-                        // The first move carries the slop the finger crossed unnoticed; the
-                        // pull begins where the finger was before it, so that after this move
-                        // the drawer's edge is exactly under the finger.
-                        motion.startPull(rootY(change.position - Offset(0f, dy)))
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val ours = rootOf(down.position)?.let(startsOnWidget) != true
+                var overSlop = 0f
+                val drag =
+                    if (ours) {
+                        awaitVerticalTouchSlopOrCancellation(down.id) { change, over ->
+                            change.consume()
+                            overSlop = over
+                        }
+                    } else {
+                        null
                     }
-                    motion.dragBy(dy)
-                },
-            )
+                if (drag != null) {
+                    tracker.resetTracking()
+                    // The first move carries the slop the finger crossed unnoticed; the pull
+                    // begins where the finger was before it, so that after this move the
+                    // drawer's edge is exactly under the finger.
+                    motion.startPull(rootOf(drag.position - Offset(0f, overSlop))?.y)
+                    tracker.addPosition(drag.uptimeMillis, drag.position)
+                    motion.dragBy(overSlop)
+                    val ended =
+                        verticalDrag(drag.id) { change ->
+                            tracker.addPosition(change.uptimeMillis, change.position)
+                            motion.dragBy(change.positionChange().y)
+                            change.consume()
+                        }
+                    onRelease(if (ended) tracker.calculateVelocity().y else 0f)
+                }
+            }
         } finally {
             // The system took the touch away (gesture navigation, a call) mid-pull.
             if (motion.pulling) onRelease(0f)

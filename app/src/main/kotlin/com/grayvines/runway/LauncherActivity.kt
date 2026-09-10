@@ -26,6 +26,7 @@ import com.grayvines.runway.ui.home.DrawerActions
 import com.grayvines.runway.ui.home.HomeScreen
 import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.home.applying
+import com.grayvines.runway.ui.home.hasWidgetAt
 import com.grayvines.runway.ui.menu.HomeMenuSession
 import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
@@ -91,6 +92,9 @@ class LauncherActivity : ComponentActivity() {
                     folderActions = viewModel.folderActions,
                     drawerOpen = drawerOpen,
                     drawerActions = drawerActions,
+                    startsOnWidget = { p ->
+                        viewModel.state.value.hasWidgetAt(viewModel.dragging.areas.areas, p)
+                    },
                     drawerQuery = drawerQuery(),
                     onLaunchApp = viewModel::launch,
                     drag = rememberDragSession(),

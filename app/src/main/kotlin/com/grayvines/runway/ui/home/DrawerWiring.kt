@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drawer.DrawerMotion
 import com.grayvines.runway.ui.drawer.drawerPull
 import com.grayvines.runway.ui.drawer.releasesAbandonedPull
@@ -23,14 +24,23 @@ internal class DrawerControls(
 )
 
 @Composable
-internal fun rememberDrawer(open: Boolean, actions: DrawerActions): DrawerControls {
+internal fun rememberDrawer(
+    open: Boolean,
+    actions: DrawerActions,
+    /**
+     * Whether a finger landing at this root point is on a widget, whose vertical drags are its own.
+     */
+    startsOnWidget: (Point) -> Boolean = { false },
+): DrawerControls {
     val scope = rememberCoroutineScope()
     val motion = remember { DrawerMotion(scope) }
     LaunchedEffect(open) { motion.settle(open) }
     val release = { velocity: Float ->
         motion.release(velocity, open, actions.open, actions.close, actions.openShade)
     }
-    return DrawerControls(motion, release, Modifier.drawerPull(motion, release))
+    val pull =
+        Modifier.drawerPull(motion, release, startsOnWidget = { startsOnWidget(Point(it.x, it.y)) })
+    return DrawerControls(motion, release, pull)
 }
 
 /** Told the screen height once it is known, so the motion knows how far a pull travels. */

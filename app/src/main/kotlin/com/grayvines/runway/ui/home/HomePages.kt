@@ -8,8 +8,12 @@ import com.grayvines.runway.data.appRef
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.model.overlaps
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
+import com.grayvines.runway.ui.drag.DropAreas
+import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.drag.homeCellAt
 
 /**
  * The pages as the UI draws them. An item whose app is not in [apps] (a profile that is off, or the
@@ -27,6 +31,16 @@ internal fun ContainerContent.toHomePages(
         items = items,
         occupied = page.items.mapNotNull { it.placed(drawn = it.id in drawn) },
     )
+}
+
+/** Whether the root point [p] lies on a widget of the home page shown in [areas]. */
+internal fun HomeState.hasWidgetAt(areas: DropAreas, p: Point): Boolean {
+    val cell = areas.homeCellAt(p) ?: return false
+    return homePages
+        .firstOrNull { it.index == cell.page }
+        ?.items
+        .orEmpty()
+        .any { it.kind == ItemKind.WIDGET && it.footprint.overlaps(Footprint(cell.x, cell.y)) }
 }
 
 /** [drawn] apps take a dropped app in; one whose profile is off is a cell to keep clear of. */

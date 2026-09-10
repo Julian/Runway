@@ -112,7 +112,13 @@ class DragSession(
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         handlers(
             onHold = { cell -> onHold(item, container, page, cell) },
-            onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
+            onStart =
+                if (item.kind == ItemKind.WIDGET) {
+                    // A widget is not carried yet: its hold shows the menu, and that is all.
+                    { _, _ -> }
+                } else {
+                    { pointer, grab -> onStart(item, container, page, pointer, grab) }
+                },
         )
 
     /**

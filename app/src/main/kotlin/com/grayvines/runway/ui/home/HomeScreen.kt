@@ -77,6 +77,10 @@ fun HomeScreen(
     folderActions: FolderActions,
     drawerOpen: Boolean,
     drawerActions: DrawerActions,
+    /**
+     * Whether a finger landing at this root point is on a widget, whose vertical drags are its own.
+     */
+    startsOnWidget: (Point) -> Boolean,
     drawerQuery: DrawerQuery,
     onLaunchApp: (AppEntry) -> Unit,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
@@ -93,7 +97,7 @@ fun HomeScreen(
     PagesShown(homePager, dockPager, onHomePageShown, onDockPageShown)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
-    val drawer = rememberDrawer(drawerOpen, drawerActions)
+    val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)
     BoxWithConstraints(Modifier.fillMaxSize().dragTracking(drag).releasesAbandonedPull(drawer)) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)

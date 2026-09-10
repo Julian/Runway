@@ -80,7 +80,7 @@ internal fun GridPage(
                             label = "cell",
                         )
                     if (item.kind == ItemKind.WIDGET) {
-                        WidgetCell(item, cell)
+                        WidgetCell(item, cell, drag = handlersFor(item))
                     } else {
                         IconCell(item, cellDrag, iconSize, labels, onLaunch, handlersFor(item))
                     }
