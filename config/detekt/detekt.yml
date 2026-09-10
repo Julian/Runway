@@ -43,3 +43,6 @@ complexity:
     ignoreAnnotated: ['Dao']
   TooManyFunctions:
     ignoreAnnotated: ['Dao']
+    # Count a class's surface, not the internal helpers behind it: the workspace repository is
+    # the placement store, and what can stand apart (folding, drawer folders, backup) already does.
+    ignoreInternal: true
