@@ -23,6 +23,7 @@
         <!-- A widget provider, so the tests have a widget to host. -->
         <receiver
             android:name=".FixtureWidget"
+            android:label="@string/fixture_widget"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

@@ -46,6 +46,8 @@ import com.grayvines.runway.ui.menu.ItemMenu
 import com.grayvines.runway.ui.menu.ItemMenuActions
 import com.grayvines.runway.ui.menu.ItemMenuState
 import com.grayvines.runway.ui.shade.ShadeHint
+import com.grayvines.runway.ui.widgets.WidgetPicker
+import com.grayvines.runway.ui.widgets.WidgetPickerSession
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -73,6 +75,7 @@ fun HomeScreen(
     itemMenuActions: ItemMenuActions,
     onDismissItemMenu: () -> Unit,
     homeMenu: HomeMenuSession,
+    widgetPicker: WidgetPickerSession,
     openFolder: OpenFolder?,
     folderActions: FolderActions,
     drawerOpen: Boolean,
@@ -139,10 +142,7 @@ fun HomeScreen(
         )
         // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
         openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
-        itemMenu?.let {
-            ItemMenu(it, itemMenuActions, state.drawerFolders, onDismiss = onDismissItemMenu)
-        }
-        homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
+        Menus(state, itemMenu, itemMenuActions, onDismissItemMenu, homeMenu, widgetPicker, cell)
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
@@ -150,6 +150,30 @@ fun HomeScreen(
             cell = cell,
             iconSize = iconSize,
             lift = lift,
+        )
+    }
+}
+
+/** The item menu, the home menu and the widget picker, whichever is up. */
+@Composable
+private fun Menus(
+    state: HomeState,
+    itemMenu: ItemMenuState?,
+    itemMenuActions: ItemMenuActions,
+    onDismissItemMenu: () -> Unit,
+    homeMenu: HomeMenuSession,
+    widgetPicker: WidgetPickerSession,
+    cell: DpSize,
+) {
+    itemMenu?.let {
+        ItemMenu(it, itemMenuActions, state.drawerFolders, onDismiss = onDismissItemMenu)
+    }
+    homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
+    if (widgetPicker.open) {
+        WidgetPicker(
+            widgetPicker.providers,
+            onPick = { widgetPicker.onPick(it, cell.width.value, cell.height.value) },
+            onDismiss = widgetPicker.onDismiss,
         )
     }
 }

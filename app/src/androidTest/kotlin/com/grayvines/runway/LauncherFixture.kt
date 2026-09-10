@@ -3,6 +3,7 @@ package com.grayvines.runway
 import android.content.Intent
 import android.os.SystemClock
 import android.view.ViewConfiguration
+import android.view.accessibility.AccessibilityEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -176,6 +177,33 @@ open class LauncherFixture {
                 }
             }
         }
+    }
+
+    /**
+     * Grants or revokes the launcher's right to bind widgets without asking, through the shell, as
+     * the system's bind dialog would grant it. By user number: the command refuses "current".
+     */
+    protected fun allowWidgetBinding(allowed: Boolean) {
+        val user = device.executeShellCommand("am get-current-user").trim()
+        val verb = if (allowed) "grantbind" else "revokebind"
+        device.executeShellCommand("appwidget $verb --package ${app.packageName} --user $user")
+    }
+
+    /**
+     * Runs [action] and waits for a toast saying [text]. A toast is no window UiAutomator can look
+     * at; it reaches accessibility as an event, which is what is watched here.
+     */
+    protected fun expectToast(text: String, action: () -> Unit) {
+        InstrumentationRegistry.getInstrumentation()
+            .uiAutomation
+            .executeAndWaitForEvent(
+                action,
+                { event ->
+                    event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED &&
+                        event.text.any { it.toString() == text }
+                },
+                TIMEOUT_MS,
+            )
     }
 
     /** The first cell of the first home page nothing sits on. */

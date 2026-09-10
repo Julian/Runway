@@ -42,6 +42,7 @@ import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.menu.HomeMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.widgets.WidgetPickerHost
 import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -205,6 +206,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         }
 
     val dragging = DragCoordinator(viewModelScope, lookup, dragWorkspace)
+
+    /** The widget picker, adding to the page on screen. */
+    val widgetPicker =
+        WidgetPickerHost(
+            graph,
+            viewModelScope,
+            lookup,
+            shownPage = { dragging.areas.areas.homePage },
+            mayOpen = { dragging.drag.value == null },
+        )
 
     /**
      * Asking the package manager who handles a web search is slow: done only when the chosen
@@ -375,6 +386,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             dragging.drag.value != null -> dragging.cancelDrag()
             itemMenu.isOpen -> itemMenu.dismiss()
             homeMenu.isOpen -> homeMenu.dismiss()
+            widgetPicker.isOpen -> widgetPicker.dismiss()
             _openFolder.value != null -> closeFolder()
             _drawerOpen.value -> closeDrawer()
             else -> _goHome.tryEmit(Unit)

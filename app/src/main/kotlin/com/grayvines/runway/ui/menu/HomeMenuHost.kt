@@ -37,10 +37,14 @@ class HomeMenuHost(
     val isOpen: Boolean
         get() = _state.value != null
 
-    /** The menu's actions, each closing it; [openSettings] is the activity's to provide. */
-    fun actions(openSettings: () -> Unit) =
+    /**
+     * The menu's actions, each closing it; [openSettings] is the activity's to provide and
+     * [openWidgets] the widget picker's.
+     */
+    fun actions(openSettings: () -> Unit, openWidgets: () -> Unit) =
         HomeMenuActions(
             wallpaper = { closing { graph.wallpapers.pick() } },
+            widgets = { closing(openWidgets) },
             addPage = { closing { scope.writing("add a page") { addPage() } } },
             settings = { closing(openSettings) },
         )

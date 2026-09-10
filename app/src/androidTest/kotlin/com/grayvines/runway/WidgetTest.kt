@@ -194,9 +194,7 @@ class WidgetTest : LauncherFixture() {
      * system's bind dialog would grant it.
      */
     private fun placeFixtureWidget(): Long {
-        // By number: the appwidget command's "current" is refused by the service.
-        val user = device.executeShellCommand("am get-current-user").trim()
-        device.executeShellCommand("appwidget grantbind --package ${app.packageName} --user $user")
+        allowWidgetBinding(true)
         val id = graph.widgets.allocateId()
         assertTrue(
             "could not bind the fixture widget",

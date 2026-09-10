@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddBox
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.runtime.Composable
 import com.grayvines.runway.ui.drag.Bounds
 import kotlinx.coroutines.flow.Flow
@@ -11,7 +12,12 @@ import kotlinx.coroutines.flow.Flow
 const val HOME_MENU_TAG = "home-menu"
 
 /** What a long press on empty home space can do. */
-class HomeMenuActions(val wallpaper: () -> Unit, val addPage: () -> Unit, val settings: () -> Unit)
+class HomeMenuActions(
+    val wallpaper: () -> Unit,
+    val widgets: () -> Unit,
+    val addPage: () -> Unit,
+    val settings: () -> Unit,
+)
 
 /** The home menu as the screen sees it: where it is open (if at all), and how to drive it. */
 class HomeMenuSession(
@@ -29,6 +35,7 @@ class HomeMenuSession(
 fun HomeMenu(at: Bounds, actions: HomeMenuActions, onDismiss: () -> Unit) {
     Menu(at, HOME_MENU_TAG, onDismiss) {
         MenuRow("Wallpaper", Icons.Outlined.Wallpaper, actions.wallpaper)
+        MenuRow("Widgets", Icons.Outlined.Widgets, actions.widgets)
         MenuRow("Add page", Icons.Outlined.AddBox, actions.addPage)
         MenuRow("Settings", Icons.Outlined.Settings, actions.settings)
     }

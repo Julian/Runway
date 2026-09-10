@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,8 @@ import com.grayvines.runway.ui.home.hasWidgetAt
 import com.grayvines.runway.ui.menu.HomeMenuSession
 import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
+import com.grayvines.runway.ui.widgets.WidgetPickerSession
+import kotlinx.coroutines.flow.Flow
 
 /** The HOME activity. Holds no state of its own. */
 class LauncherActivity : ComponentActivity() {
@@ -47,7 +50,8 @@ class LauncherActivity : ComponentActivity() {
 
     private val homeMenuActions by lazy {
         viewModel.homeMenu.actions(
-            openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) }
+            openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
+            openWidgets = viewModel.widgetPicker::open,
         )
     }
 
@@ -65,6 +69,7 @@ class LauncherActivity : ComponentActivity() {
                 val itemMenu by viewModel.itemMenu.state.collectAsStateWithLifecycle()
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
                 val homeMenuAt by viewModel.homeMenu.state.collectAsStateWithLifecycle()
+                Notices(viewModel.widgetPicker.notices)
                 val state = remember(base, pending) { base.applying(pending) }
                 // The live settings, not this composition's: page-shown callbacks are kept by
                 // effects that outlive it, and a changed grid must reach them.
@@ -80,6 +85,7 @@ class LauncherActivity : ComponentActivity() {
                     itemMenu = itemMenu,
                     itemMenuActions = viewModel.itemMenu.actions,
                     onDismissItemMenu = viewModel.itemMenu::dismiss,
+                    widgetPicker = widgetPickerSession(),
                     homeMenu =
                         HomeMenuSession(
                             at = homeMenuAt,
@@ -116,6 +122,26 @@ class LauncherActivity : ComponentActivity() {
     override fun onStop() {
         appGraph.widgets.stopListening()
         super.onStop()
+    }
+
+    @Composable
+    private fun widgetPickerSession(): WidgetPickerSession {
+        val open by viewModel.widgetPicker.open.collectAsStateWithLifecycle()
+        val providers by viewModel.widgetPicker.providers.collectAsStateWithLifecycle()
+        return WidgetPickerSession(
+            open = open,
+            providers = providers,
+            onPick = viewModel.widgetPicker::pick,
+            onDismiss = viewModel.widgetPicker::dismiss,
+        )
+    }
+
+    /** What could not be done, said in a toast. */
+    @Composable
+    private fun Notices(notices: Flow<String>) {
+        LaunchedEffect(notices) {
+            notices.collect { Toast.makeText(this@LauncherActivity, it, Toast.LENGTH_SHORT).show() }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

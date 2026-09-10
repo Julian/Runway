@@ -6,7 +6,39 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.os.UserHandle
+import android.os.UserManager
+import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
+import com.grayvines.runway.system.apps.LabelOrder
+
+/**
+ * A widget the device offers, as the picker lists it: its provider, what to call it and the app it
+ * belongs to, a picture of it, and the sizes it asks for, in dp.
+ */
+class WidgetProvider(
+    val info: AppWidgetProviderInfo,
+    val label: String,
+    val appLabel: String,
+    val appIcon: ImageBitmap?,
+    val preview: ImageBitmap?,
+    val minWidthDp: Float,
+    val minHeightDp: Float,
+) {
+    val key: String
+        get() = "${info.profile.hashCode()}/${info.provider.flattenToString()}"
+
+    /** The widget insists on its configuration activity before it can be shown. */
+    val needsSetup: Boolean
+        get() =
+            info.configure != null &&
+                info.widgetFeatures and
+                    AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL == 0
+}
 
 /**
  * The one app widget host of the process, under a fixed host id so the ids it allocates survive
@@ -16,6 +48,7 @@ import android.os.UserHandle
 class WidgetHost(context: Context) {
     private val context = context.applicationContext
     private val manager: AppWidgetManager = AppWidgetManager.getInstance(this.context)
+    private val userManager = this.context.getSystemService(UserManager::class.java)
     private val host = AppWidgetHost(this.context, HOST_ID)
 
     /** Providers start sending updates; hosted views draw them. */
@@ -43,8 +76,57 @@ class WidgetHost(context: Context) {
     fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView =
         host.createView(context, id, info)
 
+    /**
+     * Every home-screen widget installed, across profiles, by app and then by name, with pictures:
+     * slow, for a picker that is opening, not for the main thread.
+     */
+    fun providers(): List<WidgetProvider> {
+        val pm = context.packageManager
+        val density = context.resources.displayMetrics.density
+        val order = LabelOrder.comparator()
+        return userManager.userProfiles
+            .flatMap { manager.getInstalledProvidersForProfile(it) }
+            .filter { it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0 }
+            .mapNotNull { info -> info.toProvider(pm, density) }
+            .sortedWith(
+                compareBy<WidgetProvider, String>(order) { it.appLabel }.thenBy(order) { it.label }
+            )
+    }
+
+    /** Null if the provider's package cannot be read: one broken app must not empty the list. */
+    @Suppress("TooGenericExceptionCaught")
+    private fun AppWidgetProviderInfo.toProvider(pm: PackageManager, density: Float) =
+        try {
+            val app = pm.getApplicationInfo(provider.packageName, 0)
+            WidgetProvider(
+                info = this,
+                label = loadLabel(pm),
+                appLabel = pm.getApplicationLabel(app).toString(),
+                appIcon = pm.getApplicationIcon(app).toPicture((ICON_DP * density).toInt()),
+                preview = loadPreviewImage(context, 0)?.toPicture((PREVIEW_DP * density).toInt()),
+                minWidthDp = minWidth / density,
+                minHeightDp = minHeight / density,
+            )
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not read widget $provider; left out of the list", e)
+            null
+        }
+
+    /** The drawable as a bitmap no wider or taller than [maxPx], keeping its shape. */
+    private fun Drawable.toPicture(maxPx: Int): ImageBitmap? {
+        val w = intrinsicWidth
+        val h = intrinsicHeight
+        if (w <= 0 || h <= 0) return null
+        val scale = minOf(1f, maxPx.toFloat() / w, maxPx.toFloat() / h)
+        return toBitmap((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
+            .asImageBitmap()
+    }
+
     companion object {
         /** Never change: the ids in the database were allocated under it. */
         const val HOST_ID = 0x52574159 // "RWAY"
+        private const val ICON_DP = 48
+        private const val PREVIEW_DP = 240
+        private const val TAG = "Runway"
     }
 }
