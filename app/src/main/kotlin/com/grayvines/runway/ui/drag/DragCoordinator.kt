@@ -107,10 +107,15 @@ class DragCoordinator(
     /** Counts down while the finger stays on one target; done, neighbours slide aside. */
     private var resting: Job? = null
 
-    /** Begins a drag; a second finger's long press while one is live changes nothing. */
+    /**
+     * Begins a drag; a second finger's long press while one is live changes nothing. A lift while
+     * the last drop is still settling ends that settle: the overlay carries the new item now, so
+     * the settling one is simply in its cell, rather than hidden until the settle times out.
+     */
     fun startDrag(source: DragSource, pointer: Point, grab: Point) {
         if (drag.value != null) return
         edgesArmed = false
+        _settling.value = null
         controller.start(source, pointer, grab)
     }
 

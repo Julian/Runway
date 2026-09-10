@@ -177,6 +177,20 @@ class DragCoordinatorTest {
     }
 
     @Test
+    fun `a new lift ends the settle of the last drop`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.endDrag()
+        runCurrent()
+        assertEquals(1L, c.settling.value?.itemId)
+        c.startDrag(DragSource(2, ItemKind.APP, Container.HOME, 0, 1, 0), Point(150f, 50f), grab)
+        assertNull(c.settling.value) // item 1 is in its cell; the overlay carries item 2 now
+        assertEquals(2L, c.drag.value?.source?.itemId)
+    }
+
+    @Test
     fun `an undrawn settle is dropped after a timeout`() = runTest {
         val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
         c.layOut()
