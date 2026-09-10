@@ -1,5 +1,6 @@
 package com.grayvines.runway
 
+import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.SEARCH_MENU_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
@@ -19,6 +21,7 @@ import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,6 +54,29 @@ class LauncherShellTest : LauncherFixture() {
 
         sendHomeIntent()
         waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+    }
+
+    @Test
+    fun backOnTheBareHomeScreenLeavesTheLauncherUp() {
+        val activity = compose.activity
+        device.pressBack()
+        // A finished home activity is started again by the system at once, so a fresh screen would
+        // look fine: what must not have happened is the finish itself.
+        SystemClock.sleep(BACK_GRACE_MS)
+        assertFalse("back finished the launcher", activity.isFinishing || activity.isDestroyed)
+        icon(firstHomeApp).assertIsDisplayed()
+    }
+
+    @Test
+    fun backDuringADragPutsTheIconBack() {
+        val grid = useGrid(columns = 5, rows = 7)
+        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
+        compose.onNodeWithTag(DRAG_OVERLAY_TAG).assertExists()
+        device.pressBack()
+        awaitGone(DRAG_OVERLAY_TAG)
+        release() // the finger lifting afterwards drops nothing
+        assertUnmoved(firstHomeApp)
+        assertStillOnLauncher()
     }
 
     @Test
@@ -162,6 +188,8 @@ class LauncherShellTest : LauncherFixture() {
     }
 
     private companion object {
+        /** Long enough for a finish, had Back caused one, to have gone through. */
+        const val BACK_GRACE_MS = 1_000L
         const val SWIPE_INSET_PX = 100
         const val SWIPE_STEPS = 20
         const val NO_HANDLER =

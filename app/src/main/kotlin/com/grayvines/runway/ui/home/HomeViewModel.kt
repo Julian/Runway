@@ -353,6 +353,15 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         state.value.apps.matching(drawerQuery).firstOrNull()?.let(::launch)
     }
 
+    /**
+     * Back with nothing of its own to close: the drawer, folders and menus handle their own. A drag
+     * is put back; the bare home screen stays as it is. Without this the activity would finish, as
+     * any activity does on Back, and the system would start the launcher again from nothing.
+     */
+    fun onBack() {
+        if (dragging.drag.value != null) dragging.cancelDrag()
+    }
+
     /** HOME closes whatever is open over the pages; with nothing open it returns to page 1. */
     fun onHomeIntent() {
         when {

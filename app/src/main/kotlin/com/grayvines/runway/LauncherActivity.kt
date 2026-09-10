@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -52,6 +53,9 @@ class LauncherActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Registered before the content, so every handler the content adds (the drawer's, a
+        // folder's, a menu's) is asked first; this one is what is left when none of those is up.
+        onBackPressedDispatcher.addCallback(this) { viewModel.onBack() }
         setContent {
             RunwayTheme {
                 val base by viewModel.state.collectAsStateWithLifecycle()
