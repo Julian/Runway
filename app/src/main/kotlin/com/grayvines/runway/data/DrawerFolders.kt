@@ -1,5 +1,6 @@
 package com.grayvines.runway.data
 
+import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 
 /*
@@ -30,24 +31,35 @@ suspend fun WorkspaceRepository.addToDrawerFolder(folderId: Long, app: AppRef) =
     dao.deleteEmptyFolders()
 }
 
-/** A further placement of the drawer folder [folderId], in a cell; the drawer keeps its own. */
+/**
+ * A further placement of the drawer folder [folderId], in a cell, after moving aside the neighbours
+ * it [displaced]; the drawer keeps its own. False, and nothing changed, if the neighbours could not
+ * be moved.
+ */
+@Suppress("LongParameterList") // one drop, spelled out
 suspend fun WorkspaceRepository.placeFolder(
     folderId: Long,
     container: Container,
     page: Int,
     x: Int,
     y: Int,
-) = write {
-    dao.insertItem(
-        ItemEntity(
-            kind = ItemKind.FOLDER,
-            container = container,
-            pageIndex = page,
-            x = x,
-            y = y,
-            folderId = folderId,
+    displaced: Map<Long, Footprint> = emptyMap(),
+): Boolean = write {
+    if (!makeRoom(container, page, displaced)) {
+        false
+    } else {
+        dao.insertItem(
+            ItemEntity(
+                kind = ItemKind.FOLDER,
+                container = container,
+                pageIndex = page,
+                x = x,
+                y = y,
+                folderId = folderId,
+            )
         )
-    )
+        true
+    }
 }
 
 /** Deletes the folder outright: every placement of it goes, and its apps are loose again. */

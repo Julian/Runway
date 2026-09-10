@@ -45,6 +45,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -230,6 +232,26 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed() // it went as soon as the app lifted
         release()
         waitUntil(TIMEOUT_MS) { placementsOf(label).any { it.x == 4 && it.y == 4 } }
+    }
+
+    @Test
+    fun anAppPulledOutOfTheDrawerOntoAnOccupiedCellPushesTheOccupantAside() {
+        val grid = useGrid(columns = 5, rows = 7)
+        // The seed fills the top-left 4×3 of the page: dropping beside an interior icon lands on
+        // an occupied cell whichever way the corner snaps, short of folding with it.
+        val occupants = mapOf(0 to 1 to labelAtHomeCell(0, 1), 1 to 1 to labelAtHomeCell(1, 1))
+        val label = labelOnPage(1) // not on the first page: a fresh drop, not a pick-up
+        openDrawer()
+        liftFromDrawer(label)
+        dragOn(to = grid.homeCell(1, 1) - Offset(grid.cellWidth() * FRESH_BESIDE, 0f))
+        awaitDrawerClosed()
+        release()
+        waitUntil(TIMEOUT_MS) { homeCellOf(label) in occupants.keys }
+        val cell = homeCellOf(label)!!.let { it.first!! to it.second!! }
+        val pushed = occupants.getValue(cell)
+        assertTrue("$pushed still at $cell", homeCellOf(pushed) != cell)
+        assertNotNull("$pushed left the page", homeCellOf(pushed))
+        assertNull("folded instead of pushing aside", folderAt(cell.first, cell.second))
     }
 
     @Test
@@ -604,6 +626,8 @@ class DrawerTest : LauncherFixture() {
     }
 
     private companion object {
+        /** Outside the fold zone of the icon the finger is beside. */
+        const val FRESH_BESIDE = 0.45f
         const val PULL_STEPS = 10
         const val TYPED = "quickbrownfox"
         const val QUICK_SWIPE = 0.08f

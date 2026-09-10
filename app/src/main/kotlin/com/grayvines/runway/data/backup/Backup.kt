@@ -37,7 +37,43 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
                     throw IllegalArgumentException("not a Runway backup", e)
                 }
             require(backup.version <= VERSION) { "made by a newer Runway (${backup.version})" }
-            return backup.copy(settings = backup.settings.clamped())
+            val settings = backup.settings.clamped()
+            backup.layout.validate(settings)
+            return backup.copy(settings = settings)
+        }
+    }
+}
+
+/**
+ * Throws [IllegalArgumentException], naming the first fault, for a layout no restore should try: a
+ * cell off the grid [settings] describes, a page the file does not have, two things in one cell, a
+ * placement that is not exactly one of an app, a folder or a drawer folder, or a drawer folder
+ * index there is no folder for. Checked whole before anything is written, so a bad file changes
+ * nothing.
+ */
+internal fun Layout.validate(settings: Settings) {
+    require(homePages >= 0 && dockPages >= 0) { "negative page counts" }
+    val cells = mutableSetOf<List<Int>>()
+    placements.forEachIndexed { i, p ->
+        val where = "placement ${i + 1} (${p.container} page ${p.page}, cell ${p.x},${p.y})"
+        val pages = if (p.container == Container.DOCK) dockPages else homePages
+        val (columns, rows) =
+            when (p.container) {
+                Container.HOME -> settings.columns to settings.pageRows
+                Container.DOCK -> settings.dockSlots to 1
+                Container.DRAWER ->
+                    throw IllegalArgumentException("$where: the drawer has no cells")
+            }
+        require(p.page in 0 until pages) { "$where: no such page" }
+        require(p.x in 0 until columns && p.y in 0 until rows) { "$where: off the grid" }
+        require(listOfNotNull(p.app, p.folder, p.drawerFolder).size == 1) {
+            "$where: must be exactly one of an app, a folder or a drawer folder"
+        }
+        p.drawerFolder?.let {
+            require(it in drawerFolders.indices) { "$where: no such drawer folder" }
+        }
+        require(cells.add(listOf(p.container.ordinal, p.page, p.x, p.y))) {
+            "$where: two things in one cell"
         }
     }
 }

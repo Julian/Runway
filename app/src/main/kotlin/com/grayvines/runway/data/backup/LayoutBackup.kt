@@ -61,54 +61,57 @@ private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>) =
  * Replaces the whole layout with [layout], in one transaction. Apps are matched against [installed]
  * by component and profile, or by component alone where that app is installed in exactly one
  * profile (a new phone numbers its profiles differently); anything else is skipped, and a folder
- * none of whose apps are installed goes with them.
+ * none of whose apps are installed goes with them. Apps of a [quiet] profile, one that exists but
+ * reports nothing (a work profile that is paused), are taken as they are: there is nothing to check
+ * them against, and they come back with the profile.
  */
-suspend fun WorkspaceRepository.restoreLayout(layout: Layout, installed: Set<AppRef>): Restored =
-    write {
-        val match = AppMatcher(installed)
-        dao.deleteAllItems()
-        dao.deleteAllFolders()
-        dao.deleteAllPages()
-        repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
-        repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
-        val counts = Counts()
-        // Drawer folders first: a placement may refer to one by index.
-        val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
-        var placed = counts.placed
-        var skipped = counts.skipped
-        for (placement in layout.placements) {
-            val folder = placement.folder
-            val app = placement.app?.let(match::find)
-            val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
-            when {
-                app != null -> {
-                    dao.insertItem(placement.entity(ItemKind.APP, app = app))
-                    placed++
+suspend fun WorkspaceRepository.restoreLayout(
+    layout: Layout,
+    installed: Set<AppRef>,
+    quiet: Set<Long> = emptySet(),
+): Restored = write {
+    val match = AppMatcher(installed, quiet)
+    dao.deleteAllItems()
+    dao.deleteAllFolders()
+    dao.deleteAllPages()
+    repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
+    repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
+    val counts = Counts()
+    // Drawer folders first: a placement may refer to one by index.
+    val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
+    var placed = counts.placed
+    var skipped = counts.skipped
+    for (placement in layout.placements) {
+        val folder = placement.folder
+        val app = placement.app?.let(match::find)
+        val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
+        when {
+            app != null -> {
+                dao.insertItem(placement.entity(ItemKind.APP, app = app))
+                placed++
+            }
+            drawerFolder != null -> {
+                dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
+                placed++
+            }
+            folder != null -> {
+                val apps = folder.apps.mapNotNull(match::find)
+                skipped += folder.apps.size - apps.size
+                if (apps.isEmpty()) continue
+                val folderId = dao.insertFolder(FolderEntity(name = folder.name))
+                apps.forEachIndexed { i, ref ->
+                    dao.insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
                 }
-                drawerFolder != null -> {
-                    dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
-                    placed++
-                }
-                folder != null -> {
-                    val apps = folder.apps.mapNotNull(match::find)
-                    skipped += folder.apps.size - apps.size
-                    if (apps.isEmpty()) continue
-                    val folderId = dao.insertFolder(FolderEntity(name = folder.name))
-                    apps.forEachIndexed { i, ref ->
-                        dao.insertFolderApp(
-                            FolderAppEntity(folderId, ref.component, ref.profile, i)
-                        )
-                    }
-                    dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
-                    placed++
-                }
-                else -> {
-                    skipped++
-                }
+                dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
+                placed++
+            }
+            else -> {
+                skipped++
             }
         }
-        Restored(placed, skipped)
     }
+    Restored(placed, skipped)
+}
 
 private fun Placement.entity(kind: ItemKind, app: AppRef? = null, folderId: Long? = null) =
     ItemEntity(
@@ -122,12 +125,16 @@ private fun Placement.entity(kind: ItemKind, app: AppRef? = null, folderId: Long
         folderId = folderId,
     )
 
-/** Finds the installed app a backed-up reference means, or null. */
-private class AppMatcher(private val installed: Set<AppRef>) {
+/** Finds the installed app a backed-up reference means, or null; see [restoreLayout]. */
+private class AppMatcher(private val installed: Set<AppRef>, private val quiet: Set<Long>) {
     private val byComponent = installed.groupBy { it.component }
 
     fun find(ref: AppRef): AppRef? =
-        if (ref in installed) ref else byComponent[ref.component]?.singleOrNull()
+        when {
+            ref in installed -> ref
+            ref.profile in quiet -> ref
+            else -> byComponent[ref.component]?.singleOrNull()
+        }
 }
 
 /** Running totals of a restore. */

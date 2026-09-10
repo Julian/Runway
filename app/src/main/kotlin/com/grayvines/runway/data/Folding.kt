@@ -1,5 +1,6 @@
 package com.grayvines.runway.data
 
+import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -62,9 +63,11 @@ suspend fun WorkspaceRepository.foldInto(
 }
 
 /**
- * Takes [app] out of the folder [folderId] and places it in a cell of its own; the folder goes,
- * with its placement, if that empties it.
+ * Takes [app] out of the folder [folderId] and places it in a cell of its own, after moving aside
+ * the neighbours it [displaced]; the folder goes, with its placement, if that empties it. False,
+ * and nothing changed, if the neighbours could not be moved.
  */
+@Suppress("LongParameterList") // one drop, spelled out
 suspend fun WorkspaceRepository.unfold(
     folderId: Long,
     app: AppRef,
@@ -72,19 +75,25 @@ suspend fun WorkspaceRepository.unfold(
     page: Int,
     x: Int,
     y: Int,
-) = write {
-    dao.insertItem(
-        ItemEntity(
-            kind = ItemKind.APP,
-            container = container,
-            pageIndex = page,
-            x = x,
-            y = y,
-            component = app.component,
-            profile = app.profile,
+    displaced: Map<Long, Footprint> = emptyMap(),
+): Boolean = write {
+    if (!makeRoom(container, page, displaced)) {
+        false
+    } else {
+        dao.insertItem(
+            ItemEntity(
+                kind = ItemKind.APP,
+                container = container,
+                pageIndex = page,
+                x = x,
+                y = y,
+                component = app.component,
+                profile = app.profile,
+            )
         )
-    )
-    dao.leave(folderId, app)
+        dao.leave(folderId, app)
+        true
+    }
 }
 
 /** [app] leaves [folderId]; a folder left empty is gone, with every placement of it. */

@@ -21,6 +21,7 @@ import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.ui.theme.SettingsTheme
 import java.io.IOException
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -99,18 +100,25 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
-    /** Runs a file operation off the main thread; what goes wrong is shown, not thrown. */
+    /**
+     * Runs a file operation off the main thread; what goes wrong is shown, not thrown. A refusal
+     * ([IllegalArgumentException]) says why; anything else, the file or the database failing, shows
+     * as [failure], and the settings screen stays up either way.
+     */
+    @Suppress("TooGenericExceptionCaught")
     private fun withFile(failure: String, block: suspend () -> String) {
         lifecycleScope.launch {
             val message =
                 try {
                     withContext(Dispatchers.IO) { block() }
-                } catch (e: IOException) {
-                    Log.w(TAG, failure, e)
-                    failure
                 } catch (e: IllegalArgumentException) {
                     Log.w(TAG, failure, e)
                     e.message ?: failure
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, failure, e)
+                    failure
                 }
             Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
         }
@@ -128,7 +136,10 @@ class SettingsActivity : ComponentActivity() {
                 ?: throw IOException("nothing to read")
         val installed =
             appGraph.appRepository.apps.first { it.isNotEmpty() }.mapTo(mutableSetOf()) { it.ref }
-        val restored = appGraph.backup.restore(text, installed)
+        // A profile with no app in the list is paused, not empty: its apps are kept unchecked.
+        val quiet =
+            appGraph.appRepository.profiles() - installed.mapTo(mutableSetOf()) { it.profile }
+        val restored = appGraph.backup.restore(text, installed, quiet)
         return if (restored.skipped == 0) {
             "Restored ${restored.placed} items"
         } else {

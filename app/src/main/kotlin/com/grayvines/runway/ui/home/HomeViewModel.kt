@@ -13,6 +13,7 @@ import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.data.observeDrawerPlacements
@@ -171,41 +172,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
             override suspend fun move(move: PendingMove): Boolean =
                 attempt("save the move; the item snaps back") {
-                    with(move) {
-                        val app = newApp
-                        val into = foldInto
-                        val outOf = fromFolder
-                        val folder = newFolder
-                        when {
-                            folder != null ->
-                                graph.workspace.placeFolder(folder, container, page, x, y)
-                            into != null ->
-                                check(
-                                    graph.workspace.foldInto(
-                                        into,
-                                        if (app != null) Dropped.App(app) else Dropped.Item(itemId),
-                                        outOf = outOf,
-                                    )
-                                ) {
-                                    "nothing to fold: the target or the dropped app is gone"
-                                }
-                            app != null && outOf != null ->
-                                graph.workspace.unfold(outOf, app, container, page, x, y)
-                            app != null -> graph.workspace.addApp(app, container, page, x, y)
-                            else ->
-                                check(
-                                    graph.workspace.moveItem(
-                                        itemId,
-                                        container,
-                                        page,
-                                        x,
-                                        y,
-                                        displaced,
-                                    )
-                                ) {
-                                    "the page or a displaced neighbour is gone; nothing moved"
-                                }
-                        }
+                    check(graph.workspace.apply(move)) {
+                        "the page, a neighbour, the target or the dropped app is gone since the " +
+                            "plan was made; nothing saved"
                     }
                 }
 
@@ -399,6 +368,31 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         const val TAG = "Runway"
     }
 }
+
+/**
+ * Writes [move] as the drop it is: a drawer folder placed, a fold, an app out of a folder, an app
+ * from the drawer, or a placement moved; each with the neighbours it displaced moved aside first.
+ * False, and nothing changed, when the layout no longer matches the plan.
+ */
+internal suspend fun WorkspaceRepository.apply(move: PendingMove): Boolean =
+    with(move) {
+        val app = newApp
+        val into = foldInto
+        val outOf = fromFolder
+        val folder = newFolder
+        when {
+            folder != null -> placeFolder(folder, container, page, x, y, displaced)
+            into != null ->
+                foldInto(
+                    into,
+                    if (app != null) Dropped.App(app) else Dropped.Item(itemId),
+                    outOf = outOf,
+                )
+            app != null && outOf != null -> unfold(outOf, app, container, page, x, y, displaced)
+            app != null -> addApp(app, container, page, x, y, displaced)
+            else -> moveItem(itemId, container, page, x, y, displaced)
+        }
+    }
 
 /**
  * Whether what [menu] opened on is still there: the app, for one held in the drawer's list, which

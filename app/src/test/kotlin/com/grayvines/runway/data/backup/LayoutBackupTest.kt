@@ -88,6 +88,28 @@ class LayoutBackupTest {
     }
 
     @Test
+    fun `apps of a quiet profile are kept as they were, not matched or dropped`() = runTest {
+        // A work profile that is paused reports no apps; the personal profile has twins of two.
+        repo.autoFill(
+            listOf(app(1, 10), app(2, 10), app(3)),
+            columns = 3,
+            pageRows = 1,
+            dockSlots = 1,
+        )
+        val layout = repo.layoutBackup()
+        repo.autoFill(emptyList(), columns = 3, pageRows = 1, dockSlots = 1)
+
+        val restored =
+            repo.restoreLayout(layout, installed = setOf(app(1), app(3)), quiet = setOf(10))
+
+        assertEquals(Restored(placed = 3, skipped = 0), restored)
+        assertEquals(
+            setOf(app(1, 10), app(2, 10), app(3)),
+            repo.layoutBackup().placements.flatMap { it.apps() }.toSet(),
+        )
+    }
+
+    @Test
     fun `a layout with no pages still leaves the first of each`() = runTest {
         repo.restoreLayout(
             Layout(homePages = 0, dockPages = 0, placements = emptyList()),

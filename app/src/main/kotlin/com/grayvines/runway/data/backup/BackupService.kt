@@ -15,12 +15,16 @@ class BackupService(
 
     /**
      * Replaces the settings and the layout with those in [text], keeping only the apps in
-     * [installed]. Throws [IllegalArgumentException] for a file this cannot read, before touching
-     * anything.
+     * [installed] and those of a [quiet] profile (one that exists but reports no apps: paused).
+     * Throws [IllegalArgumentException] for a file this cannot read, before touching anything.
      */
-    suspend fun restore(text: String, installed: Set<AppRef>): Restored {
+    suspend fun restore(
+        text: String,
+        installed: Set<AppRef>,
+        quiet: Set<Long> = emptySet(),
+    ): Restored {
         val backup = Backup.fromJson(text)
         settings.update { backup.settings }
-        return workspace.restoreLayout(backup.layout, installed)
+        return workspace.restoreLayout(backup.layout, installed, quiet)
     }
 }

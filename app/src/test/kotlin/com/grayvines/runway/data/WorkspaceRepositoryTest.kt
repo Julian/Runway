@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -390,6 +391,30 @@ class WorkspaceRepositoryTest {
         val byId = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
         assertEquals(1, byId[2L]?.x)
         assertEquals(0, byId[3L]?.x)
+    }
+
+    @Test
+    fun `addApp beside an occupied cell moves the neighbour aside first`() = runTest {
+        repo.autoFill(apps(2), columns = 3, pageRows = 1, dockSlots = 1)
+        val neighbour = repo.observe(Container.HOME).first().pages.single().items.single()
+        assertTrue(
+            repo.addApp(
+                apps(3)[2],
+                Container.HOME,
+                0,
+                neighbour.x!!,
+                neighbour.y!!,
+                displaced = mapOf(neighbour.id to Footprint(2, 0)),
+            )
+        )
+        val items = repo.observe(Container.HOME).first().pages.single().items
+        assertEquals(2, items.size)
+        assertEquals(2, items.single { it.id == neighbour.id }.x)
+        // A neighbour that has left the page since the plan: nothing happens, nothing throws.
+        repo.removeItem(neighbour.id)
+        assertFalse(
+            repo.addApp(apps(4)[3], Container.HOME, 0, 1, 0, mapOf(neighbour.id to Footprint(2, 0)))
+        )
     }
 
     @Test

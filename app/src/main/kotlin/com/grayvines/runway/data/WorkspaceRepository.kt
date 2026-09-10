@@ -64,16 +64,7 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         y: Int,
         displaced: Map<Long, Footprint>,
     ): Boolean = write {
-        val pageExists = dao.pages(container).any { it.index == page }
-        val neighboursThere =
-            displaced.keys.all { otherId ->
-                dao.item(otherId)?.let { it.container == container && it.pageIndex == page } == true
-            }
-        if (pageExists && neighboursThere && dao.item(id) != null) {
-            // Every cell has one item at a time, and the moves can chain through each other's
-            // old cells, so all movers leave their cells before any lands.
-            dao.park(displaced.keys.toList() + id)
-            displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
+        if (dao.item(id) != null && makeRoom(container, page, displaced, mover = id)) {
             dao.place(id, container, page, x, y)
             true
         } else {
@@ -81,19 +72,57 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         }
     }
 
-    /** A new placement of [app], as dragging it out of the drawer makes. */
-    suspend fun addApp(app: AppRef, container: Container, page: Int, x: Int, y: Int) = write {
-        dao.insertItem(
-            ItemEntity(
-                kind = ItemKind.APP,
-                container = container,
-                pageIndex = page,
-                x = x,
-                y = y,
-                component = app.component,
-                profile = app.profile,
+    /**
+     * Inside a write: moves the [displaced] neighbours on [page] to their new cells, first taking
+     * them (and [mover], if it is a placement) off their cells, since the moves can chain through
+     * each other's old cells. False, and nothing moved, if the page is gone or a neighbour has left
+     * it: the plan was made from a picture of the layout that has changed since.
+     */
+    internal suspend fun makeRoom(
+        container: Container,
+        page: Int,
+        displaced: Map<Long, Footprint>,
+        mover: Long? = null,
+    ): Boolean {
+        val pageExists = dao.pages(container).any { it.index == page }
+        val neighboursThere =
+            displaced.keys.all { otherId ->
+                dao.item(otherId)?.let { it.container == container && it.pageIndex == page } == true
+            }
+        if (!pageExists || !neighboursThere) return false
+        dao.park(displaced.keys.toList() + listOfNotNull(mover))
+        displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
+        return true
+    }
+
+    /**
+     * A new placement of [app], as dragging it out of the drawer makes, after moving aside the
+     * neighbours it [displaced]; false, and nothing changed, if they could not be moved.
+     */
+    suspend fun addApp(
+        app: AppRef,
+        container: Container,
+        page: Int,
+        x: Int,
+        y: Int,
+        displaced: Map<Long, Footprint> = emptyMap(),
+    ): Boolean = write {
+        if (!makeRoom(container, page, displaced)) {
+            false
+        } else {
+            dao.insertItem(
+                ItemEntity(
+                    kind = ItemKind.APP,
+                    container = container,
+                    pageIndex = page,
+                    x = x,
+                    y = y,
+                    component = app.component,
+                    profile = app.profile,
+                )
             )
-        )
+            true
+        }
     }
 
     /**

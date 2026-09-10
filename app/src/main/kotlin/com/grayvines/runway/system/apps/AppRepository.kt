@@ -97,6 +97,13 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         refresh()
     }
 
+    /**
+     * The serials of every profile on the device, whether or not it reports any apps right now: a
+     * paused work profile is in here and not in [apps].
+     */
+    fun profiles(): Set<Long> =
+        userManager.userProfiles.mapTo(mutableSetOf()) { userManager.getSerialNumberForUser(it) }
+
     /** The device configuration is now [config]; the list is rebuilt if that made it stale. */
     fun configurationChanged(config: Configuration) {
         val changed = configuration.diff(config)
