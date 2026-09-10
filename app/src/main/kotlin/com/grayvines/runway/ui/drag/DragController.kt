@@ -145,8 +145,10 @@ class DragController(private val lookup: WorkspaceLookup) {
     }
 
     /**
-     * Only a single app folds, and only into an app or folder that is not itself. Within a dock
-     * page, dropping on an icon reorders instead: that row is for reaching, not for filing.
+     * Only a single app folds, and only into an app or folder that is not itself, nor another
+     * placement of the same app: there is nothing to make of two of the same, and the drop beside
+     * it is refused for the same reason (a page holds a thing once). Within a dock page, dropping
+     * on an icon reorders instead: that row is for reaching, not for filing.
      */
     private fun planFold(source: DragSource, over: DropTarget): DropPlan.Fold? {
         val reordering =
@@ -161,6 +163,7 @@ class DragController(private val lookup: WorkspaceLookup) {
             }
         val there = items.firstOrNull {
             it.id != source.itemId &&
+                !it.isPlacementOf(source) &&
                 it.foldable &&
                 it.footprint.isSingleCell &&
                 it.footprint.overlaps(cell)
@@ -209,7 +212,11 @@ class DragController(private val lookup: WorkspaceLookup) {
 
 /** The same app or folder is placed on that page already: once per page is enough. */
 internal fun DragSource.isAlreadyAmong(others: List<Placed>) =
-    identity != null && others.any { it.identity == identity }
+    identity != null && others.any { it.isPlacementOf(source = this) }
+
+/** Whether this is a placement of what [source] is a placement of. */
+internal fun Placed.isPlacementOf(source: DragSource) =
+    source.identity != null && identity == source.identity
 
 internal fun DragSource.isAt(container: Container, page: Int, footprint: Footprint) =
     this.container == container && this.page == page && x == footprint.x && y == footprint.y

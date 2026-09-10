@@ -309,14 +309,18 @@ class WorkspaceRepositoryTest {
         assertEquals(ItemKind.APP, items.single { it.id == b.id }.kind)
         assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
 
-        // A second placement of the same app dropped onto the first: just the extra placement goes.
+        // A second placement of the same app dropped onto the first: nothing to fold, and the
+        // dropped placement stays where it was (the planner refuses such a drop; the icon snaps
+        // back).
         repo.addApp(AppRef(b.component!!, b.profile!!), Container.HOME, 0, 2, 0)
         val extra = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 2 }
         assertEquals(false, repo.foldInto(targetId = b.id, dropped = Dropped.Item(extra.id)))
+        assertEquals(false, repo.foldInto(targetId = b.id, dropped = Dropped.App(extra.appRef()!!)))
         val after = repo.observe(Container.HOME).first().pages.single().items
         assertEquals(ItemKind.APP, after.single { it.id == b.id }.kind)
-        assertEquals(null, after.firstOrNull { it.id == extra.id })
+        assertEquals(2, after.single { it.id == extra.id }.x)
         assertEquals(a.id, after.first { it.x == 0 }.id)
+        assertEquals(emptyList<FolderContent>(), repo.observeFolders().first())
     }
 
     @Test

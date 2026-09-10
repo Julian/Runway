@@ -86,6 +86,19 @@ class DragControllerTest {
     }
 
     @Test
+    fun `dropping an app onto another placement of itself folds nothing, and is refused`() {
+        val app = AppRef("a/.Main", 0)
+        home[0] = listOf(Placed(1, Footprint(0, 0), identity = app.identity))
+        home[1] = listOf(Placed(3, Footprint(1, 0), identity = app.identity))
+        lift(1, identity = app.identity)
+
+        val onto = DropTarget.HomeCell(1, 1, 0)
+        controller.move(origin, onto, over = onto)
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        assertNull(controller.drop())
+    }
+
+    @Test
     fun `free home cell moves without displacement`() {
         lift(1)
         controller.move(origin, DropTarget.HomeCell(0, 2, 1))
