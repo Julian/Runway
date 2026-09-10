@@ -71,6 +71,26 @@ class DragFeedbackTest : LauncherFixture() {
     }
 
     @Test
+    fun aLiftedDockIconRidesWhereItWasGrabbedWhenSlotsAreWiderThanCells() {
+        // Three dock slots across five columns: a slot is five thirds of a cell wide. Grabbed by
+        // its middle, the icon must stay centred on the finger, not sit a third of a cell off it.
+        val grid = useGrid(columns = 5, rows = 7)
+        val start = icon(firstDockApp).fetchSemanticsNode().boundsInRoot.center
+        val to = grid.homeCell(2, 3)
+        holdDragAt(start, to)
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val lifted =
+            compose
+                .onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .center
+        assertEquals("off the finger sideways", to.x, lifted.x, GRAB_TOLERANCE_PX)
+        assertEquals("off the finger vertically", to.y, lifted.y, GRAB_TOLERANCE_PX)
+        release()
+    }
+
+    @Test
     fun theLiftAndThePullBackMoveAsOne() {
         useGrid(columns = 5, rows = 7)
         val restingIcon = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.width
@@ -203,5 +223,10 @@ class DragFeedbackTest : LauncherFixture() {
             grid.dockSlotAt(shown) == settings.dockSlots - 2
         }
         release()
+    }
+
+    private companion object {
+        /** The overlay is placed to the pixel; the finger's steps land within one too. */
+        const val GRAB_TOLERANCE_PX = 4f
     }
 }

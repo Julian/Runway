@@ -234,6 +234,7 @@ private fun HomeColumn(
             pagerState = dockPager,
             slots = settings.dockSlots,
             slot = dockSlot,
+            cell = cell,
             iconSize = iconSize,
             labels = settings.dockLabels,
             onLaunch = onLaunch,
