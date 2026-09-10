@@ -152,6 +152,20 @@ open class LauncherFixture {
         }
     }
 
+    /**
+     * Waits for the keyboard to be up: asked for, and its window on screen. Keystrokes injected
+     * from the shell while it is still attaching are swallowed, so a test that types that way must
+     * wait for it, focus on the field alone is not enough.
+     */
+    protected fun awaitKeyboard() {
+        val window = compose.activity.window
+        val keyboard = keyboardPackage()
+        waitUntil(LONG_TIMEOUT_MS) {
+            ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(Type.ime()) == true &&
+                (keyboard == null || device.hasObject(By.pkg(keyboard)))
+        }
+    }
+
     /** The current keyboard app, whose window is what shows on screen; null if none is set. */
     private fun keyboardPackage(): String? =
         android.provider.Settings.Secure.getString(

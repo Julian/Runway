@@ -381,6 +381,7 @@ class DrawerTest : LauncherFixture() {
     fun typingQuicklyKeepsEveryCharacter() {
         openDrawer()
         searchField().assertIsFocused()
+        awaitKeyboard() // on a slow device it is still attaching; keystrokes before that are lost
         // Keystrokes one after another as fast as the system delivers them, not one committed
         // string: each must land on the field as the last one left it.
         device.executeShellCommand("input text $TYPED")
