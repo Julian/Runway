@@ -19,6 +19,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat.Type
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -45,6 +48,7 @@ import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -113,7 +117,47 @@ open class LauncherFixture {
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
         awaitWindowFocus()
+        dismissKeyboard()
     }
+
+    /**
+     * A test that ends with the keyboard up (a folder's name half typed) would leave the system
+     * bringing it back over the next test's launcher on a slow image, and handing that test's first
+     * Back press to the keyboard instead of the launcher. So the keyboard is put away, and seen to
+     * be gone, before the activity goes; and once more, cheaply, before the next test touches
+     * anything.
+     */
+    @After
+    fun putKeyboardAway() {
+        val activity = runCatching { compose.activity }.getOrNull() ?: return
+        if (activity.isDestroyed) return
+        // Never masks the test's own failure: a keyboard that will not go is not this test's fault.
+        runCatching { dismissKeyboard() }
+    }
+
+    private fun dismissKeyboard() {
+        val window = compose.activity.window
+        compose.runOnUiThread {
+            window.currentFocus?.clearFocus()
+            WindowCompat.getInsetsController(window, window.decorView).hide(Type.ime())
+        }
+        // The insets say "hidden" as soon as the hide is asked for; the keyboard's own window is
+        // still on its way out, and a window torn down under it leaves the system bringing the
+        // keyboard back for the next one. Wait for the keyboard itself to have gone.
+        val keyboard = keyboardPackage()
+        waitUntil(TIMEOUT_MS) {
+            ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(Type.ime()) != true &&
+                (keyboard == null || !device.hasObject(By.pkg(keyboard)))
+        }
+    }
+
+    /** The current keyboard app, whose window is what shows on screen; null if none is set. */
+    private fun keyboardPackage(): String? =
+        android.provider.Settings.Secure.getString(
+                app.contentResolver,
+                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD,
+            )
+            ?.substringBefore('/')
 
     /**
      * Waits for the launcher's window to have focus. A hung app's dialog (see
