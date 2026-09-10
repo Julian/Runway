@@ -141,7 +141,9 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * and its icons come back with it. Catches uninstalls that happened while the launcher was not
      * running.
      */
-    suspend fun retainApps(installed: Set<AppRef>) {
+    suspend fun retainApps(installed: Set<AppRef>) = write {
+        // Read and deleted in the one transaction: a fold landing between the two could turn a
+        // stale app row into a folder row of the same id, which must not then be deleted.
         val profiles = installed.mapTo(mutableSetOf()) { it.profile }
         val stale =
             dao.itemsOfKind(ItemKind.APP).filter { item ->
@@ -153,8 +155,7 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
                     AppRef(component, profile) !in installed
             }
         val gone = dao.folderApps().filter { it.profile in profiles && it.ref !in installed }
-        if (stale.isEmpty() && gone.isEmpty()) return
-        write {
+        if (stale.isNotEmpty() || gone.isNotEmpty()) {
             dao.deleteItems(stale.map { it.id })
             gone.forEach { dao.deleteFolderApp(it.component, it.profile) }
             dao.deleteEmptyFolders()
