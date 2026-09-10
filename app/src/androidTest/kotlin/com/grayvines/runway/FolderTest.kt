@@ -170,7 +170,8 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
         waitUntil(TIMEOUT_MS) { folderName() == "Tools" }
         compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Tools")
-        compose.onRoot().performTouchInput { click(bottomCenter - Offset(0f, 20f)) }
+        // Up top, clear of a keyboard that may still be on its way down after Done.
+        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
         awaitFolderClosed()
         compose.onNodeWithContentDescription("Tools", useUnmergedTree = true).assertIsDisplayed()
     }

@@ -209,6 +209,44 @@ class DrawerMotionTest {
             repeat(70) { motion.dragBy(10f) } // past the bottom of a 600 px pull
             assertEquals(Asked.CLOSE, release(0f, true))
         }
+
+    @Test
+    fun `a pull down inside an open drawer closes past the threshold, and stays short of it`() =
+        runWithMotion { motion, release ->
+            motion.revealed.snapTo(1f)
+            repeat(10) { motion.dragBy(10f) } // 100 px: past the 20 px that decides either way
+            assertEquals(Asked.CLOSE, release(0f, true))
+
+            motion.revealed.snapTo(1f)
+            motion.startPull(null)
+            motion.dragBy(10f) // 10 px: not far enough to mean it
+            assertEquals(Asked.NOTHING, release(0f, true))
+        }
+
+    @Test
+    fun `a pull down inside an open drawer that comes back up, or flicks up, leaves it open`() =
+        runWithMotion { motion, release ->
+            motion.revealed.snapTo(1f)
+            repeat(30) { motion.dragBy(10f) } // 300 px down: well past the threshold
+            repeat(3) { motion.dragBy(-10f) } // 30 px back up: a change of mind
+            assertEquals(Asked.NOTHING, release(0f, true))
+
+            motion.revealed.snapTo(1f)
+            motion.startPull(null)
+            repeat(30) { motion.dragBy(10f) }
+            assertEquals(Asked.NOTHING, release(-2000f, true)) // flicked back up
+            motion.startPull(null)
+            repeat(30) { motion.dragBy(10f) }
+            assertEquals(Asked.CLOSE, release(2000f, true)) // flicked on down
+        }
+
+    @Test
+    fun `letting go with no pull in progress decides nothing for an open drawer`() =
+        runWithMotion { motion, release ->
+            motion.revealed.snapTo(1f)
+            // A list fling reporting itself after a scroll back to the top: nothing was pulled.
+            assertEquals(Asked.NOTHING, release(500f, true))
+        }
 }
 
 /** Animations finish at once: these tests care about decisions, not frames. */

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -98,6 +99,10 @@ fun FolderSheet(
 ) {
     val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
+    // Whatever had the keyboard (the drawer's search field) gives it up as the sheet opens: what
+    // is typed now is for the folder, not for a field hidden behind it.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(Unit) { focusManager.clearFocus() }
     var room by remember { mutableStateOf(IntSize.Zero) }
     // Above the keyboard while the name is being typed, centred otherwise.
     Box(

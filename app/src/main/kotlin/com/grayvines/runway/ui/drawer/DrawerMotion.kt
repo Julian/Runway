@@ -82,6 +82,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * The farthest [pulledPx] has been in the committed direction, and what counts as coming back.
      */
     private var farthestPx = 0f
+
+    /**
+     * Which way the finger set off, 1 up or -1 down, fixed as the pull commits; the farthest point
+     * is measured that way. Not [way]: a pull down inside an open drawer heads down while staying
+     * on the drawer's side of rest.
+     */
+    private var heading = 0
     private var reversalPx = 0f
     private var against = 0f
 
@@ -135,6 +142,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
         pulling = true
         pulled = revealed.value
         way = 0
+        heading = 0
         pulledPx = 0f
         farthestPx = 0f
         basePx = revealed.value * heightPx
@@ -147,7 +155,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
         if (!pulling) startPull(null)
         pulledPx -= dy
         farthestPx =
-            when (way) {
+            when (heading) {
                 1 -> maxOf(farthestPx, pulledPx)
                 -1 -> minOf(farthestPx, pulledPx)
                 else -> pulledPx
@@ -157,6 +165,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
         // rest, and coming back can only undo it, never turn into the other action.
         if (way == 0 && abs(moved) > COMMIT) {
             way = if (moved > 0f) 1 else -1
+            heading = if (pulledPx > 0f) 1 else -1
             // Committed upward: now the drawer's top edge sets off to meet the finger.
             if (way == 1) scope.launch { caughtUp.animateTo(1f, tween(CATCH_UP_MS)) }
         }
@@ -183,7 +192,9 @@ class DrawerMotion(private val scope: CoroutineScope) {
         onClose: () -> Unit,
         onOpenShade: () -> Unit,
     ) {
-        val wantOpen = wantsOpen(velocity)
+        // An open drawer pulled down closes by the mirror of the rule that opens it, unless the
+        // finger changed its mind on the way: then it stays.
+        val wantOpen = if (open) reversed() || !closes(velocity) else wantsOpen(velocity)
         val wantShade =
             pulling &&
                 !open &&
@@ -225,6 +236,13 @@ class DrawerMotion(private val scope: CoroutineScope) {
         way >= 0 &&
             !reversed() &&
             shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick, against)
+
+    /**
+     * Whether a pull down inside an open drawer closes it: the opening rule with the pull and the
+     * velocity read the other way up. No pull (a list's fling reporting itself) decides nothing.
+     */
+    private fun closes(velocity: Float) =
+        pulling && shouldOpen(1f - pulled, velocity, openAt, flick, against)
 
     /** Follows the model: open animates the rest of the way in, closed the rest of the way out. */
     suspend fun settle(open: Boolean) {

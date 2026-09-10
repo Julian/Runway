@@ -111,6 +111,27 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun aPullDownThatComesBackUpLeavesTheDrawerOpen() {
+        openDrawer()
+        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput {
+            down(center)
+            // Well on the way to closing, then a change of mind: back up, slowly, and let go.
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, partialPullPx() * 2 / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, -partialPullPx() / 2 / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+            up()
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
+        drawerApp(sortedDrawerLabels().first()).assertIsDisplayed()
+    }
+
+    @Test
     fun aPullCutShortStillLeavesTheDrawerFullyOpenOrClosed() {
         // A pull that the system cancels part way (a call comes in, another gesture takes over)
         // never reports letting go. The drawer must still end up somewhere definite.

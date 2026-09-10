@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.moveBy
@@ -79,6 +81,30 @@ class DrawerFolderTest : LauncherFixture() {
             .onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(first))
             .assertIsDisplayed()
         compose.onNodeWithTag(DRAWER_TAG).assertExists() // still there behind the sheet
+    }
+
+    @Test
+    fun openingADrawerFolderTakesTheKeyboardOffTheSearchField() {
+        makeDrawerFolder(first)
+        compose.onNodeWithTag(DRAWER_SEARCH_TAG).assertIsFocused() // the drawer opened with it
+        tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(DRAWER_SEARCH_TAG).assertIsNotFocused()
+        // Keystrokes now go nowhere near the hidden field.
+        device.executeShellCommand("input text xyz")
+        compose.waitForIdle()
+        val typed =
+            compose
+                .onNodeWithTag(DRAWER_SEARCH_TAG)
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.EditableText)
+                ?.text
+        assertEquals("", typed)
+        // And with no keyboard up, back closes the sheet itself.
+        device.pressBack()
+        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag(DRAWER_TAG).assertExists()
     }
 
     @Test
