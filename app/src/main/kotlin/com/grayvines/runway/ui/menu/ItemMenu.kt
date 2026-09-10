@@ -80,7 +80,11 @@ private fun Rows(state: ItemMenuState, actions: ItemMenuActions, drawerFolders: 
     when {
         inDrawer && app != null -> {
             MenuRow("New folder", Icons.Outlined.CreateNewFolder, actions.newFolder)
-            val targets = drawerFolders.mapNotNull { f -> f.folderId?.let { f.label to it } }
+            // Every drawer folder but the one the app is already in, if any.
+            val targets =
+                drawerFolders
+                    .filter { f -> f.folder.none { it.key == app.key } }
+                    .mapNotNull { f -> f.folderId?.let { f.label to it } }
             targets.forEach { (label, id) ->
                 MenuRow("Add to $label", Icons.Outlined.Folder) {
                     actions.addToFolder(id)

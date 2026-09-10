@@ -3,11 +3,13 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -81,6 +83,30 @@ class DrawerFolderTest : LauncherFixture() {
             .onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(first))
             .assertIsDisplayed()
         compose.onNodeWithTag(DRAWER_TAG).assertExists() // still there behind the sheet
+    }
+
+    @Test
+    fun anAppsMenuDoesNotOfferTheFolderItIsAlreadyIn() {
+        makeDrawerFolder(first)
+        compose.onNodeWithTag(DRAWER_SEARCH_TAG).performTextInput(first)
+        waitUntil { drawerApp(first).isDisplayedOrFalse() }
+        hold(drawerApp(first))
+        release()
+        menuRow("New folder").assertIsDisplayed()
+        compose.onAllNodes(hasText("Add to Folder")).assertCountEquals(0)
+        sendHomeIntent() // closes the menu
+    }
+
+    @Test
+    fun newFolderForTheOnlyAppOfAnotherLeavesNoEmptyFolderBehind() {
+        makeDrawerFolder(first)
+        // Out of the grid, so search is the way to its menu.
+        compose.onNodeWithTag(DRAWER_SEARCH_TAG).performTextInput(first)
+        waitUntil { drawerApp(first).isDisplayedOrFalse() }
+        hold(drawerApp(first))
+        release()
+        menuRow("New folder").performClick()
+        awaitFolders(listOf(listOf(first))) // one folder, the new one; not an empty one too
     }
 
     @Test

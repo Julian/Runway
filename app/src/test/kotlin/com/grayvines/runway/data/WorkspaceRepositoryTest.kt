@@ -225,8 +225,15 @@ class WorkspaceRepositoryTest {
             assertEquals(listOf(a), folderApps(first))
             assertEquals(listOf(b), folderApps(second))
 
-            repo.addToDrawerFolder(second, a) // empties the first, which goes
+            // A new folder for the only app of another: that one has nothing left, and goes.
+            val third = repo.createDrawerFolder(a)
+            assertEquals(
+                listOf(second, third),
+                repo.observeDrawerPlacements().first().map { it.folderId },
+            )
+            repo.addToDrawerFolder(second, a) // and so does the third, the same way
             assertEquals(listOf(second), repo.observeDrawerPlacements().first().map { it.folderId })
+
             assertEquals(listOf(b, a), folderApps(second))
 
             repo.deleteFolder(second)

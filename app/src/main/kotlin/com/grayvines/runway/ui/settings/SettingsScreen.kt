@@ -57,21 +57,7 @@ fun SettingsScreen(
                 Button(onClick = onOpenHome) { Text("Open home screen") }
             }
 
-            Section("Grid")
-            Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { v ->
-                onChange { it.copy(columns = v) }
-            }
-            Stepper("Rows", settings.rows, Settings.MIN_ROWS, Settings.MAX_ROWS) { v ->
-                onChange { it.copy(rows = v) }
-            }
-            Stepper(
-                "Dock slots",
-                settings.dockSlots,
-                Settings.MIN_DOCK_SLOTS,
-                Settings.MAX_DOCK_SLOTS,
-            ) { v ->
-                onChange { it.copy(dockSlots = v) }
-            }
+            GridSection(settings, onChange)
 
             Section("Labels")
             Toggle("Home", settings.homeLabels) { v -> onChange { it.copy(homeLabels = v) } }
@@ -121,8 +107,17 @@ private fun DrawerSection(settings: Settings, onChange: ((Settings) -> Settings)
         onChange { it.copy(drawerColumns = if (same) null else it.columns) }
     }
     settings.drawerColumns?.let { drawerColumns ->
-        Stepper("Columns", drawerColumns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { v ->
-            onChange { it.copy(drawerColumns = v) }
+        Stepper("Columns", drawerColumns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { by ->
+            onChange {
+                it.copy(
+                    drawerColumns =
+                        (it.drawerColumns ?: it.columns).stepped(
+                            by,
+                            Settings.MIN_COLUMNS,
+                            Settings.MAX_COLUMNS,
+                        )
+                )
+            }
         }
     }
     Toggle("Alphabet along the edge", settings.drawerIndex) { v ->
@@ -140,19 +135,59 @@ private fun Section(title: String) {
     )
 }
 
+/**
+ * The grid's steppers. Each step is applied to the stored value, not the one on screen: the screen
+ * can be a write behind (the first frames show defaults; two quick taps show one).
+ */
 @Composable
-private fun Stepper(label: String, value: Int, min: Int, max: Int, onValue: (Int) -> Unit) {
+private fun GridSection(settings: Settings, onChange: ((Settings) -> Settings) -> Unit) {
+    Section("Grid")
+    Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { by ->
+        onChange {
+            it.copy(columns = it.columns.stepped(by, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS))
+        }
+    }
+    Stepper("Rows", settings.rows, Settings.MIN_ROWS, Settings.MAX_ROWS) { by ->
+        onChange {
+            it.copy(rows = it.rows.stepped(by, Settings.MIN_ROWS, Settings.MAX_ROWS))
+        }
+    }
+    Stepper(
+        "Dock slots",
+        settings.dockSlots,
+        Settings.MIN_DOCK_SLOTS,
+        Settings.MAX_DOCK_SLOTS,
+    ) { by ->
+        onChange {
+            it.copy(
+                dockSlots =
+                    it.dockSlots.stepped(
+                        by,
+                        Settings.MIN_DOCK_SLOTS,
+                        Settings.MAX_DOCK_SLOTS,
+                    )
+            )
+        }
+    }
+}
+
+/** [value] with a step of ±1; [onStep] says which, and the caller applies it to what is stored. */
+@Composable
+private fun Stepper(label: String, value: Int, min: Int, max: Int, onStep: (by: Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f))
-        TextButton(onClick = { onValue(value - 1) }, enabled = value > min) { Text("−") }
+        TextButton(onClick = { onStep(-1) }, enabled = value > min) { Text("−") }
         Text(
             value.toString(),
             Modifier.width(32.dp),
             textAlign = TextAlign.Center,
         )
-        TextButton(onClick = { onValue(value + 1) }, enabled = value < max) { Text("+") }
+        TextButton(onClick = { onStep(+1) }, enabled = value < max) { Text("+") }
     }
 }
+
+/** This plus [by], kept within [min]..[max]. */
+internal fun Int.stepped(by: Int, min: Int, max: Int) = (this + by).coerceIn(min, max)
 
 /** "Search with": a dropdown of Automatic plus every app that can take a web search. */
 @Composable

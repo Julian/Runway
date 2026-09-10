@@ -15,13 +15,17 @@ import kotlinx.coroutines.flow.Flow
 fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<ItemEntity>> =
     dao.observeItems(Container.DRAWER)
 
-/** A new drawer folder holding [app], which leaves any other drawer folder it was in. */
+/**
+ * A new drawer folder holding [app], which leaves any other drawer folder it was in; one emptied by
+ * that goes, as with [addToDrawerFolder].
+ */
 suspend fun WorkspaceRepository.createDrawerFolder(app: AppRef): Long = write {
     val folderId = dao.insertFolder(FolderEntity(name = NEW_FOLDER_NAME))
     dao.insertItem(
         ItemEntity(kind = ItemKind.FOLDER, container = Container.DRAWER, folderId = folderId)
     )
     dao.moveIntoDrawerFolder(folderId, app)
+    dao.deleteEmptyFolders()
     folderId
 }
 
