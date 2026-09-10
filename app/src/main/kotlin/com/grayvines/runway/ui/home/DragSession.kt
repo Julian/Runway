@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.ui.input.pointer.PointerId
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
@@ -48,6 +49,14 @@ class DragSession(
     val draggedId: Long?
         get() = state?.source?.itemId
 
+    /**
+     * The pointer carrying the drag, from the moment a cell reports its start until the release:
+     * the root tracker follows this one, whichever finger came down first. Read by the tracker on
+     * the very event that starts the drag, before [state] (a frame behind) shows it.
+     */
+    var finger: PointerId? = null
+        private set
+
     /** The item the dragged app would fold into if let go now. */
     val foldTargetId: Long?
         get() = (state?.plan as? DropPlan.Fold)?.into
@@ -59,13 +68,19 @@ class DragSession(
     /** Pointer tracking after a start comes from the root ([tracksDrag]), not the cell. */
     fun move(pointer: Point) = onMove(pointer)
 
-    fun end() = onEnd()
+    fun end() {
+        finger = null
+        onEnd()
+    }
 
-    fun cancel() = onCancel()
+    fun cancel() {
+        finger = null
+        onCancel()
+    }
 
     /** A drawer app: a hold shows its menu; moving after the hold pulls a new placement out. */
     fun handlersForDrawer(app: AppEntry) =
-        DragHandlers(
+        handlers(
             onHold = { cell -> onHold(app.asItem(), Container.DRAWER, 0, cell) },
             onStart = { pointer, grab -> onStartNew(app.fresh(), pointer, grab) },
         )
@@ -75,7 +90,7 @@ class DragSession(
      * drop gives it a second placement in a cell.
      */
     fun handlersForDrawerFolder(folder: HomeItem) =
-        DragHandlers(
+        handlers(
             onHold = { cell -> onHold(folder, Container.DRAWER, 0, cell) },
             onStart = { pointer, grab ->
                 folder.folderId?.let { onStartNew(fresh(newFolder = it), pointer, grab) }
@@ -87,7 +102,7 @@ class DragSession(
      * out of a drawer folder it is copied, and stays.
      */
     fun handlersForFolder(app: AppEntry, leaving: Long?) =
-        DragHandlers(
+        handlers(
             onHold = {},
             onStart = { pointer, grab ->
                 onStartNew(app.fresh(fromFolder = leaving), pointer, grab)
@@ -95,10 +110,19 @@ class DragSession(
         )
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
-        DragHandlers(
+        handlers(
             onHold = { cell -> onHold(item, container, page, cell) },
             onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
         )
+
+    /**
+     * Handlers that also name the finger. Only while no drag is live: a second finger's long press
+     * during one changes nothing, and must not take the drag away from the finger carrying it.
+     */
+    private fun handlers(
+        onHold: (cell: Bounds) -> Unit,
+        onStart: (pointer: Point, grab: Point) -> Unit,
+    ) = DragHandlers(onHold, onStart, onFinger = { if (state == null) finger = it })
 }
 
 /** A drawer app as the menu sees it: no placement of its own. */

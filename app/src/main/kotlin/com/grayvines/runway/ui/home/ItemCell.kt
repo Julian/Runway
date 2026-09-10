@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -64,11 +65,13 @@ const val FOLD_HINT_TAG = "fold-hint"
 /**
  * Long-press callbacks; positions are root pixels. [onHold] fires when the finger has rested long
  * enough, with the cell's bounds; [onStart] when it then moves, with the grab point within the
- * cell. Everything after the start is tracked from the root, not by the cell.
+ * cell, just after [onFinger] has said which pointer that is. Everything after the start is tracked
+ * from the root, not by the cell, and the root follows that finger.
  */
 class DragHandlers(
     val onHold: (cell: Bounds) -> Unit,
     val onStart: (pointer: Point, grab: Point) -> Unit,
+    val onFinger: (PointerId) -> Unit = {},
 )
 
 /** One cell's content: an app icon of [iconSize] (optionally labelled), or a placeholder. */
@@ -211,7 +214,7 @@ internal fun Modifier.dragAfterLongPress(
             val hold = HoldThenDrag(viewConfiguration.touchSlop, coords, handlers)
             detectDragGesturesAfterLongPress(
                 onDragStart = hold::held,
-                onDrag = { change, _ -> hold.moved(change.position) },
+                onDrag = { change, _ -> hold.moved(change.id, change.position) },
             )
         }
     }
@@ -231,11 +234,14 @@ private class HoldThenDrag(
         coords()?.let { handlers()?.onHold(it.boundsInRoot().toBounds()) }
     }
 
-    fun moved(local: Offset) {
+    fun moved(finger: PointerId, local: Offset) {
         if (dragging || (local - grab).getDistance() <= slop) return
         dragging = true
         val root = coords()?.localToRoot(local) ?: local
-        handlers()?.onStart(root.toPoint(), grab.toPoint())
+        handlers()?.let {
+            it.onFinger(finger)
+            it.onStart(root.toPoint(), grab.toPoint())
+        }
     }
 }
 

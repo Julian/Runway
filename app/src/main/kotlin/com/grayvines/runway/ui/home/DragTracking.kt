@@ -32,15 +32,19 @@ fun Modifier.tracksDrag(session: () -> DragSession): Modifier =
     }
 
 /**
- * The first finger down, followed until it lifts; whatever drag is live meanwhile moves with it.
- * Every move and the lift are forwarded whether or not a drag is known to be live: the drag state
+ * The finger carrying the drag, followed until it lifts; whatever drag is live meanwhile moves with
+ * it. Until a drag names its finger ([DragSession.finger]) that is the first finger down, and every
+ * move and lift of it are forwarded whether or not a drag is known to be live: the drag state
  * reaches the screen a frame after the long press, and a hold, move and lift can all arrive in one
- * batch of input, which would otherwise leave the lifted icon with no finger to end it.
+ * batch of input, which would otherwise leave the lifted icon with no finger to end it. A drag
+ * begun by another finger while one is already resting on the screen is followed from that one
+ * instead.
  */
 private class Finger(private val session: () -> DragSession) {
     private var id: PointerId? = null
 
     fun saw(event: PointerEvent) {
+        session().finger?.let { id = it }
         val current = id
         if (current == null) {
             id = event.changes.firstOrNull { it.changedToDownIgnoreConsumed() }?.id

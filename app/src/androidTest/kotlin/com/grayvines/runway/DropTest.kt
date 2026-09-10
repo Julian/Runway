@@ -3,6 +3,8 @@ package com.grayvines.runway
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
@@ -28,6 +30,31 @@ class DropTest : LauncherFixture() {
         // And back: the handler must see the item's new position, not its original one.
         drag(from = firstHomeApp, to = grid.homeCell(0, 0))
         waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 0 to 0 }
+    }
+
+    @Test
+    fun aDragBegunWithASecondFingerFollowsThatFinger() {
+        // One finger rests on an empty dock slot; another lifts an icon and carries it off. The
+        // drag is that second finger's, and its release is the drop.
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        val resting = grid.dockSlot(settings.dockSlots)
+        val start = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
+        val to = grid.homeCell(4, 4)
+        compose.onRoot().performTouchInput {
+            down(0, resting)
+            down(1, start)
+            advanceEventTime(LONG_PRESS_MS)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += (to - start) / DRAG_STEPS.toFloat()
+                moveTo(1, p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+            up(1)
+        }
+        waitUntil(TIMEOUT_MS) { homeCellOf(firstHomeApp) == 4 to 4 }
+        compose.onRoot().performTouchInput { up(0) }
+        assertStillOnLauncher()
     }
 
     @Test
