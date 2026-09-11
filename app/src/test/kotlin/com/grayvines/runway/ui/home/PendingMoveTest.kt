@@ -62,4 +62,16 @@ class PendingMoveTest {
         assertEquals(cells(home), cells(h))
         assertEquals(cells(dock), cells(d))
     }
+
+    @Test
+    fun `a mover with no placement yet still moves the neighbours it displaced`() {
+        // A widget dropped out of the picker has no row until it is bound and set up, which can
+        // take as long as the user likes; the icons it pushed aside must not snap back meanwhile.
+        val move = PendingMove(0, Container.HOME, 0, 0, 0, displaced = mapOf(1L to Footprint(2, 0)))
+        val (h, d) = move.applyTo(home, dock)
+        assertEquals(setOf(Triple(0, 1L, 2 to 0), Triple(0, 2L, 1 to 0)), cells(h))
+        assertEquals(cells(dock), cells(d))
+        val (again, _) = move.applyTo(h, dock)
+        assertEquals(cells(h), cells(again))
+    }
 }
