@@ -1,9 +1,12 @@
 package com.grayvines.runway.ui.home
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.animateIntSizeAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -28,27 +31,32 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.widgets.WidgetCell
+import com.grayvines.runway.ui.widgets.WidgetResizeSession
 
 /**
  * One page of cells: every item at its footprint, sized by its span. While a drag plans
  * displacement, displaced items are shown at their planned cells, and any change of cell slides
  * rather than jumps. The item being dragged, and the one settling after a drop, are drawn by
  * [DragOverlay] instead; their cells stay invisible here and the settling one reports where it is
- * so the overlay can bring the icon to it. A widget is drawn by its own host view over its cells.
+ * so the overlay can bring the icon to it. A widget is drawn by its own host view over its cells,
+ * which are those a [resize] handle is pulling it to while one is.
  */
 @Composable
 internal fun GridPage(
@@ -61,51 +69,42 @@ internal fun GridPage(
     handlersFor: (HomeItem) -> DragHandlers?,
     onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
+    resize: WidgetResizeSession? = null,
     /** The cells the carried item would take on this page if let go now; outlined while it is. */
     landing: () -> Footprint? = { null },
 ) {
     val density = LocalDensity.current
     val cellW = with(density) { cell.width.roundToPx() }
     val cellH = with(density) { cell.height.roundToPx() }
-    val positions = mutableListOf<State<IntOffset>>()
     // The page's own long press (on empty space) takes the same hold as an icon's lift.
     CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        GridLayout(
-            items,
-            cellW,
-            cellH,
-            positions,
-            onHoldEmpty,
-            modifier.outlines(landing, cellW, cellH),
-        ) {
+        GridLayout(items, cellW, cellH, onHoldEmpty, modifier.outlines(landing, cellW, cellH)) {
             items.forEach { item ->
                 key(item.id) {
-                    val cellDrag = rememberCellDrag(item, drag)
+                    val cellDrag = rememberCellDrag(item, drag, resize)
                     val settlingHere = cellDrag.settlingHere
-                    val f = cellDrag.footprint
-                    positions +=
-                        animateIntOffsetAsState(
-                            IntOffset(f.x * cellW, f.y * cellH),
-                            // The overlay carries a settling item to its cell; the cell itself
-                            // must already be there, not sliding over.
-                            if (settlingHere != null) {
-                                snap()
-                            } else {
-                                spring(stiffness = Spring.StiffnessMediumLow)
-                            },
-                            label = "cell",
-                        )
+                    val placement = Modifier.then(rememberCellPlacement(cellDrag, cellW, cellH))
                     if (item.kind == ItemKind.WIDGET) {
                         WidgetCell(
                             item,
                             cell,
+                            modifier = placement,
                             drag = handlersFor(item),
                             session = drag,
                             lifted = cellDrag.lifted || settlingHere != null,
                             settlingHere = settlingHere,
+                            framedBy = resize?.takeIf { cellDrag.framed },
                         )
                     } else {
-                        IconCell(item, cellDrag, iconSize, labels, onLaunch, handlersFor(item))
+                        IconCell(
+                            item,
+                            cellDrag,
+                            iconSize,
+                            labels,
+                            onLaunch,
+                            handlersFor(item),
+                            placement,
+                        )
                     }
                 }
             }
@@ -124,6 +123,7 @@ private fun IconCell(
     labels: Boolean,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     handlers: DragHandlers?,
+    modifier: Modifier,
 ) {
     val settlingHere = cellDrag.settlingHere
     ItemCell(
@@ -136,15 +136,57 @@ private fun IconCell(
         receiving = cellDrag.receiving,
         modifier =
             if (settlingHere != null) {
-                Modifier.onGloballyPositioned {
+                modifier.onGloballyPositioned {
                     val c = it.boundsInRoot().center
                     settlingHere.onSettleTargetPositioned(Point(c.x, c.y))
                 }
             } else {
-                Modifier
+                modifier
             },
     )
 }
+
+/**
+ * Where a cell goes and how big it is (px, mid-animation included), read by the page's measure and
+ * placement: through [State], so a cell that slides or grows costs a re-layout, not a
+ * recomposition. Carried by the cell itself: a list filled as the cells compose could be read by a
+ * measure before it is.
+ */
+private class CellPlacement(val position: State<IntOffset>, val size: State<IntSize>) :
+    ParentDataModifier {
+    override fun Density.modifyParentData(parentData: Any?) = this@CellPlacement
+}
+
+/** The cell's placement, animated: any change of cell slides, and a resize eases. */
+@Composable
+private fun rememberCellPlacement(cellDrag: CellDrag, cellW: Int, cellH: Int): CellPlacement {
+    val f = cellDrag.footprint
+    val position =
+        animateIntOffsetAsState(
+            IntOffset(f.x * cellW, f.y * cellH),
+            // The overlay carries a settling item to its cell; the cell itself must already be
+            // there, not sliding over. A widget under a resize handle eases to each cell it snaps
+            // to, its size in step.
+            when {
+                cellDrag.settlingHere != null -> snap()
+                cellDrag.resizing -> resizeTween()
+                else -> spring(stiffness = Spring.StiffnessMediumLow)
+            },
+            label = "cell",
+        )
+    val size =
+        animateIntSizeAsState(
+            IntSize(f.width * cellW, f.height * cellH),
+            if (cellDrag.resizing) resizeTween() else snap(),
+            label = "cell size",
+        )
+    return CellPlacement(position, size)
+}
+
+/** How long a widget takes to reach the cells a resize handle snapped it to. */
+private const val RESIZE_MS = 150
+
+private fun <T> resizeTween() = tween<T>(RESIZE_MS, easing = FastOutSlowInEasing)
 
 /** A faint rounded outline over the cells the carried item would land on: a hint, not a target. */
 private const val LANDING_ALPHA = 0.45f
@@ -176,13 +218,15 @@ private fun Modifier.outlines(landing: () -> Footprint?, cellW: Int, cellH: Int)
         }
     }
 
-/** Every item at its footprint, sized by its span; the page itself fills what it is given. */
+/**
+ * Every item at its footprint, sized by its span, as each cell's [CellPlacement] says; the page
+ * itself fills what it is given.
+ */
 @Composable
 private fun GridLayout(
     items: List<HomeItem>,
     cellW: Int,
     cellH: Int,
-    positions: List<State<IntOffset>>,
     onHoldEmpty: (Point) -> Unit,
     modifier: Modifier,
     content: @Composable () -> Unit,
@@ -191,12 +235,13 @@ private fun GridLayout(
         content = content,
         modifier = modifier.fillMaxSize().holdsEmptyCells(items, cellW, cellH, onHoldEmpty),
     ) { measurables, constraints ->
-        val placeables = measurables.mapIndexed { i, measurable ->
-            val f = items[i].footprint
-            measurable.measure(Constraints.fixed(f.width * cellW, f.height * cellH))
+        val placeables = measurables.map { measurable ->
+            val cell = measurable.parentData as CellPlacement
+            val size = cell.size.value
+            measurable.measure(Constraints.fixed(size.width, size.height)) to cell
         }
         layout(constraints.maxWidth, constraints.maxHeight) {
-            placeables.forEachIndexed { i, placeable -> placeable.place(positions[i].value) }
+            placeables.forEach { (placeable, cell) -> placeable.place(cell.position.value) }
         }
     }
 }
@@ -250,20 +295,37 @@ private class CellDrag(
     settlingHere: State<DragSession?>,
     lifted: State<Boolean>,
     receiving: State<Boolean>,
+    resizing: State<Boolean>,
+    framed: State<Boolean>,
 ) {
     val footprint by footprint
     val settlingHere by settlingHere
     val lifted by lifted
     val receiving by receiving
+
+    /** A resize handle is pulling this widget. */
+    val resizing by resizing
+
+    /** The resize frame is around this widget, and wants to know where it is. */
+    val framed by framed
 }
 
 @Composable
-private fun rememberCellDrag(item: HomeItem, drag: DragSession?): CellDrag =
-    remember(item, drag) {
+private fun rememberCellDrag(
+    item: HomeItem,
+    drag: DragSession?,
+    resize: WidgetResizeSession?,
+): CellDrag =
+    remember(item, drag, resize) {
         CellDrag(
-            footprint = derivedStateOf { drag?.previewFor(item.id) ?: item.footprint },
+            footprint =
+                derivedStateOf {
+                    resize?.previewFor(item.id) ?: drag?.previewFor(item.id) ?: item.footprint
+                },
             settlingHere = derivedStateOf { drag?.takeIf { it.settling?.itemId == item.id } },
             lifted = derivedStateOf { item.id == drag?.draggedId },
             receiving = derivedStateOf { item.id == drag?.foldTargetId },
+            resizing = derivedStateOf { resize?.previewFor(item.id) != null },
+            framed = derivedStateOf { resize?.frames(item.id) == true },
         )
     }

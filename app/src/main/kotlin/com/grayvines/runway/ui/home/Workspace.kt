@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.widgets.WidgetResizeSession
 
 const val WORKSPACE_TAG = "workspace"
 
@@ -34,6 +35,7 @@ fun Workspace(
     onPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
+    resize: WidgetResizeSession? = null,
 ) {
     Box(modifier.fillMaxSize()) {
         HorizontalPager(
@@ -56,6 +58,7 @@ fun Workspace(
                 drag = drag,
                 handlersFor = { item -> drag?.handlersFor(item, page) },
                 onHoldEmpty = onHoldEmpty,
+                resize = resize,
                 landing = { drag?.plannedHomeFootprint(page) },
                 modifier =
                     Modifier.onGloballyPositioned { coords ->

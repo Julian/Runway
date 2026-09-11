@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A two-by-one widget that can be made one-by-one or three-by-two. -->
+<!-- A two-by-one widget that can be made as small as one cell and as large as 400dp square. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="80dp"
     android:minHeight="40dp"
     android:minResizeWidth="40dp"
     android:minResizeHeight="40dp"
-    android:maxResizeWidth="180dp"
-    android:maxResizeHeight="110dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="400dp"
     android:targetCellWidth="2"
     android:targetCellHeight="1"
     android:resizeMode="horizontal|vertical"

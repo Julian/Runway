@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,12 +45,16 @@ const val WIDGET_TAG = "widget"
 
 /**
  * A widget over its cells, each [cell] big: the system's host view, told its size in dp so the
- * provider lays out for it. A widget nothing is bound to shows a stand-in until placeholders come.
- * A long press is the launcher's ([drag]), as on an icon; every other touch is the widget's.
- * Lifted, the cell goes invisible while [session] carries a picture of it; settling after a drop,
- * it reports where it is so the picture can come to it.
+ * provider lays out for it. The size it is told is the stored one: while a resize handle pulls it
+ * the view stretches to the cells it snaps to, and the provider hears once, when the resize is
+ * saved, rather than at every snap. A widget nothing is bound to shows a stand-in until
+ * placeholders come. A long press is the launcher's ([drag]), as on an icon; every other touch is
+ * the widget's. Lifted, the cell goes invisible while [session] carries a picture of it; settling
+ * after a drop, it reports where it is so the picture can come to it. While the resize frame is
+ * around it ([framedBy]) it reports where it is to that.
  */
 @Composable
+@Suppress("LongParameterList") // one cell's inputs, passed once
 fun WidgetCell(
     item: HomeItem,
     cell: DpSize,
@@ -58,6 +63,7 @@ fun WidgetCell(
     session: DragSession? = null,
     lifted: Boolean = false,
     settlingHere: DragSession? = null,
+    framedBy: WidgetResizeSession? = null,
 ) {
     val context = LocalContext.current
     val host = context.appGraph.widgets
@@ -71,6 +77,8 @@ fun WidgetCell(
     val size = SizeF(cell.width.value * item.spanX, cell.height.value * item.spanY)
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var frame by remember { mutableStateOf<WidgetFrame?>(null) }
+    // The frame may arrive after the cell's last layout: it is told where the cell is at once.
+    LaunchedEffect(framedBy) { coords?.let { framedBy?.positioned(item.id, it.boundsInRoot()) } }
     // The hold is the launcher's from then on: the widget must not take the release as a tap. A
     // move after it lifts the widget, which travels as a picture taken at that moment. Read
     // through state by the gesture, which outlives compositions: the session is replaced after
@@ -107,6 +115,7 @@ fun WidgetCell(
                 .graphicsLayer { alpha = if (lifted) 0f else 1f }
                 .onGloballyPositioned {
                     coords = it
+                    framedBy?.positioned(item.id, it.boundsInRoot())
                     if (settlingHere != null) {
                         val c = it.boundsInRoot().center
                         settlingHere.onSettleTargetPositioned(Point(c.x, c.y))

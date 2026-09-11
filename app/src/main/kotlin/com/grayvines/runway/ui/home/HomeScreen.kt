@@ -48,6 +48,9 @@ import com.grayvines.runway.ui.menu.ItemMenuSession
 import com.grayvines.runway.ui.shade.ShadeHint
 import com.grayvines.runway.ui.widgets.WidgetPicker
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
+import com.grayvines.runway.ui.widgets.WidgetResizeOverlay
+import com.grayvines.runway.ui.widgets.WidgetResizeSession
+import com.grayvines.runway.ui.widgets.dismissingResize
 import kotlinx.coroutines.flow.Flow
 
 /** Fraction of a grid cell's shorter side left empty around an icon. */
@@ -74,6 +77,7 @@ fun HomeScreen(
     itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
+    widgetResize: WidgetResizeSession,
     openFolder: OpenFolder?,
     folderActions: FolderActions,
     drawerOpen: Boolean,
@@ -99,7 +103,7 @@ fun HomeScreen(
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)
-    BoxWithConstraints(Modifier.fillMaxSize().dragTracking(drag).releasesAbandonedPull(drawer)) {
+    BoxWithConstraints(Modifier.fillMaxSize().rootGestures(drag, widgetResize, drawer)) {
         val insets = WindowInsets.systemBars.asPaddingValues()
         val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
         val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
@@ -123,6 +127,7 @@ fun HomeScreen(
             onHomePagePositioned = onHomePagePositioned,
             onDockPagePositioned = onDockPagePositioned,
             onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
+            resize = widgetResize,
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
@@ -140,6 +145,7 @@ fun HomeScreen(
         )
         // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
         openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
+        WidgetResizeOverlay(state, widgetResize, cell, drag)
         Menus(state, itemMenu, homeMenu, widgetPicker, cell, drag)
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
@@ -232,6 +238,7 @@ private fun HomeColumn(
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
+    resize: WidgetResizeSession,
     modifier: Modifier = Modifier,
     /** Applied to the pages alone: the dock and search bar do not pull the drawer. */
     pagesModifier: Modifier = Modifier,
@@ -261,6 +268,7 @@ private fun HomeColumn(
             onPagePositioned = onHomePagePositioned,
             onHoldEmpty = onHoldEmpty,
             modifier = Modifier.weight(1f).then(pagesModifier),
+            resize = resize,
         )
         if (!settings.searchBarAtTop) {
             SearchBar(
@@ -287,12 +295,19 @@ private fun HomeColumn(
 }
 
 /**
- * The root drag tracker, built once: rebuilding a pointer-input modifier restarts it mid-gesture.
+ * The root's gesture watchers: the drag tracker, the resize frame's dismissal and the drawer's
+ * abandoned pull. Built once: rebuilding a pointer-input modifier restarts it mid-gesture.
  */
 @Composable
-private fun Modifier.dragTracking(drag: DragSession): Modifier {
+private fun Modifier.rootGestures(
+    drag: DragSession,
+    resize: WidgetResizeSession,
+    drawer: DrawerControls,
+): Modifier {
     val current = rememberUpdatedState(drag)
     return this.then(remember { Modifier.tracksDrag { current.value } })
+        .dismissingResize(resize)
+        .releasesAbandonedPull(drawer)
 }
 
 /** The drawer over the pages, with what it lists and what it can do. */

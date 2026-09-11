@@ -43,6 +43,7 @@ import com.grayvines.runway.ui.menu.HomeMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuState
 import com.grayvines.runway.ui.widgets.WidgetPickerHost
+import com.grayvines.runway.ui.widgets.WidgetResizeHost
 import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -155,6 +156,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             mayOpen = { dragging.drag.value == null },
         )
 
+    /** The frame around a widget: its handles and its Remove. */
+    val widgetResize =
+        WidgetResizeHost(graph, viewModelScope, mayShow = { dragging.drag.value == null })
+
     private val lookup =
         object : WorkspaceLookup {
             override val grid: GridSize
@@ -176,17 +181,22 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         object : DragWorkspace {
             override fun pageCount(container: Container) = state.value.pages(container).size
 
-            override suspend fun move(move: PendingMove): Boolean =
-                if (move.newWidget != null) {
-                    widgetPicker.place(move)
-                } else {
+            override suspend fun move(move: PendingMove): Boolean {
+                if (move.newWidget != null) return widgetPicker.place(move)
+                val saved =
                     attempt("save the move; the item snaps back") {
                         check(graph.workspace.apply(move)) {
                             "the page, a neighbour, the target or the dropped app is gone since " +
                                 "the plan was made; nothing saved"
                         }
                     }
+                // A moved widget gets its frame, as a placed one does: the size may want changing
+                // in the new spot.
+                if (saved && state.value.item(move.itemId)?.kind == ItemKind.WIDGET) {
+                    widgetResize.show(move.itemId)
                 }
+                return saved
+            }
 
             // The state the screen draws, not the database flow directly: the override must
             // outlive the write until what replaces it is on screen, or the icon shows in its old
@@ -221,6 +231,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             lookup,
             shownPage = { dragging.areas.areas.homePage },
             mayOpen = { dragging.drag.value == null },
+            onPlaced = { widgetResize.show(it) },
         )
 
     /**
@@ -296,13 +307,28 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 }
                 val menu = itemMenu.state.value
                 if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
+                val framed = widgetResize.shown.value
+                if (framed != null && s.loaded && s.item(framed) == null) widgetResize.dismiss()
             }
+        }
+    }
+
+    /**
+     * A long press on a placed item: a widget on a page gets its resize frame, which has its
+     * Remove; anything else gets the item menu.
+     */
+    val hold: (HomeItem, Container, Int, Bounds) -> Unit = { item, container, page, cell ->
+        if (item.kind == ItemKind.WIDGET && container == Container.HOME) {
+            widgetResize.show(item.id)
+        } else {
+            itemMenu.hold(item, container, page, cell)
         }
     }
 
     fun startDrag(item: HomeItem, container: Container, page: Int, pointer: Point, grab: Point) {
         itemMenu.dismiss()
         homeMenu.dismiss()
+        widgetResize.dismiss()
         val source =
             DragSource(
                 item.id,
@@ -325,6 +351,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     fun startNewDrag(source: DragSource, pointer: Point, grab: Point) {
         itemMenu.dismiss()
         homeMenu.dismiss()
+        widgetResize.dismiss()
         widgetPicker.dismiss()
         closeDrawer()
         closeFolder()
@@ -393,6 +420,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             dragging.drag.value != null -> dragging.cancelDrag()
             itemMenu.isOpen -> itemMenu.dismiss()
             homeMenu.isOpen -> homeMenu.dismiss()
+            widgetResize.isShown -> widgetResize.dismiss()
             widgetPicker.isOpen -> widgetPicker.dismiss()
             _openFolder.value != null -> closeFolder()
             _drawerOpen.value -> closeDrawer()

@@ -1,6 +1,7 @@
 package com.grayvines.runway.data
 
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.model.overlaps
 
 /*
  * Widget placements. A widget lives on a home page only, as the id the widget host allocated for
@@ -39,4 +40,35 @@ suspend fun WorkspaceRepository.addWidget(
             )
         )
     }
+}
+
+/**
+ * The widget placed as [id] now covers [to] on its page. False, and nothing changed, when it is not
+ * a placed widget any more or another item on the page is under [to]: the frame was pulled over a
+ * picture of the layout that has changed since.
+ */
+suspend fun WorkspaceRepository.resizeWidget(id: Long, to: Footprint): Boolean = write {
+    val item = dao.item(id)
+    val page = item?.pageIndex
+    if (item == null || item.kind != ItemKind.WIDGET || page == null) {
+        false
+    } else {
+        val taken =
+            dao.items().any { other ->
+                other.id != id &&
+                    other.container == item.container &&
+                    other.pageIndex == page &&
+                    other.footprint()?.overlaps(to) == true
+            }
+        if (!taken) {
+            dao.updateItem(item.copy(x = to.x, y = to.y, spanX = to.width, spanY = to.height))
+        }
+        !taken
+    }
+}
+
+private fun ItemEntity.footprint(): Footprint? {
+    val cellX = x ?: return null
+    val cellY = y ?: return null
+    return Footprint(cellX, cellY, spanX, spanY)
 }

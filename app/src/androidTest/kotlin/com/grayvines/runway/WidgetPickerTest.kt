@@ -24,6 +24,7 @@ import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_LIST_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_PICKER_TAG
+import com.grayvines.runway.ui.widgets.WIDGET_RESIZE_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
@@ -64,6 +65,10 @@ class WidgetPickerTest : LauncherFixture() {
         assertEquals(0 to 0, widget.x to widget.y)
         assertEquals(2 to 1, widget.spanX to widget.spanY)
         waitUntil { compose.onAllNodesWithTag(WIDGET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        // Placed, it is framed for resizing straight away.
+        waitUntil {
+            compose.onAllNodesWithTag(WIDGET_RESIZE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
@@ -242,18 +247,6 @@ class WidgetPickerTest : LauncherFixture() {
 
     private fun choice(label: String) =
         compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG)))
-
-    /** Empties [cells] of the first page and waits for the screen to show them empty. */
-    private fun clearHomeCells(vararg cells: Pair<Int, Int>) {
-        val removed = runBlocking {
-            val page = graph.workspace.observe(Container.HOME).first().pages.first()
-            page.items
-                .filter { it.x to it.y in cells }
-                .onEach { graph.workspace.removeItem(it.id) }
-                .map { item -> apps.first { it.ref.component == item.component }.label }
-        }
-        waitUntil { removed.none { icon(it).isDisplayedOrFalse() } }
-    }
 
     private fun placedWidgets(): List<ItemEntity> = runBlocking {
         graph.workspace.observe(Container.HOME).first().pages.first().items.filter {

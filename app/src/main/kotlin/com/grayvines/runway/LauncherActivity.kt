@@ -41,6 +41,7 @@ import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
 import com.grayvines.runway.ui.widgets.WidgetPrompts
+import com.grayvines.runway.ui.widgets.rememberWidgetResizeSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 
@@ -137,6 +138,7 @@ class LauncherActivity : ComponentActivity() {
                             viewModel.itemMenu::dismiss,
                         ),
                     widgetPicker = widgetPickerSession(),
+                    widgetResize = rememberWidgetResizeSession(viewModel.widgetResize),
                     homeMenu =
                         HomeMenuSession(
                             at = homeMenuAt,
@@ -244,7 +246,7 @@ class LauncherActivity : ComponentActivity() {
                 pictureOf = picture,
                 onSettleTargetPositioned = { settleTarget.value = it },
                 onSettled = viewModel.dragging::settled,
-                onHold = viewModel.itemMenu::hold,
+                onHold = viewModel.hold,
                 onStart = viewModel::startDrag,
                 onStartNew = viewModel::startNewDrag,
                 onMove = viewModel.dragging::dragTo,

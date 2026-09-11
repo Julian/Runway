@@ -234,6 +234,18 @@ open class LauncherFixture {
         }
     }
 
+    /** Empties [cells] of the first home page and waits for the screen to show them empty. */
+    protected fun clearHomeCells(vararg cells: Pair<Int, Int>) {
+        val removed = runBlocking {
+            val page = graph.workspace.observe(Container.HOME).first().pages.first()
+            page.items
+                .filter { it.x to it.y in cells }
+                .onEach { graph.workspace.removeItem(it.id) }
+                .map { item -> apps.first { it.ref.component == item.component }.label }
+        }
+        waitUntil { removed.none { icon(it).isDisplayedOrFalse() } }
+    }
+
     /**
      * Binds the fixture's widget the way the picker does and puts it over [spanX] × [spanY] cells
      * of the first page from ([x], [y]), whose icons make way; the placement's id.
@@ -385,6 +397,8 @@ open class LauncherFixture {
         fun dockSlotWidth() = dock.width / dockSlots
 
         fun cellWidth() = page.width / columns
+
+        fun cellHeight() = page.height / pageRows
 
         /** The dock slot a root-pixel point falls in. */
         fun dockSlotAt(p: Offset) = ((p.x - dock.left) / (dock.width / dockSlots)).toInt()

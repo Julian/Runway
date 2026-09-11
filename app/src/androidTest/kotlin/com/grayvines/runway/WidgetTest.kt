@@ -8,7 +8,6 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -24,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -126,32 +124,6 @@ class WidgetTest : LauncherFixture() {
         assertFalse(
             "the shade came down from a swipe on a widget",
             device.wait(Until.hasObject(SHADE), GRACE_MS),
-        )
-    }
-
-    @Test
-    fun holdingAWidgetOffersRemove_whichDropsThePlacementAndTheHostId() {
-        val itemId = placeFixtureWidget(0, 0)
-        awaitWidgetCell()
-        val id =
-            runBlocking { graph.workspace.observe(Container.HOME).first() }
-                .pages
-                .first()
-                .items
-                .first { it.id == itemId }
-                .appWidgetId!!
-        hold(compose.onNodeWithTag(WIDGET_TAG))
-        release()
-        menuRow("Remove").assertIsDisplayed()
-        menuRow("Remove").performClick()
-        awaitGone(WIDGET_TAG)
-        waitUntil(TIMEOUT_MS) { graph.widgets.info(id) == null }
-        assertNull(
-            runBlocking { graph.workspace.observe(Container.HOME).first() }
-                .pages
-                .first()
-                .items
-                .firstOrNull { it.id == itemId }
         )
     }
 

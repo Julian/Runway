@@ -31,6 +31,8 @@ class WidgetPickerHost(
     private val shownPage: () -> Int,
     /** Whether the picker may open now: not over a live drag. */
     private val mayOpen: () -> Boolean = { true },
+    /** Told the placement id of every widget added. */
+    private val onPlaced: (itemId: Long) -> Unit = {},
 ) {
     private val _open = MutableStateFlow(false)
     val open: StateFlow<Boolean> = _open
@@ -157,7 +159,7 @@ class WidgetPickerHost(
         at: Footprint,
         displaced: Map<Long, Footprint>,
     ): Boolean {
-        var stored = false
+        var stored: Long? = null
         attempt("store the widget") {
             stored =
                 graph.workspace.addWidget(
@@ -169,9 +171,10 @@ class WidgetPickerHost(
                     at.width,
                     at.height,
                     displaced,
-                ) != null
+                )
         }
-        if (!stored) graph.widgets.deleteId(id)
-        return stored
+        val itemId = stored
+        if (itemId == null) graph.widgets.deleteId(id) else onPlaced(itemId)
+        return itemId != null
     }
 }

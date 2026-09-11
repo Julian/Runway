@@ -11,6 +11,7 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.widgets.WIDGET_RESIZE_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
@@ -81,6 +82,10 @@ class WidgetDragTest : LauncherFixture() {
         awaitGone(DRAG_OVERLAY_TAG)
         val shown = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
         assertTrue("drawn at $shown, not at $target", (shown - target).getDistance() < 2f)
+        // Settled in its new cells, it is framed for resizing, as a newly placed widget is.
+        waitUntil {
+            compose.onAllNodesWithTag(WIDGET_RESIZE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
@@ -181,17 +186,5 @@ class WidgetDragTest : LauncherFixture() {
             .filter {
                 it.kind == ItemKind.FOLDER
             }
-    }
-
-    /** Empties [cells] of the first page and waits for the screen to show them empty. */
-    private fun clearHomeCells(vararg cells: Pair<Int, Int>) {
-        val removed = runBlocking {
-            val page = graph.workspace.observe(Container.HOME).first().pages.first()
-            page.items
-                .filter { it.x to it.y in cells }
-                .onEach { graph.workspace.removeItem(it.id) }
-                .map { item -> apps.first { it.ref.component == item.component }.label }
-        }
-        waitUntil { removed.none { icon(it).isDisplayedOrFalse() } }
     }
 }
