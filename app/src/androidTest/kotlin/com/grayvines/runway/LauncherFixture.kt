@@ -50,6 +50,8 @@ import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit.MILLISECONDS
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -212,16 +214,24 @@ open class LauncherFixture {
      * at; it reaches accessibility as an event, which is what is watched here.
      */
     protected fun expectToast(text: String, action: () -> Unit) {
-        InstrumentationRegistry.getInstrumentation()
-            .uiAutomation
-            .executeAndWaitForEvent(
-                action,
-                { event ->
-                    event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED &&
-                        event.text.any { it.toString() == text }
-                },
-                TIMEOUT_MS,
-            )
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val seen = CountDownLatch(1)
+        // A listener rather than executeAndWaitForEvent: the action may itself go through
+        // UiAutomation (a click on a system dialog), which that cannot nest.
+        automation.setOnAccessibilityEventListener { event ->
+            if (
+                event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED &&
+                    event.text.any { it.toString() == text }
+            ) {
+                seen.countDown()
+            }
+        }
+        try {
+            action()
+            assertTrue("no toast saying \"$text\"", seen.await(LONG_TIMEOUT_MS, MILLISECONDS))
+        } finally {
+            automation.setOnAccessibilityEventListener(null)
+        }
     }
 
     /**

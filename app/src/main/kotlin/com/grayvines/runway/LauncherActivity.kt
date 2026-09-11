@@ -1,12 +1,17 @@
 package com.grayvines.runway
 
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.os.UserHandle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.widgets.bindWidgetRequest
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.Point
@@ -34,6 +40,8 @@ import com.grayvines.runway.ui.menu.ItemMenuSession
 import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
+import com.grayvines.runway.ui.widgets.WidgetPrompts
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 
 /** The HOME activity. Holds no state of its own. */
@@ -57,9 +65,47 @@ class LauncherActivity : ComponentActivity() {
         )
     }
 
+    /** The system's leave to bind widgets, asked for once; its answer ends [pendingBind]. */
+    private val bindRequest =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            pendingBind?.complete(result.resultCode == RESULT_OK)
+            pendingBind = null
+        }
+    private var pendingBind: CompletableDeferred<Boolean>? = null
+    private var pendingSetup: CompletableDeferred<Boolean>? = null
+
+    /** The dialogs a widget may need before it is added; each answers when the user has. */
+    private val widgetPrompts =
+        object : WidgetPrompts {
+            override suspend fun requestBind(
+                id: Int,
+                provider: ComponentName,
+                profile: UserHandle,
+            ): Boolean {
+                val answer = CompletableDeferred<Boolean>()
+                pendingBind = answer
+                bindRequest.launch(bindWidgetRequest(id, provider, profile))
+                return answer.await()
+            }
+
+            override suspend fun configure(id: Int): Boolean {
+                val answer = CompletableDeferred<Boolean>()
+                pendingSetup = answer
+                try {
+                    appGraph.widgets.configure(this@LauncherActivity, id, REQUEST_WIDGET_SETUP)
+                } catch (e: ActivityNotFoundException) {
+                    Log.w(TAG, "no setup screen for widget $id", e)
+                    pendingSetup = null
+                    return false
+                }
+                return answer.await()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        viewModel.widgetPicker.prompts = widgetPrompts
         // Registered before the content, so every handler the content adds (the drawer's, a
         // folder's, a menu's) is asked first; this one is what is left when none of those is up.
         onBackPressedDispatcher.addCallback(this) { viewModel.onBack() }
@@ -115,6 +161,22 @@ class LauncherActivity : ComponentActivity() {
                     onDockPageShown = reports::dockPageShown,
                 )
             }
+        }
+    }
+
+    override fun onDestroy() {
+        // The view model outlives this activity, and must not keep it through the prompts.
+        if (viewModel.widgetPicker.prompts === widgetPrompts) viewModel.widgetPicker.prompts = null
+        super.onDestroy()
+    }
+
+    /** A widget's setup screen, started by the host, answers here; there is no newer way. */
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_WIDGET_SETUP) {
+            pendingSetup?.complete(resultCode == RESULT_OK)
+            pendingSetup = null
         }
     }
 
@@ -198,6 +260,11 @@ class LauncherActivity : ComponentActivity() {
             Toast.makeText(this, "Android refused to open the notifications", Toast.LENGTH_SHORT)
                 .show()
         }
+    }
+
+    private companion object {
+        const val REQUEST_WIDGET_SETUP = 1
+        const val TAG = "Runway"
     }
 }
 

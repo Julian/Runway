@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="fixture_widget">Fixture widget</string>
+    <string name="fixture_setup_widget">Fixture setup widget</string>
+    <string name="fixture_setup_done">Done</string>
+    <string name="fixture_setup_cancel">Cancel</string>
 </resources>

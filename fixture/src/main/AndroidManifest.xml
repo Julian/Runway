@@ -32,6 +32,27 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/fixture_widget" />
         </receiver>
+
+        <!-- A widget that insists on being set up first, and its setup screen. -->
+        <receiver
+            android:name=".FixtureSetupWidget"
+            android:label="@string/fixture_setup_widget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fixture_setup_widget" />
+        </receiver>
+        <activity
+            android:name=".FixtureWidgetSetupActivity"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

@@ -1,11 +1,13 @@
 package com.grayvines.runway.system.widgets
 
+import android.app.Activity
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.UserHandle
@@ -41,6 +43,16 @@ class WidgetProvider(
 }
 
 /**
+ * The system's request to let this launcher bind widgets, with [id] and [provider] as the first; it
+ * comes back through the activity that starts it, and on OK [id] is bound.
+ */
+fun bindWidgetRequest(id: Int, provider: ComponentName, user: UserHandle): Intent =
+    Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
+        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, user)
+
+/**
  * The one app widget host of the process, under a fixed host id so the ids it allocates survive
  * restarts and reboots: a stored id is bound and drawable again on the next start with no work of
  * ours. Listening is tied to the launcher activity's visibility.
@@ -71,6 +83,14 @@ class WidgetHost(context: Context) {
      */
     fun bind(id: Int, provider: ComponentName, user: UserHandle): Boolean =
         manager.bindAppWidgetIdIfAllowed(id, user, provider, null)
+
+    /**
+     * Starts the setup screen of the widget bound to [id] from [activity], which hears back in its
+     * activity result under [requestCode]. Only the host may start it: the system hands the screen
+     * a token for the id.
+     */
+    fun configure(activity: Activity, id: Int, requestCode: Int) =
+        host.startAppWidgetConfigureActivityForResult(activity, id, 0, requestCode, null)
 
     /** The view that draws widget [id]; [context] is the activity's, for its theme. */
     fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView =

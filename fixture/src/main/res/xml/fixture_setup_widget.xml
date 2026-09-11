@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Like the fixture widget, but with a setup screen it insists on. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="80dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="40dp"
+    android:minResizeHeight="40dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal|vertical"
+    android:initialLayout="@layout/fixture_widget"
+    android:configure="com.grayvines.runway.fixture.FixtureWidgetSetupActivity"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

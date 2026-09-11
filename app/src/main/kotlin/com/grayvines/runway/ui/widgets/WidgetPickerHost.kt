@@ -44,6 +44,12 @@ class WidgetPickerHost(
     /** Why a chosen widget was not added, for the user. */
     val notices: SharedFlow<String> = _notices
 
+    /**
+     * The activity's, while there is one: the system's dialogs a widget may need before it is
+     * added.
+     */
+    var prompts: WidgetPrompts? = null
+
     val isOpen: Boolean
         get() = _open.value
 
@@ -119,21 +125,28 @@ class WidgetPickerHost(
             lookup.grid,
         )
 
-    /** A fresh id bound to [provider], or null (and a notice) when that cannot be done yet. */
-    private fun bound(provider: WidgetProvider): Int? {
+    /**
+     * A fresh id bound to [provider] and set up if the widget insists on it, or null when the user
+     * would not have it: the system asks their leave to bind the first time, and a widget's setup
+     * screen can be cancelled. Only a refused bind is worth a notice; a cancelled setup was theirs.
+     */
+    private suspend fun bound(provider: WidgetProvider): Int? {
         val host = graph.widgets
         val info = provider.info
         val id = host.allocateId()
-        val refused =
-            when {
-                !host.bind(id, info.provider, info.profile) -> "Runway may not add widgets yet"
-                provider.needsSetup -> "This widget needs setting up first, which is not done yet"
-                else -> null
-            }
-        if (refused == null) return id
-        host.deleteId(id)
-        _notices.tryEmit(refused)
-        return null
+        val allowed =
+            host.bind(id, info.provider, info.profile) ||
+                prompts?.requestBind(id, info.provider, info.profile) == true
+        if (!allowed) {
+            host.deleteId(id)
+            _notices.tryEmit("Runway was not allowed to add widgets")
+            return null
+        }
+        if (provider.needsSetup && prompts?.configure(id) != true) {
+            host.deleteId(id)
+            return null
+        }
+        return id
     }
 
     /** Stores the placement; the id goes back to the host if the layout would not take it. */

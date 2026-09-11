@@ -1,5 +1,6 @@
 package com.grayvines.runway
 
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
@@ -13,6 +14,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
@@ -25,6 +29,8 @@ import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,11 +86,68 @@ class WidgetPickerTest : LauncherFixture() {
     }
 
     @Test
-    fun whileBindingIsNotAllowedNothingIsAddedAndTheUserIsTold() {
+    fun theFirstWidgetAsksTheSystemsLeaveToBind_andAllowingItPlacesTheWidget() {
         allowWidgetBinding(false)
         clearHomeCells(0 to 0, 1 to 0)
         openPicker()
-        expectToast("Runway may not add widgets yet") { fixtureChoice().performClick() }
+        fixtureChoice().performClick()
+        val allow = device.wait(Until.findObject(BIND_ALLOW), LONG_TIMEOUT_MS)
+        assertNotNull("the system never asked whether Runway may bind widgets", allow)
+        // Ticked, the dialog grants Runway for good; unticked it binds this one widget only.
+        device.findObject(BIND_ALWAYS).click()
+        allow.click()
+        val widget = awaitPlacedWidget()
+        assertEquals(0 to 0, widget.x to widget.y)
+        // Granted for good: the next widget goes straight in.
+        runBlocking { graph.workspace.removeItem(widget.id) }
+        awaitGone(WIDGET_TAG)
+        openPicker()
+        fixtureChoice().performClick()
+        awaitPlacedWidget()
+        assertFalse(device.hasObject(BIND_ALLOW))
+    }
+
+    @Test
+    fun decliningTheSystemsLeaveToBindAddsNothing() {
+        allowWidgetBinding(false)
+        clearHomeCells(0 to 0, 1 to 0)
+        openPicker()
+        fixtureChoice().performClick()
+        val cancel = device.wait(Until.findObject(BIND_CANCEL), LONG_TIMEOUT_MS)
+        assertNotNull("the system never asked whether Runway may bind widgets", cancel)
+        cancel.click()
+        // The notice's toast is shown as the launcher comes back, before accessibility hears of
+        // it; what matters is checked instead: nothing was added.
+        waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
+        SystemClock.sleep(WRITE_GRACE_MS)
+        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+    }
+
+    @Test
+    fun aWidgetThatInsistsOnSetupRunsItsSetupScreen_andIsPlacedWhenThatIsDone() {
+        allowWidgetBinding(true)
+        clearHomeCells(0 to 0, 1 to 0)
+        openPicker(SETUP_WIDGET)
+        choice(SETUP_WIDGET).performClick()
+        val done = device.wait(Until.findObject(By.text("Done")), LONG_TIMEOUT_MS)
+        assertNotNull("the widget's setup screen never opened", done)
+        done.click()
+        val widget = awaitPlacedWidget()
+        assertEquals(0 to 0, widget.x to widget.y)
+        assertTrue(widget.provider!!.endsWith("FixtureSetupWidget"))
+    }
+
+    @Test
+    fun cancellingAWidgetsSetupScreenAddsNothing() {
+        allowWidgetBinding(true)
+        clearHomeCells(0 to 0, 1 to 0)
+        openPicker(SETUP_WIDGET)
+        choice(SETUP_WIDGET).performClick()
+        val cancel = device.wait(Until.findObject(By.text("Cancel")), LONG_TIMEOUT_MS)
+        assertNotNull("the widget's setup screen never opened", cancel)
+        cancel.click()
+        waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
+        SystemClock.sleep(WRITE_GRACE_MS)
         assertEquals(emptyList<ItemEntity>(), placedWidgets())
     }
 
@@ -150,7 +213,7 @@ class WidgetPickerTest : LauncherFixture() {
     }
 
     /** Through the search bar's three dots: the pages may be full, with nowhere to long-press. */
-    private fun openPicker() {
+    private fun openPicker(label: String = FIXTURE_WIDGET_LABEL) {
         compose.onNode(hasContentDescription("Runway menu")).performClick()
         waitUntil { compose.onAllNodesWithTag(HOME_MENU_TAG).fetchSemanticsNodes().isNotEmpty() }
         menuRow("Widgets").performClick()
@@ -158,7 +221,7 @@ class WidgetPickerTest : LauncherFixture() {
         waitUntil(LONG_TIMEOUT_MS) {
             compose.onAllNodesWithTag(WIDGET_LIST_TAG).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText("Fixture widget"))
+        compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText(label))
     }
 
     /** Long-presses the fixture widget's row and nudges it, so the drag has begun. */
@@ -175,8 +238,10 @@ class WidgetPickerTest : LauncherFixture() {
         }
     }
 
-    private fun fixtureChoice() =
-        compose.onNode(hasText("Fixture widget") and hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG)))
+    private fun fixtureChoice() = choice(FIXTURE_WIDGET_LABEL)
+
+    private fun choice(label: String) =
+        compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG)))
 
     /** Empties [cells] of the first page and waits for the screen to show them empty. */
     private fun clearHomeCells(vararg cells: Pair<Int, Int>) {
@@ -199,5 +264,15 @@ class WidgetPickerTest : LauncherFixture() {
     private fun awaitPlacedWidget(): ItemEntity {
         waitUntil(LONG_TIMEOUT_MS) { placedWidgets().isNotEmpty() }
         return placedWidgets().single()
+    }
+
+    private companion object {
+        const val FIXTURE_WIDGET_LABEL = "Fixture widget"
+        const val SETUP_WIDGET = "Fixture setup widget"
+
+        /** The system's "may this launcher create widgets?" dialog, by its buttons' ids. */
+        val BIND_ALLOW: BySelector = By.res("android", "button1")
+        val BIND_CANCEL: BySelector = By.res("android", "button2")
+        val BIND_ALWAYS: BySelector = By.res("android", "alwaysUse")
     }
 }
