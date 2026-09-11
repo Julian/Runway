@@ -8,8 +8,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
@@ -65,10 +63,7 @@ class HomeMenuTest : LauncherFixture() {
     fun settingsFromTheHomeMenuOpensSettings() {
         holdEmptySpace()
         menuRow("Settings").performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
     }
 

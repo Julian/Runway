@@ -70,10 +70,7 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         compose.onNodeWithTag(DRAWER_TAG).performScrollToNode(hasContentDescription(firstHomeApp))
         drawerApp(firstHomeApp).performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
         awaitDrawerClosed()
     }
@@ -428,10 +425,7 @@ class DrawerTest : LauncherFixture() {
         searchField().performTextInput(firstHomeApp)
         waitUntil(TIMEOUT_MS) { drawerItems().size == 1 }
         searchField().performImeAction()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
         awaitDrawerClosed()
     }

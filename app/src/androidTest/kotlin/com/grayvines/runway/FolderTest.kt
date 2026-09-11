@@ -21,8 +21,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
@@ -257,10 +255,7 @@ class FolderTest : LauncherFixture() {
     fun tappingAnAppInAnOpenFolderLaunchesItAndClosesTheFolder() {
         makeFolder()
         folderApp(firstHomeApp).performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
         awaitFolderClosed()
     }

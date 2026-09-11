@@ -606,6 +606,17 @@ open class LauncherFixture {
             .filter { it.component == ref.component && it.profile == ref.profile }
     }
 
+    /**
+     * The settings screen has come up, after a tap on our icon or a menu's "Settings". A cold
+     * activity launch on a loaded runner can take eight seconds (CI, 2026-09-11), so the long wait.
+     */
+    protected fun awaitSettingsOpen() {
+        assertTrue(
+            "settings did not open",
+            device.wait(Until.hasObject(By.text("Grid")), LONG_TIMEOUT_MS),
+        )
+    }
+
     /** The lifted icon is our settings app; a stray click would open its "Grid" section. */
     protected fun assertStillOnLauncher() {
         compose.waitForIdle()

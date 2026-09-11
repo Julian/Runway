@@ -33,10 +33,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun tappingTheSettingsIconOpensSettings() {
         icon(firstHomeApp).performClick()
-        assertTrue(
-            "settings screen did not appear",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
     }
 
@@ -117,10 +114,7 @@ class LauncherShellTest : LauncherFixture() {
         assertNotNull(ONE_HANDLER, other)
         other!!
         icon(firstHomeApp).performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         // Nothing picked yet, so the dropdown button reads Automatic. On a short screen the
         // "Search with" row starts below the fold: swipe the page up, then let it draw (the
         // Compose rule owns the frame clock, so nothing moves until the test idles).
@@ -162,10 +156,7 @@ class LauncherShellTest : LauncherFixture() {
         compose.onNodeWithTag(SEARCH_MENU_TAG).performClick()
         waitUntil { compose.onAllNodesWithTag(HOME_MENU_TAG).fetchSemanticsNodes().isNotEmpty() }
         menuRow("Settings").performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         device.pressBack()
     }
 

@@ -51,10 +51,7 @@ class BackupTest : LauncherFixture() {
     @Test
     fun settingsOfferToSaveAndRestoreABackup() {
         icon(firstHomeApp).performClick()
-        assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), TIMEOUT_MS),
-        )
+        awaitSettingsOpen()
         // The backup section is near the bottom: on a short screen, below the fold. The Compose
         // rule owns the frame clock, so the page only moves once the test idles.
         val save = By.text("Save a backup")
