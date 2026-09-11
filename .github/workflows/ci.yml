@@ -68,11 +68,7 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
-          # Writing from main, as the checks job does. Read-only, these jobs only ever got a
-          # partial match off that job's entry, so they recompiled and recalculated their task
-          # graph every run. Each device and shard needs its own entry: the shard index is read
-          # while configuring, so it is part of the configuration cache key.
-          cache-read-only: ${{ github.ref_name != 'main' }}
+          cache-read-only: true
           cache-disabled: ${{ github.ref_type == 'tag' }} # zizmor: ignore[cache-poisoning]
       - name: Enable KVM
         run: |

@@ -144,9 +144,12 @@ class DragCoordinator(
         val arrived = drag.value ?: return
         val target =
             areas.areas.targetFor(pointer, arrived.grab, arrived.source.spanX, arrived.source.spanY)
-        pickUpIfPlaced(arrived, target)
-        val current = drag.value ?: return
         val edge = areas.areas.edgeAt(pointer)
+        // Only a page at rest, away from its edges, is one the finger is on: mid-scroll the cell
+        // under it belongs to a page passing by, and at an edge the finger is flipping, not
+        // placing.
+        if (areas.areas.settled && edge == null) pickUpIfPlaced(arrived, target)
+        val current = drag.value ?: return
         if (edge == null) edgesArmed = true
         val hovered = edge.takeIf { edgesArmed }
         edgeDwell.hover(hovered)
@@ -192,7 +195,14 @@ class DragCoordinator(
     private fun drop() {
         released = false
         settleWait?.cancel()
-        val state = drag.value ?: return
+        val released = drag.value ?: return
+        // A release at an edge, or straight after a flip, can be over a page that holds the thing
+        // already: it is that placement the drop moves, never a second one added.
+        if (pickUpIfPlaced(released, released.target)) {
+            val over = areas.areas.cellUnder(released.pointer, FOLD_ZONE)
+            controller.move(released.pointer, released.target, released.edge, over = over)
+        }
+        val state = drag.value ?: released // adopting keeps the drag live
         val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
         // Whether the drop lands or is refused, the icon settles from where it was released. An
@@ -244,10 +254,10 @@ class DragCoordinator(
      * cell into the finger, and the user is moving it. A page holds a thing once. An app being
      * taken out of a folder still is: the drop moves the placement and takes it out.
      */
-    private fun pickUpIfPlaced(state: DragState, target: DropTarget?) {
+    private fun pickUpIfPlaced(state: DragState, target: DropTarget?): Boolean {
         val source = state.source
-        val identity = source.identity ?: return
-        if (source.itemId != 0L || target == null) return
+        val identity = source.identity ?: return false
+        if (source.itemId != 0L || target == null) return false
         val (container, page, items) =
             when (target) {
                 is DropTarget.HomeCell ->
@@ -255,24 +265,27 @@ class DragCoordinator(
                 is DropTarget.DockSlot ->
                     Triple(Container.DOCK, target.page, lookup.dockItems(target.page))
             }
-        val placed = items.firstOrNull { it.identity == identity } ?: return
-        val from = areas.areas.centreOf(container, placed.footprint) ?: return
-        val f = placed.footprint
-        controller.adopt(
-            DragSource(
-                placed.id,
-                source.kind,
-                container,
-                page,
-                f.x,
-                f.y,
-                f.width,
-                f.height,
-                fromFolder = source.fromFolder,
-                identity = identity,
-            ),
-            from,
-        )
+        val placed = items.firstOrNull { it.identity == identity }
+        val from = placed?.let { areas.areas.centreOf(container, it.footprint) }
+        if (placed != null && from != null) {
+            val f = placed.footprint
+            controller.adopt(
+                DragSource(
+                    placed.id,
+                    source.kind,
+                    container,
+                    page,
+                    f.x,
+                    f.y,
+                    f.width,
+                    f.height,
+                    fromFolder = source.fromFolder,
+                    identity = identity,
+                ),
+                from,
+            )
+        }
+        return from != null
     }
 
     /**

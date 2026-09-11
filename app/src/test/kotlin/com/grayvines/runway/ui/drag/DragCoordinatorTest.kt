@@ -528,6 +528,60 @@ class DragCoordinatorTest {
         }
 
     @Test
+    fun `a drawer drag over a page still scrolling picks nothing up until it settles`() = runTest {
+        val app = AppRef("a/.Main", 0)
+        val c = DragCoordinator(backgroundScope, holding(app), FakeWorkspace())
+        c.layOut()
+        c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
+        c.areas.homePageShown(0, 3, 2, settled = false) // page 0 is passing under the finger
+        c.dragTo(Point(250f, 150f))
+        assertEquals(0L, c.drag.value?.source?.itemId) // still the app from the drawer
+        c.areas.homePageShown(0, 3, 2, settled = true) // it stops there: now it is that placement
+        assertEquals(1L, c.drag.value?.source?.itemId)
+    }
+
+    @Test
+    fun `a drawer drag held at a page's edge picks nothing up, but a release there moves it`() =
+        runTest {
+            val app = AppRef("a/.Main", 0)
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, holding(app), workspace)
+            c.layOut()
+            c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
+            c.dragTo(Point(299f, 50f)) // the right edge of page 0, which holds the app
+            assertEquals(0L, c.drag.value?.source?.itemId) // flipping, not placing
+            c.endDrag()
+            runCurrent()
+            val move = workspace.moves.single()
+            assertEquals(1L, move.itemId) // the placement moved, not a second one added
+            assertNull(move.newApp)
+        }
+
+    @Test
+    fun `a drawer drag that leaves the edge for the page picks the placement up then`() = runTest {
+        val app = AppRef("a/.Main", 0)
+        val c = DragCoordinator(backgroundScope, holding(app), FakeWorkspace())
+        c.layOut()
+        c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
+        c.dragTo(Point(299f, 50f))
+        assertEquals(0L, c.drag.value?.source?.itemId)
+        c.dragTo(Point(250f, 150f))
+        assertEquals(1L, c.drag.value?.source?.itemId)
+    }
+
+    private fun fromDrawer(app: AppRef) =
+        DragSource(
+            0,
+            ItemKind.APP,
+            Container.DRAWER,
+            0,
+            0,
+            0,
+            newApp = app,
+            identity = app.identity,
+        )
+
+    @Test
     fun `a placement picked up in a folder app's stead still leaves the folder on the drop`() =
         runTest {
             val app = AppRef("a/.Main", 0)
