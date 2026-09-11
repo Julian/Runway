@@ -9,6 +9,9 @@ import android.util.SizeF
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -40,6 +45,7 @@ import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
 import com.grayvines.runway.ui.home.dragAfterLongPress
+import kotlinx.coroutines.withTimeoutOrNull
 
 const val WIDGET_TAG = "widget"
 
@@ -101,15 +107,23 @@ fun WidgetCell(
                 }
             }
         )
+    // Framed, the widget is not live: its view sees no touch, and a tap puts the frame away. The
+    // cell's own gestures go on as before, so a hold lifts the framed widget again.
+    val framed = framedBy?.frames(item.id) == true
+    val dismissFrame = rememberUpdatedState { framedBy?.onDismiss?.invoke() }
     AndroidView(
         factory = { ctx ->
             WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { frame = it }
         },
-        update = { f -> f.widget?.updateAppWidgetSize(Bundle(), listOf(size)) },
+        update = { f ->
+            f.muted = framed
+            f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
+        },
         modifier =
             modifier
                 .fillMaxSize()
                 .testTag(WIDGET_TAG)
+                .pointerInput(framed) { if (framed) detectTaps { dismissFrame.value() } }
                 .semantics { contentDescription = label }
                 // Invisible while carried: removing the view would end its own gesture.
                 .graphicsLayer { alpha = if (lifted) 0f else 1f }
@@ -126,6 +140,25 @@ fun WidgetCell(
 }
 
 /**
+ * A finger down and up again within the hold time, without moving past slop: a tap. Nothing is
+ * consumed, so the cell's hold-then-drag sees the same events.
+ */
+private suspend fun PointerInputScope.detectTaps(onTap: () -> Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val up =
+            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                waitForUpOrCancellation()
+            }
+        if (
+            up != null && (up.position - down.position).getDistance() <= viewConfiguration.touchSlop
+        ) {
+            onTap()
+        }
+    }
+}
+
+/**
  * Holds the widget's view and stands between it and the finger: touches are the widget's until a
  * long press [claim]s the finger, after which the widget is sent a cancel (so the release is not
  * its tap) and sees nothing more of that finger. Compose's own detectors see every event
@@ -136,6 +169,9 @@ private class WidgetFrame(context: Context) : FrameLayout(context) {
         private set
 
     private var claimed = false
+
+    /** While the resize frame is up: every touch is kept from the widget. */
+    var muted = false
 
     fun hosting(view: AppWidgetHostView): WidgetFrame {
         widget = view
@@ -185,7 +221,7 @@ private class WidgetFrame(context: Context) : FrameLayout(context) {
     }
 
     /** Intercepting sends the widget a cancel; the frame itself then declines what follows. */
-    override fun onInterceptTouchEvent(ev: MotionEvent) = claimed
+    override fun onInterceptTouchEvent(ev: MotionEvent) = claimed || muted
 
     private companion object {
         const val TAG = "Runway"
