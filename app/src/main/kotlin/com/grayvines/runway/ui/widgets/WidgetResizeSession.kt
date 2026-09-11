@@ -46,6 +46,10 @@ class WidgetResizeSession(
     var preview by mutableStateOf<Pair<Long, Footprint>?>(null)
         internal set
 
+    /** A handle is under a finger: the preview is the pull's, whether or not it changes. */
+    var pulling by mutableStateOf(false)
+        internal set
+
     fun frames(itemId: Long) = shown == itemId
 
     fun anchorFor(itemId: Long): Rect? = anchor?.takeIf { it.first == itemId }?.second

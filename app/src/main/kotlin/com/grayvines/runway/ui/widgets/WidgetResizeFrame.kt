@@ -61,7 +61,7 @@ private val CHIP = Color(0xFF202124)
 /**
  * How long a resize is shown as pulled after the handle is let go, if the layout never shows it.
  */
-private const val REFLECT_TIMEOUT_MS = 3_000L
+internal const val REFLECT_TIMEOUT_MS = 3_000L
 
 /**
  * The frame around [item] (root coordinates, over everything): an outline on its cells, a handle on
@@ -198,16 +198,18 @@ private fun RemoveChip(outline: () -> Rect, onRemove: () -> Unit) {
 }
 
 /**
- * Keeps the preview only until the layout shows the saved size, or for a while if it never does
- * (the write failed: the widget goes back to its stored cells).
+ * Keeps the preview only until the layout shows the saved size, or for a while after the handle is
+ * let go if it never does (the write failed: the widget goes back to its stored cells). While a
+ * finger is on a handle the preview is the pull's, however long it rests.
  */
 @Composable
 private fun Reflected(item: HomeItem, session: WidgetResizeSession) {
     val preview = session.previewFor(item.id)
-    LaunchedEffect(preview, item.footprint) {
+    val pulling = session.pulling
+    LaunchedEffect(preview, item.footprint, pulling) {
         if (preview != null && preview == item.footprint) {
             session.preview = null
-        } else if (preview != null) {
+        } else if (preview != null && !pulling) {
             delay(REFLECT_TIMEOUT_MS)
             if (session.previewFor(item.id) == preview) session.preview = null
         }
@@ -245,6 +247,7 @@ private class Pull(
     private var cells = 0
 
     fun start(edge: Edge) {
+        session.pulling = true
         this.edge = edge
         px = 0f
         cells = 0
@@ -271,6 +274,7 @@ private class Pull(
     }
 
     fun end() {
+        session.pulling = false
         val to = session.previewFor(itemId)
         edge = null
         px = 0f

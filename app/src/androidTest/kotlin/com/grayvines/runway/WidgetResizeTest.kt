@@ -17,6 +17,7 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
+import com.grayvines.runway.ui.widgets.REFLECT_TIMEOUT_MS
 import com.grayvines.runway.ui.widgets.WIDGET_RESIZE_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlin.math.abs
@@ -69,6 +70,35 @@ class WidgetResizeTest : LauncherFixture() {
             val handle = handle("Right edge").boundsInRoot.center.x
             abs(handle - edge) < 2f
         }
+    }
+
+    @Test
+    fun aHandleHeldStillKeepsItsPull() {
+        // The pulled size used to be given up after a while with no change, meant for a save that
+        // never showed; a finger resting on the handle looked the same, and the widget snapped
+        // back under it.
+        placeFixtureWidget(0, 0)
+        clearHomeCells(2 to 0)
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        val start = handle("Right edge").boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(start)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += Offset(grid.cellWidth() / DRAG_STEPS, 0f)
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+        }
+        val pulled = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.width
+        assertTrue("the pull should show three cells", abs(pulled - 3 * grid.cellWidth()) < 2f)
+        compose.mainClock.advanceTimeBy(REFLECT_TIMEOUT_MS + FRAME_MS)
+        val held = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.width
+        assertTrue("held still, the widget went back to $held px", abs(held - pulled) < 2f)
+        compose.onRoot().performTouchInput { up() }
+        awaitWidgetSize(3 to 1)
     }
 
     @Test
