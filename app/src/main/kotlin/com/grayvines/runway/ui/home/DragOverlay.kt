@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -45,7 +46,9 @@ private val BLANK_WIDGET_CORNER = 16.dp
  * eases it back to resting size, then hands over to the cell. Drawing this here rather than in the
  * page means a release outside the page is not clipped on its way back. [lift] is how far the
  * pick-up has progressed, shared with the home area's pull-back so the two move as one. A widget is
- * drawn at the size of its cells, from the [picture] its cell took as it lifted.
+ * drawn at the size of its cells, from the [picture] its cell took as it lifted, and stops at the
+ * top and bottom of [within] (the pages, root px) while the finger goes on: it can land nowhere
+ * else, and a picture over the search bar or dock read as if it could.
  */
 @Composable
 fun DragOverlay(
@@ -55,6 +58,7 @@ fun DragOverlay(
     cell: DpSize,
     iconSize: Dp,
     lift: () -> Float,
+    within: () -> Rect? = { null },
 ) {
     if (item == null) return
     // Which phase, and whether a fold is on: derived, so the finger's moves change nothing here.
@@ -82,7 +86,10 @@ fun DragOverlay(
             OverlayCell(
                 item,
                 picture,
-                at = { drag.state?.carried(pickedUpFrom, half, arrival.value) ?: Point(0f, 0f) },
+                at = {
+                    drag.state?.carried(item, pickedUpFrom, half, arrival.value, within())
+                        ?: Point(0f, 0f)
+                },
                 size,
                 iconSize,
                 scale = { item.liftedScale(lift()) * folding },
@@ -104,13 +111,25 @@ fun DragOverlay(
 
 /**
  * Where the carried item's cell is drawn: under the finger, less the grab; or, just picked up out
- * of a cell at [pickedUpFrom] (centre), [arrival] of the way from there to under the finger.
+ * of a cell at [pickedUpFrom] (centre), [arrival] of the way from there to under the finger. A
+ * widget is held [within] the pages (root px) whatever the finger does.
  */
-private fun DragState.carried(pickedUpFrom: Point?, half: Point, arrival: Float): Point {
+private fun DragState.carried(
+    item: HomeItem,
+    pickedUpFrom: Point?,
+    half: Point,
+    arrival: Float,
+    within: Rect?,
+): Point {
     val under = Point(pointer.x - grab.x, pointer.y - grab.y)
-    if (pickedUpFrom == null || arrival >= 1f) return under
-    val from = Point(pickedUpFrom.x - half.x, pickedUpFrom.y - half.y)
-    return Point(lerp(from.x, under.x, arrival), lerp(from.y, under.y, arrival))
+    val at =
+        if (pickedUpFrom == null || arrival >= 1f) {
+            under
+        } else {
+            val from = Point(pickedUpFrom.x - half.x, pickedUpFrom.y - half.y)
+            Point(lerp(from.x, under.x, arrival), lerp(from.y, under.y, arrival))
+        }
+    return if (item.kind == ItemKind.WIDGET) at.heldWithin(within, half) else at
 }
 
 @Composable
@@ -167,6 +186,13 @@ private fun HomeItem.liftedScale(lift: Float): Float =
  * The carried item at [at] (root px, top-left), in a box of [size], at [scale]: an icon, or a
  * widget's [picture].
  */
+/** This top-left, kept between the top and bottom of [area] for a box [half] again as tall. */
+private fun Point.heldWithin(area: Rect?, half: Point): Point {
+    if (area == null) return this
+    val top = y.coerceAtMost(area.bottom - half.y * 2).coerceAtLeast(area.top)
+    return Point(x, top)
+}
+
 @Composable
 private fun OverlayCell(
     item: HomeItem,

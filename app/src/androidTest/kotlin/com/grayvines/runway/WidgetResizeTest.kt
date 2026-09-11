@@ -17,6 +17,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.ui.home.SEARCH_BAR_EDGE_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import com.grayvines.runway.ui.widgets.REFLECT_TIMEOUT_MS
 import com.grayvines.runway.ui.widgets.WIDGET_RESIZE_TAG
@@ -150,6 +151,30 @@ class WidgetResizeTest : LauncherFixture() {
         release()
         pull("Right edge", Offset(grid.cellWidth() * 3, 0f))
         awaitWidgetSize(most to 1)
+    }
+
+    @Test
+    fun aHandlePulledIntoTheSearchBarOutlinesTheBar() {
+        placeFixtureWidget(0, 0) // the top row: the bar is just above
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        val start = handle("Top edge").boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(start)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += Offset(0f, -grid.cellHeight() / DRAG_STEPS)
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+        }
+        waitUntil {
+            compose.onAllNodesWithTag(SEARCH_BAR_EDGE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onRoot().performTouchInput { up() }
+        waitUntil { compose.onAllNodesWithTag(SEARCH_BAR_EDGE_TAG).fetchSemanticsNodes().isEmpty() }
+        assertEquals(0 to 0, widget().let { it.x to it.y }) // nothing to grow into
     }
 
     @Test

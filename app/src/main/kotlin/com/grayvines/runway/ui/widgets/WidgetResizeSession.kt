@@ -50,6 +50,10 @@ class WidgetResizeSession(
     var pulling by mutableStateOf(false)
         internal set
 
+    /** The outline as a pulled handle has it (root px), while a handle is pulled; else null. */
+    var outline by mutableStateOf<Rect?>(null)
+        internal set
+
     fun frames(itemId: Long) = shown == itemId
 
     fun anchorFor(itemId: Long): Rect? = anchor?.takeIf { it.first == itemId }?.second

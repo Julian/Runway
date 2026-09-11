@@ -16,14 +16,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
@@ -65,6 +71,7 @@ private val DRAG_CORNER = 28.dp
  * dock each occupy one full row and the pages get the rest. Icons everywhere share one size,
  * derived from the grid cell.
  */
+@Suppress("LongMethod") // one screen's wiring, spelled out
 @Composable
 fun HomeScreen(
     state: HomeState,
@@ -113,6 +120,8 @@ fun HomeScreen(
         // Read inside layers and draws, never here: every frame of a lift or a pull would
         // otherwise recompose every cell on screen.
         val lift = { maxOf(lifting.value, drawer.motion.shown.value) }
+        // Where the pages are (root px): a carried widget is held inside them.
+        var pagesArea by remember { mutableStateOf<Rect?>(null) }
         HomeColumn(
             state = state,
             homePager = homePager,
@@ -128,6 +137,7 @@ fun HomeScreen(
             onDockPagePositioned = onDockPagePositioned,
             onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
             resize = widgetResize,
+            onPagesPositioned = { pagesArea = it },
             modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
         )
         ShadeHint({ drawer.motion.given.value }, insets)
@@ -155,8 +165,19 @@ fun HomeScreen(
             cell = cell,
             iconSize = iconSize,
             lift = lift,
+            within = { pagesArea },
         )
     }
+}
+
+/** The cells a carried widget is drawn on (root px), or null when nothing carried is a widget. */
+private fun carriedWidget(drag: DragSession, cellPx: Size): Rect? {
+    val state = drag.state ?: return null
+    val source = state.source
+    if (source.kind != ItemKind.WIDGET && source.newWidget == null) return null
+    val left = state.pointer.x - state.grab.x
+    val top = state.pointer.y - state.grab.y
+    return Rect(left, top, left + cellPx.width * source.spanX, top + cellPx.height * source.spanY)
 }
 
 /** The item menu, the home menu and the widget picker, whichever is up. */
@@ -241,10 +262,15 @@ private fun HomeColumn(
     onHoldEmpty: (Point) -> Unit,
     resize: WidgetResizeSession,
     drawer: DrawerControls,
+    /** The pages' bounds (root px), whenever they are laid out. */
+    onPagesPositioned: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
     val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
+    val cellPx = with(LocalDensity.current) { Size(cell.width.toPx(), cell.height.toPx()) }
+    // A widget on the move (root px): carried under the finger, or pulled by a resize handle.
+    val widgetOnTheMove = { carriedWidget(drag, cellPx) ?: resize.outline }
     Column(modifier) {
         if (settings.searchBarAtTop) {
             SearchBar(
@@ -253,6 +279,7 @@ private fun HomeColumn(
                 onSearch = onSearch,
                 onMenu = onMenu,
                 modifier = Modifier.drawerPull(drawer),
+                pressedBy = widgetOnTheMove,
             )
         }
         Workspace(
@@ -267,7 +294,10 @@ private fun HomeColumn(
             drag = drag,
             onPagePositioned = onHomePagePositioned,
             onHoldEmpty = onHoldEmpty,
-            modifier = Modifier.weight(1f).drawerPull(drawer),
+            modifier =
+                Modifier.weight(1f)
+                    .onGloballyPositioned { onPagesPositioned(it.boundsInRoot()) }
+                    .drawerPull(drawer),
             resize = resize,
         )
         if (!settings.searchBarAtTop) {
@@ -277,6 +307,7 @@ private fun HomeColumn(
                 onSearch = onSearch,
                 onMenu = onMenu,
                 modifier = Modifier.drawerPull(drawer),
+                pressedBy = widgetOnTheMove,
             )
         }
         Dock(

@@ -275,10 +275,12 @@ private class Pull(
         px = (px + outward).coerceIn((least - span) * cell, (most - span) * cell)
         cells = cellsPulled(px, cell, cells)
         session.preview = itemId to resized(origin, e, cells, limits, grid, others)
+        session.outline = outline()
     }
 
     fun end() {
         session.pulling = false
+        session.outline = null
         val to = session.previewFor(itemId)
         edge = null
         px = 0f

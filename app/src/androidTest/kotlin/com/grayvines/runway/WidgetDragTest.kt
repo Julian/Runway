@@ -3,6 +3,7 @@ package com.grayvines.runway
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -11,6 +12,9 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.DragMotion
+import com.grayvines.runway.ui.home.SEARCH_BAR_EDGE_TAG
+import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_RESIZE_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlin.math.abs
@@ -40,6 +44,30 @@ class WidgetDragTest : LauncherFixture() {
             "carried at ${carried.width} wide, not about $expected",
             abs(carried.width - expected) < grid.cellWidth() * 0.15f,
         )
+        release()
+    }
+
+    @Test
+    fun aWidgetCarriedOntoTheSearchBarOutlinesTheBar() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        placeFixtureWidget(0, 0)
+        awaitWidgetCell()
+        compose.onAllNodesWithTag(SEARCH_BAR_EDGE_TAG).assertCountEquals(0)
+        holdDragAt(widgetCentre(), grid.searchBar())
+        waitUntil {
+            compose.onAllNodesWithTag(SEARCH_BAR_EDGE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        // The picture stops at the pages' top while the finger is over the bar (its lifted scale
+        // grows it about its centre, so its drawn top sits a little above the box it is held in).
+        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+        val carried = compose.onNodeWithTag(DRAG_OVERLAY_TAG).fetchSemanticsNode().boundsInRoot
+        val grown = carried.height * (DragMotion.WIDGET_LIFTED_SCALE - 1f) / 2
+        assertTrue(
+            "carried at $carried, over the bar; pages at $pages",
+            carried.top >= pages.top - grown - 1f,
+        )
+        dragOn(grid.homeCell(2, 2))
+        waitUntil { compose.onAllNodesWithTag(SEARCH_BAR_EDGE_TAG).fetchSemanticsNodes().isEmpty() }
         release()
     }
 
