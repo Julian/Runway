@@ -10,6 +10,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -133,7 +134,7 @@ class FolderTest : LauncherFixture() {
         compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
         awaitFolderClosed()
         waitUntil(TIMEOUT_MS) { folderName() == "Games" }
-        compose.onNodeWithContentDescription("Games", useUnmergedTree = true).assertIsDisplayed()
+        awaitFolderLabel("Games")
     }
 
     @Test
@@ -171,7 +172,7 @@ class FolderTest : LauncherFixture() {
         // Up top, clear of a keyboard that may still be on its way down after Done.
         compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
         awaitFolderClosed()
-        compose.onNodeWithContentDescription("Tools", useUnmergedTree = true).assertIsDisplayed()
+        awaitFolderLabel("Tools")
     }
 
     @Test
@@ -382,6 +383,21 @@ class FolderTest : LauncherFixture() {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty()
         }
         compose.onAllNodesWithTag(FOLDER_TAG).assertCountEquals(0)
+    }
+
+    /**
+     * Asserts the folder is on the home screen under [name]. The label is drawn from the database a
+     * frame or more after the write a rename makes lands, so an assertion that waits only on the
+     * name can beat the label onto the screen.
+     */
+    private fun awaitFolderLabel(name: String) {
+        waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithContentDescription(name, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithContentDescription(name, useUnmergedTree = true).assertIsDisplayed()
     }
 
     private companion object {

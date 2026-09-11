@@ -1,5 +1,6 @@
 package com.grayvines.runway
 
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -13,8 +14,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
@@ -174,10 +173,11 @@ class WidgetResizeTest : LauncherFixture() {
         release()
         compose.onRoot().performTouchInput { click(widgetCentre()) }
         awaitGone(WIDGET_RESIZE_TAG)
-        assertNull(
-            "the tap reached the widget: its app opened",
-            device.wait(Until.findObject(By.pkg(FIXTURE_WIDGET.packageName)), APP_OPEN_MS),
-        )
+        // Whatever the widget would do with a tap (a default view opens its app) must not happen:
+        // the launcher's window keeps the screen. Its own views carry the provider's package, so
+        // the window is what to look at, not any node of that package.
+        SystemClock.sleep(APP_OPEN_MS)
+        assertEquals("the tap reached the widget", app.packageName, device.currentPackageName)
         compose.onNodeWithTag(WIDGET_TAG).assertIsDisplayed()
         assertStillOnLauncher()
     }
