@@ -329,6 +329,20 @@ class DragCoordinatorTest {
     }
 
     @Test
+    fun `a cancelled drag settles back into its cell the way a refused drop does`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.cancelDrag()
+        assertNull(c.drag.value)
+        assertEquals(Settling(1L, Point(200f, 100f)), c.settling.value) // from under the finger
+        runCurrent()
+        assertEquals(emptyList<PendingMove>(), workspace.moves)
+    }
+
+    @Test
     fun `a cancel during the settle wait drops nothing when the wait runs out`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)

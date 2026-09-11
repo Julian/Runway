@@ -314,14 +314,16 @@ class DragCoordinator(
         if (_settling.value?.itemId == itemId) _settling.value = null
     }
 
+    /**
+     * Ends the drag with nothing changed, Back or HOME say: a drop with nowhere to land, so the
+     * icon glides back into its cell from under the finger as a refused drop does.
+     */
     fun cancelDrag() {
+        val state = drag.value ?: return
         edgeDwell.stop()
         resting?.cancel()
-        released = false
-        settleWait?.cancel()
-        drag.value?.let { showSourcePage(it.source) }
-        controller.cancel()
-        scope.launch { workspace.pruneEmptyPages() }
+        controller.move(state.pointer, target = null)
+        drop()
     }
 
     private fun DropPlan.asPendingMove(itemId: Long): PendingMove {
