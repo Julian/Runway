@@ -8,8 +8,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-
-private const val FLIP_SCROLL_MS = 250
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Reports the page each pager shows, and whether it has settled there or is still scrolling, to
@@ -60,15 +59,28 @@ internal fun PagerCommands(
 /**
  * Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. The scroll
  * is shorter than the dwell between ticks, so each page settles before the next flip.
+ *
+ * A flip onto a page the dwell has just added can arrive before the pager knows the page: the
+ * layout is written and the flip emitted in the same turn, while the pager's count comes from the
+ * composed state, one composition behind. Such a flip waits for the count, briefly.
  */
 @Composable
 internal fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
     LaunchedEffect(flipPage) {
         flipPage.collect { delta ->
             val next = pager.currentPage + delta
-            if (next in 0 until pager.pageCount) {
+            if (next >= 0 && pager.knows(next)) {
                 pager.animateScrollToPage(next, animationSpec = tween(FLIP_SCROLL_MS))
             }
         }
     }
 }
+
+private suspend fun PagerState.knows(page: Int): Boolean =
+    page < pageCount ||
+        withTimeoutOrNull(PAGE_COUNT_LAG_MS) { snapshotFlow { pageCount }.first { it > page } } !=
+            null
+
+private const val FLIP_SCROLL_MS = 250
+/** How long a flip waits for the pager to learn of a page just added: a few compositions. */
+private const val PAGE_COUNT_LAG_MS = 250L
