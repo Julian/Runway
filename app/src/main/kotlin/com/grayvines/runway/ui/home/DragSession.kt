@@ -12,12 +12,14 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.DropPlan
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
+import com.grayvines.runway.ui.widgets.WidgetSpan
 
 /**
  * The UI's view of dragging: what is lifted, where things would land, and how to report input.
@@ -129,6 +131,19 @@ class DragSession(
     }
 
     /**
+     * A widget in the picker: moving after the hold carries its preview out, [span] cells big and
+     * held at [grab] (px within it), and the drop binds and places one.
+     */
+    fun handlersForNewWidget(provider: WidgetProvider, span: WidgetSpan, grab: Point) =
+        handlers(
+            onHold = {},
+            onStart = { pointer, _ ->
+                carry(provider.preview)
+                onStartNew(freshWidget(provider.key, span), pointer, grab)
+            },
+        )
+
+    /**
      * Handlers that also name the finger. Only while no drag is live: a second finger's long press
      * during one changes nothing, and must not take the drag away from the finger carrying it.
      */
@@ -145,6 +160,20 @@ internal fun AppEntry.asItem() = HomeItem(0, ItemKind.APP, 0, 0, 1, 1, label, th
  * A drag of this app with no cell yet, out of the drawer or out of the folder it is [fromFolder].
  */
 internal fun AppEntry.fresh(fromFolder: Long? = null) = fresh(newApp = ref, fromFolder = fromFolder)
+
+/** A drag of a widget with no cell yet, out of the picker. */
+internal fun freshWidget(key: String, span: WidgetSpan) =
+    DragSource(
+        0,
+        ItemKind.WIDGET,
+        Container.DRAWER,
+        0,
+        0,
+        0,
+        spanX = span.width,
+        spanY = span.height,
+        newWidget = key,
+    )
 
 /** A drag of something with no cell yet; its kind follows what is set. */
 internal fun fresh(newApp: AppRef? = null, fromFolder: Long? = null, newFolder: Long? = null) =

@@ -177,10 +177,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             override fun pageCount(container: Container) = state.value.pages(container).size
 
             override suspend fun move(move: PendingMove): Boolean =
-                attempt("save the move; the item snaps back") {
-                    check(graph.workspace.apply(move)) {
-                        "the page, a neighbour, the target or the dropped app is gone since the " +
-                            "plan was made; nothing saved"
+                if (move.newWidget != null) {
+                    widgetPicker.place(move)
+                } else {
+                    attempt("save the move; the item snaps back") {
+                        check(graph.workspace.apply(move)) {
+                            "the page, a neighbour, the target or the dropped app is gone since " +
+                                "the plan was made; nothing saved"
+                        }
                     }
                 }
 
@@ -205,10 +209,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             }
         }
 
-    val dragging = DragCoordinator(viewModelScope, lookup, dragWorkspace)
+    // Typed explicitly: the picker places widgets dropped by the coordinator, and the coordinator
+    // asks the picker for the shown page, so inference would chase its own tail.
+    val dragging: DragCoordinator = DragCoordinator(viewModelScope, lookup, dragWorkspace)
 
     /** The widget picker, adding to the page on screen. */
-    val widgetPicker =
+    val widgetPicker: WidgetPickerHost =
         WidgetPickerHost(
             graph,
             viewModelScope,
@@ -319,6 +325,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     fun startNewDrag(source: DragSource, pointer: Point, grab: Point) {
         itemMenu.dismiss()
         homeMenu.dismiss()
+        widgetPicker.dismiss()
         closeDrawer()
         closeFolder()
         dragging.startDrag(source, pointer, grab)
@@ -457,6 +464,9 @@ private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
     val newApp = move.newApp
     return when {
         move.newFolder != null -> folderId == move.newFolder
+        // The key is the profile and the provider; a placement stores the provider alone.
+        move.newWidget != null ->
+            kind == ItemKind.WIDGET && provider == move.newWidget.substringAfter('/')
         newApp != null && move.foldInto != null -> folder.any { it.ref == newApp }
         newApp != null -> app?.ref == newApp
         else -> id == move.itemId

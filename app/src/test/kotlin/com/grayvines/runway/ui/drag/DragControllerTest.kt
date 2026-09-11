@@ -249,6 +249,37 @@ class DragControllerTest {
     }
 
     @Test
+    fun `a widget from the picker lands where its cells fit, pushing icons aside, never in the dock`() {
+        val fromPicker =
+            DragSource(
+                0,
+                ItemKind.WIDGET,
+                Container.DRAWER,
+                0,
+                0,
+                0,
+                spanX = 2,
+                spanY = 1,
+                newWidget = "0/pkg/.Widget",
+            )
+        controller.start(fromPicker, Point(0f, 0f), Point(0f, 0f))
+        controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 0, 1)) // the free row
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 0, 1), emptyMap()),
+            controller.state.value?.plan,
+        )
+        controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 0, 0)) // over both icons
+        assertEquals(
+            setOf(1L, 2L),
+            (controller.state.value?.plan as DropPlan.Move).displaced.keys,
+        )
+        controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 2, 1)) // off the grid's edge
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+        controller.move(Point(0f, 0f), DropTarget.DockSlot(0, 1))
+        assertEquals(DropPlan.Invalid, controller.state.value?.plan)
+    }
+
+    @Test
     fun `an app from the drawer lands on a free cell, displaces on an occupied one, never in a full dock slot`() {
         val fromDrawer =
             DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = AppRef("new/.Main", 0))

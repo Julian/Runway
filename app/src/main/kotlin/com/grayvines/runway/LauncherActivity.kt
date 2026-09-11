@@ -30,6 +30,7 @@ import com.grayvines.runway.ui.home.HomeViewModel
 import com.grayvines.runway.ui.home.applying
 import com.grayvines.runway.ui.home.hasWidgetAt
 import com.grayvines.runway.ui.menu.HomeMenuSession
+import com.grayvines.runway.ui.menu.ItemMenuSession
 import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
@@ -83,9 +84,12 @@ class LauncherActivity : ComponentActivity() {
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
-                    itemMenu = itemMenu,
-                    itemMenuActions = viewModel.itemMenu.actions,
-                    onDismissItemMenu = viewModel.itemMenu::dismiss,
+                    itemMenu =
+                        ItemMenuSession(
+                            itemMenu,
+                            viewModel.itemMenu.actions,
+                            viewModel.itemMenu::dismiss,
+                        ),
                     widgetPicker = widgetPickerSession(),
                     homeMenu =
                         HomeMenuSession(
@@ -134,6 +138,7 @@ class LauncherActivity : ComponentActivity() {
             providers = providers,
             onPick = viewModel.widgetPicker::pick,
             onDismiss = viewModel.widgetPicker::dismiss,
+            spanFor = viewModel.widgetPicker::spanFor,
         )
     }
 

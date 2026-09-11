@@ -25,4 +25,9 @@ data class PendingMove(
     val fromFolder: Long? = null,
     /** Set when the drop places the drawer folder of this id in the target cell. */
     val newFolder: Long? = null,
+    /** Set when the drop adds a widget of this provider key over the target cells. */
+    val newWidget: String? = null,
+    /** With [newWidget]: how many cells it covers. */
+    val spanX: Int = 1,
+    val spanY: Int = 1,
 )

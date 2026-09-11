@@ -397,6 +397,8 @@ class WorkspaceRepositoryTest {
     fun `addWidget stores a home placement with its span, id and provider`() = runTest {
         repo.ensureInitialised()
         val id = repo.addWidget(7, "pkg/.Widget", page = 0, x = 1, y = 2, spanX = 3, spanY = 2)
+        val stale = repo.addWidget(8, "pkg/.Widget", 0, 0, 0, 1, 1, mapOf(99L to Footprint(2, 0)))
+        assertEquals(null, stale) // a neighbour that is not there: nothing added
         val item = repo.observe(Container.HOME).first().pages.single().items.single()
         assertEquals(id, item.id)
         assertEquals(ItemKind.WIDGET, item.kind)

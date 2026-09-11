@@ -241,6 +241,7 @@ open class LauncherFixture {
                 .filter { it.x in x until x + spanX && it.y in y until y + spanY }
                 .forEach { graph.workspace.removeItem(it.id) }
             graph.workspace.addWidget(id, FIXTURE_WIDGET.flattenToString(), 0, x, y, spanX, spanY)
+                ?: error("the fixture widget could not be placed at ($x, $y)")
         }
     }
 

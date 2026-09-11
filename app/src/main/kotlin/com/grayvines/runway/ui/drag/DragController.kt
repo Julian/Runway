@@ -32,6 +32,11 @@ data class DragSource(
     val fromFolder: Long? = null,
     /** A drawer folder lifted out of the drawer: the drop places it again, in a cell. */
     val newFolder: Long? = null,
+    /**
+     * A widget lifted out of the picker, by the provider's key: the drop binds one and places it,
+     * [spanX] × [spanY] cells big.
+     */
+    val newWidget: String? = null,
     /** What this is a placement of, as [Placed.identity]; a page holding one refuses another. */
     val identity: String? = null,
 )

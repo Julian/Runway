@@ -35,6 +35,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.widgets.WidgetProvider
+import com.grayvines.runway.ui.home.DragHandlers
+import com.grayvines.runway.ui.home.liftable
 
 const val WIDGET_PICKER_TAG = "widget-picker"
 const val WIDGET_LIST_TAG = "widget-list"
@@ -47,6 +49,8 @@ class WidgetPickerSession(
     /** A widget chosen, with the size of a grid cell in dp, which decides its span. */
     val onPick: (WidgetProvider, cellWidthDp: Float, cellHeightDp: Float) -> Unit,
     val onDismiss: () -> Unit,
+    /** The size a widget is carried at when dragged out, for a grid of cells this size in dp. */
+    val spanFor: (WidgetProvider, cellWidthDp: Float, cellHeightDp: Float) -> WidgetSpan,
 )
 
 private val SURFACE = Color(0xFF202124)
@@ -59,13 +63,15 @@ private const val SHEET_HEIGHT = 0.7f
 
 /**
  * The widgets the device offers, by app, rising from the bottom of the screen. Tapping one adds it
- * to the page; a tap outside, or back, closes the picker. [providers] is null while they load.
+ * to the page; a long press lifts it out ([handlersFor]) to be dropped where it is wanted; a tap
+ * outside, or back, closes the picker. [providers] is null while they load.
  */
 @Composable
 fun WidgetPicker(
     providers: List<WidgetProvider>?,
     onPick: (WidgetProvider) -> Unit,
     onDismiss: () -> Unit,
+    handlersFor: (WidgetProvider) -> DragHandlers? = { null },
 ) {
     BackHandler(onBack = onDismiss)
     Box(Modifier.fillMaxSize()) {
@@ -101,7 +107,7 @@ fun WidgetPicker(
                         CircularProgressIndicator()
                     }
                 } else {
-                    Choices(providers, onPick)
+                    Choices(providers, onPick, handlersFor)
                 }
             }
         }
@@ -110,7 +116,11 @@ fun WidgetPicker(
 
 /** The widgets under their apps' names, in the order [providers] came in. */
 @Composable
-private fun Choices(providers: List<WidgetProvider>, onPick: (WidgetProvider) -> Unit) {
+private fun Choices(
+    providers: List<WidgetProvider>,
+    onPick: (WidgetProvider) -> Unit,
+    handlersFor: (WidgetProvider) -> DragHandlers?,
+) {
     val groups = providers.groupBy { it.appLabel }
     // The last rows scroll up from under the navigation bar rather than staying beneath it.
     LazyColumn(
@@ -119,7 +129,9 @@ private fun Choices(providers: List<WidgetProvider>, onPick: (WidgetProvider) ->
     ) {
         groups.forEach { (appLabel, widgets) ->
             item(key = "app:$appLabel") { AppHeader(appLabel, widgets.first()) }
-            items(widgets, key = { it.key }) { widget -> Choice(widget) { onPick(widget) } }
+            items(widgets, key = { it.key }) { widget ->
+                Choice(widget, handlersFor(widget)) { onPick(widget) }
+            }
         }
     }
 }
@@ -136,14 +148,18 @@ private fun AppHeader(appLabel: String, first: WidgetProvider) {
     }
 }
 
-/** One widget: its picture (or its app's icon), its name, and the cells it is designed for. */
+/**
+ * One widget: its picture (or its app's icon), its name, and the cells it is designed for. A tap
+ * adds it; a long press then a move ([drag]) carries it out.
+ */
 @Composable
-private fun Choice(widget: WidgetProvider, onClick: () -> Unit) {
+private fun Choice(widget: WidgetProvider, drag: DragHandlers?, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
             Modifier.fillMaxWidth()
                 .clickable(onClick = onClick)
+                .liftable(widget.key, drag)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .testTag(WIDGET_CHOICE_TAG),
     ) {

@@ -193,7 +193,8 @@ class DragCoordinator(
         // Whether the drop lands or is refused, the icon settles from where it was released. An
         // app from the drawer has no cell to settle into or back to, and one folded away has no
         // cell of its own any more: those simply appear, or do not.
-        val fresh = state.source.newApp != null || state.source.newFolder != null
+        val source = state.source
+        val fresh = source.newApp != null || source.newFolder != null || source.newWidget != null
         if (!fresh && plan !is DropPlan.Fold) {
             val settling = Settling(state.source.itemId, from)
             _settling.value = settling
@@ -217,6 +218,9 @@ class DragCoordinator(
                     newApp = state.source.newApp,
                     fromFolder = state.source.fromFolder,
                     newFolder = state.source.newFolder,
+                    newWidget = state.source.newWidget,
+                    spanX = state.source.spanX,
+                    spanY = state.source.spanY,
                 )
         _pending.value = pendingMove
         scope.launch {

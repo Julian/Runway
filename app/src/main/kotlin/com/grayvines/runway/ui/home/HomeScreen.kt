@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -43,8 +44,7 @@ import com.grayvines.runway.ui.folder.FolderSheet
 import com.grayvines.runway.ui.menu.HomeMenu
 import com.grayvines.runway.ui.menu.HomeMenuSession
 import com.grayvines.runway.ui.menu.ItemMenu
-import com.grayvines.runway.ui.menu.ItemMenuActions
-import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.menu.ItemMenuSession
 import com.grayvines.runway.ui.shade.ShadeHint
 import com.grayvines.runway.ui.widgets.WidgetPicker
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
@@ -71,9 +71,7 @@ fun HomeScreen(
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
     drag: DragSession,
-    itemMenu: ItemMenuState?,
-    itemMenuActions: ItemMenuActions,
-    onDismissItemMenu: () -> Unit,
+    itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
     openFolder: OpenFolder?,
@@ -142,7 +140,7 @@ fun HomeScreen(
         )
         // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
         openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
-        Menus(state, itemMenu, itemMenuActions, onDismissItemMenu, homeMenu, widgetPicker, cell)
+        Menus(state, itemMenu, homeMenu, widgetPicker, cell, drag)
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
@@ -159,22 +157,34 @@ fun HomeScreen(
 @Composable
 private fun Menus(
     state: HomeState,
-    itemMenu: ItemMenuState?,
-    itemMenuActions: ItemMenuActions,
-    onDismissItemMenu: () -> Unit,
+    itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
     cell: DpSize,
+    drag: DragSession,
 ) {
-    itemMenu?.let {
-        ItemMenu(it, itemMenuActions, state.drawerFolders, onDismiss = onDismissItemMenu)
+    itemMenu.at?.let {
+        ItemMenu(it, itemMenu.actions, state.drawerFolders, onDismiss = itemMenu.onDismiss)
     }
     homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
     if (widgetPicker.open) {
+        val density = LocalDensity.current
         WidgetPicker(
             widgetPicker.providers,
             onPick = { widgetPicker.onPick(it, cell.width.value, cell.height.value) },
             onDismiss = widgetPicker.onDismiss,
+            // Carried at its size for this grid, held by its middle.
+            handlersFor = { provider ->
+                val span = widgetPicker.spanFor(provider, cell.width.value, cell.height.value)
+                val grab =
+                    with(density) {
+                        Point(
+                            (cell.width * span.width).toPx() / 2,
+                            (cell.height * span.height).toPx() / 2,
+                        )
+                    }
+                drag.handlersForNewWidget(provider, span, grab)
+            },
         )
     }
 }
@@ -194,6 +204,9 @@ private fun draggedItem(state: HomeState, drag: DragSession): HomeItem? {
     val newFolder = source?.newFolder
     return when {
         newFolder != null -> state.drawerFolders.firstOrNull { it.folderId == newFolder }
+        // Out of the picker: no placement yet, only a size to be drawn at.
+        source?.newWidget != null ->
+            HomeItem(0, ItemKind.WIDGET, 0, 0, source.spanX, source.spanY, "", null)
         newApp != null ->
             state.apps
                 .firstOrNull { it.ref == newApp }

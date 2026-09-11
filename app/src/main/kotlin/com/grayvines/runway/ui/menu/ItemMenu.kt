@@ -41,6 +41,13 @@ data class ItemMenuState(
     val anchor: Bounds,
 )
 
+/** The item menu as the screen sees it: what it is open on, if anything, and how to drive it. */
+class ItemMenuSession(
+    val at: ItemMenuState?,
+    val actions: ItemMenuActions,
+    val onDismiss: () -> Unit,
+)
+
 /** What the menu can do to its item. */
 class ItemMenuActions(
     val appInfo: () -> Unit,
