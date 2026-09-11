@@ -32,6 +32,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,6 +88,20 @@ class WidgetPickerTest : LauncherFixture() {
         allowWidgetBinding(true)
         openPicker() // the first page is full by default
         expectToast("No room on this page") { fixtureChoice().performClick() }
+        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+    }
+
+    @Test
+    fun withNoRoomAtAllTheUserIsToldBeforeBeingAskedAnything() {
+        // Room is checked first: the bind prompt and a setup screen are not worth answering for a
+        // widget that cannot be placed.
+        allowWidgetBinding(false)
+        openPicker() // the first page is full by default
+        expectToast("No room on this page") { fixtureChoice().performClick() }
+        assertNull(
+            "the system's bind prompt came up for a widget with nowhere to go",
+            device.wait(Until.findObject(BIND_ALLOW), PRESS_SETTLE_MS * 4),
+        )
         assertEquals(emptyList<ItemEntity>(), placedWidgets())
     }
 

@@ -94,8 +94,12 @@ class WidgetPickerHost(
         return store(id, provider, move.page, at, move.displaced)
     }
 
+    /**
+     * Room first, then the binding: the system's prompt and a widget's setup screen are not worth
+     * answering for a widget with nowhere to go. The page can fill meanwhile; [store] then refuses
+     * and gives the id back.
+     */
     private suspend fun add(provider: WidgetProvider, cellWidthDp: Float, cellHeightDp: Float) {
-        val id = bound(provider) ?: return
         val page = shownPage()
         val placed =
             spans(provider, cellWidthDp, cellHeightDp).firstNotNullOfOrNull { span ->
@@ -108,10 +112,10 @@ class WidgetPickerHost(
                     ?.let { Footprint(it.x, it.y, span.width, span.height) }
             }
         if (placed == null) {
-            graph.widgets.deleteId(id)
             _notices.tryEmit("No room on this page")
             return
         }
+        val id = bound(provider) ?: return
         store(id, provider, page, placed, emptyMap())
     }
 
