@@ -82,6 +82,9 @@ class DragCoordinator(
      */
     private var released = false
 
+    /** The bounded wait behind [released]; held so a drop, cancel or new drag can end it. */
+    private var settleWait: Job? = null
+
     private val edgeDwell =
         EdgeDwell(
             scope,
@@ -177,7 +180,8 @@ class DragCoordinator(
             drop()
         } else {
             released = true
-            scope.launch {
+            settleWait?.cancel()
+            settleWait = scope.launch {
                 delay(SETTLE_WAIT_MS)
                 if (released) drop()
             }
@@ -187,6 +191,7 @@ class DragCoordinator(
     /** Commits the planned drop, if any; the override shows it until the database catches up. */
     private fun drop() {
         released = false
+        settleWait?.cancel()
         val state = drag.value ?: return
         val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
@@ -300,6 +305,7 @@ class DragCoordinator(
         edgeDwell.stop()
         resting?.cancel()
         released = false
+        settleWait?.cancel()
         drag.value?.let { showSourcePage(it.source) }
         controller.cancel()
         scope.launch { workspace.pruneEmptyPages() }

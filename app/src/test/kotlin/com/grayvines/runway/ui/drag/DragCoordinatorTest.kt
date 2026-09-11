@@ -302,6 +302,48 @@ class DragCoordinatorTest {
         }
 
     @Test
+    fun `a settle wait that was cut short does not drop the next drag early`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        // First drag: released mid-scroll, and the page settles well inside the wait.
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.areas.homePageShown(0, 3, 2, settled = false)
+        c.endDrag()
+        advanceTimeBy(DragCoordinator.SETTLE_WAIT_MS / 2)
+        c.areas.homePageShown(0, 3, 2, settled = true)
+        runCurrent()
+        assertEquals(1, workspace.moves.size)
+        // Second drag, also released mid-scroll: it gets the whole wait of its own.
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.areas.homePageShown(0, 3, 2, settled = false)
+        c.endDrag()
+        advanceTimeBy(
+            DragCoordinator.SETTLE_WAIT_MS / 2 + 1
+        ) // the first drag's timer would fire here
+        assertEquals(1, workspace.moves.size) // still waiting
+        advanceTimeBy(DragCoordinator.SETTLE_WAIT_MS / 2)
+        assertEquals(2, workspace.moves.size)
+    }
+
+    @Test
+    fun `a cancel during the settle wait drops nothing when the wait runs out`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.areas.homePageShown(0, 3, 2, settled = false)
+        c.endDrag()
+        c.cancelDrag()
+        advanceTimeBy(DragCoordinator.SETTLE_WAIT_MS + 1)
+        assertEquals(emptyList<PendingMove>(), workspace.moves)
+        assertNull(c.drag.value)
+    }
+
+    @Test
     fun `a release waiting on a page that never settles drops after a while anyway`() = runTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, lookup, workspace)
