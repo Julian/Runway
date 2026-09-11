@@ -38,18 +38,26 @@ jobs:
         run: ./gradlew spotlessCheck detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease
 
   instrumented:
-    name: Instrumented tests (${{ matrix.device.name }})
+    name: Instrumented tests (${{ matrix.device.name }}, shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 45 # a hung emulator must not hold a runner for hours
+    env:
+      # Kept in step with the shard list below by hand; the matrix cannot count itself.
+      SHARDS: 4
     strategy:
       fail-fast: false # one device failing must not hide how the other did
       matrix:
-        # One runner per device; the devices themselves are declared in app/build.gradle.kts.
+        # A runner per device per shard; the devices themselves are declared in
+        # app/build.gradle.kts. The suite is serial on one emulator and dwarfs everything else in
+        # the run, so it is split: AndroidJUnitRunner hashes each test's name to a shard, and each
+        # shard boots its own emulator and runs only its own slice. Four is about where it stops
+        # paying, with a slice down to the couple of minutes the build and boot take anyway.
         device:
           - name: Pixel 9, API 36
             task: pixel9Api36DebugAndroidTest
           - name: Pixel 10 Pro, API 37
             task: pixel10ProApi37DebugAndroidTest
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,17 +77,60 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       # Gradle fetches the image, boots the emulator headless, runs the tests and discards it.
       # The same task runs on a laptop.
-      - name: Run the instrumented tests on the managed device
+      - name: Run this shard of the instrumented tests on the managed device
         env:
           TASK: ${{ matrix.device.task }}
-        run: ./gradlew ":app:$TASK" -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+          SHARD: ${{ matrix.shard }}
+        run: >
+          ./gradlew ":app:$TASK"
+          -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+          "-Pandroid.testInstrumentationRunnerArguments.numShards=$SHARDS"
+          "-Pandroid.testInstrumentationRunnerArguments.shardIndex=$SHARD"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
-          name: instrumented-test-report-${{ matrix.device.task }}
+          name: instrumented-test-report-${{ matrix.device.task }}-shard${{ matrix.shard }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+
+  profile:
+    name: Record the baseline profile
+    # Recording walks a journey on a managed AOSP emulator (profile collection needs a rootable
+    # image). It does not depend on a single test passing, so it runs beside the checks instead
+    # of inside the release job, and finishes well inside the window they take. The release job
+    # bakes in whatever this records, from the very same commit.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45 # a hung emulator must not hold a runner for hours
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          # What a release ships must not come from a cache another run could have poisoned,
+          # and this job feeds the release. Running cold costs it nothing it does not have:
+          # it still lands inside the window the instrumented tests take.
+          cache-disabled: true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Without -PrunwayProfile the plugin writes what it records into src rather than baking it
+      # straight into a build of its own, which is what lets the release job pick it up.
+      - name: Record the profile on the managed AOSP emulator
+        run: ./gradlew :app:generateReleaseBaselineProfile -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baseline-profile
+          path: app/src/release/generated/baselineProfiles/
+          if-no-files-found: error # a release must never quietly ship without one
 
   release:
     name: Publish the release
@@ -87,7 +138,7 @@ jobs:
     # once every check above has passed. Signing needs two repository secrets:
     # RUNWAY_RELEASE_KEY_B64 (the PKCS#12 key file, base64) and RUNWAY_RELEASE_KEY_PASSWORD.
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: [checks, instrumented]
+    needs: [checks, instrumented, profile]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -104,23 +155,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-disabled: true # a release never reads a cache another run could have poisoned
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
       - name: Write the signing key
         env:
           KEY_B64: ${{ secrets.RUNWAY_RELEASE_KEY_B64 }}
         run: printf '%s' "$KEY_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
-      # -PrunwayProfile records the baseline profile on a managed AOSP emulator as part of the
-      # build, so every release ships one recorded from its own code.
-      - name: Build the signed release, with a fresh baseline profile
+      - name: Fetch the profile the profile job recorded
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: baseline-profile
+          path: app/src/release/generated/baselineProfiles/
+      # No -PrunwayProfile: the profile is already in src, so the build reads it there instead
+      # of booting an emulator to record one. Every release still ships one from its own code.
+      - name: Build the signed release, with the recorded baseline profile
         env:
           ORG_GRADLE_PROJECT_runwayStoreFile: ${{ runner.temp }}/release.p12
           ORG_GRADLE_PROJECT_runwayStorePassword: ${{ secrets.RUNWAY_RELEASE_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_runwayVersionName: ${{ github.ref_name }}
-        run: ./gradlew :app:assembleRelease -PrunwayProfile -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+        run: ./gradlew :app:assembleRelease
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

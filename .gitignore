@@ -14,5 +14,5 @@ FEATURES.md
 IMPLEMENTATION_PLAN.md
 TODO.md
 
-# A baseline profile recorded by hand; the published builds record their own.
+# A recorded baseline profile, by hand or by CI's profile job; it is never committed.
 app/src/release/generated/baselineProfiles/

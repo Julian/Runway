@@ -232,9 +232,11 @@ tasks
     .configureEach { finalizedBy(printConnectedTestFailures) }
 
 // The baseline profile tells ART which code to compile at install time: the startup, drawer and
-// drag paths the baselineprofile module's journey walks. A release built with -PrunwayProfile
-// (CI's, on a managed AOSP emulator) records it fresh and bakes it in, so it never goes stale
-// and nothing is checked in; a release built without one simply carries no profile.
+// drag paths the baselineprofile module's journey walks. CI records it in a job of its own,
+// `:app:generateReleaseBaselineProfile` on a managed AOSP emulator, which writes it into src for
+// the release build to pick up there, so every release ships one recorded from its own code and
+// nothing is checked in. -PrunwayProfile instead records and bakes in within the one build, for
+// recording by hand; a release built with neither simply carries no profile.
 val recordProfile = providers.gradleProperty("runwayProfile").isPresent
 
 baselineProfile {
