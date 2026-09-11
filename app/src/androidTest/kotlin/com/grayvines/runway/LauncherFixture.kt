@@ -1,6 +1,8 @@
 package com.grayvines.runway
 
+import android.content.ComponentName
 import android.content.Intent
+import android.os.Process
 import android.os.SystemClock
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
@@ -31,6 +33,7 @@ import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.DrawerSwipe
@@ -46,6 +49,7 @@ import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
+import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -218,6 +222,37 @@ open class LauncherFixture {
                 },
                 TIMEOUT_MS,
             )
+    }
+
+    /**
+     * Binds the fixture's widget the way the picker does and puts it over [spanX] × [spanY] cells
+     * of the first page from ([x], [y]), whose icons make way; the placement's id.
+     */
+    protected fun placeFixtureWidget(x: Int, y: Int, spanX: Int = 2, spanY: Int = 1): Long {
+        allowWidgetBinding(true)
+        val id = graph.widgets.allocateId()
+        assertTrue(
+            "could not bind the fixture widget",
+            graph.widgets.bind(id, FIXTURE_WIDGET, Process.myUserHandle()),
+        )
+        return runBlocking {
+            val page = graph.workspace.observe(Container.HOME).first().pages.first()
+            page.items
+                .filter { it.x in x until x + spanX && it.y in y until y + spanY }
+                .forEach { graph.workspace.removeItem(it.id) }
+            graph.workspace.addWidget(id, FIXTURE_WIDGET.flattenToString(), 0, x, y, spanX, spanY)
+        }
+    }
+
+    /**
+     * Waits for a widget's cell to compose. Through Compose, not UiAutomator: the composition's
+     * frames only advance while the test drives them, so a UiAutomator wait alone would sit on a
+     * screen that never changes.
+     */
+    protected fun awaitWidgetCell() {
+        waitUntil(LONG_TIMEOUT_MS) {
+            compose.onAllNodesWithTag(WIDGET_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /** The first cell of the first home page nothing sits on. */
@@ -662,6 +697,10 @@ open class LauncherFixture {
 }
 
 const val TIMEOUT_MS = 5_000L
+
+/** The fixture app's widget: two by one by design, resizable, labelled "Fixture widget". */
+val FIXTURE_WIDGET: ComponentName =
+    ComponentName("com.grayvines.runway.fixture", "com.grayvines.runway.fixture.FixtureWidget")
 
 /** Focus waits per test: one, and one more after closing a dialog that came up meanwhile. */
 const val FOCUS_ATTEMPTS = 2

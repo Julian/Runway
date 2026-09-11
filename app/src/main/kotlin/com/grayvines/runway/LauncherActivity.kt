@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -165,11 +166,15 @@ class LauncherActivity : ComponentActivity() {
         val settling = viewModel.dragging.settling.collectAsStateWithLifecycle()
         // A settle target is per drop: it forgets itself when the settling item changes.
         val settleTarget = remember(settling.value) { mutableStateOf<Point?>(null) }
+        // A carried widget's picture outlives the session, which is remade per drop: the settle
+        // after the drop still draws it.
+        val picture = remember { mutableStateOf<ImageBitmap?>(null) }
         return remember(settleTarget) {
             DragSession(
                 stateOf = drag,
                 settlingOf = settling,
                 settleTargetOf = settleTarget,
+                pictureOf = picture,
                 onSettleTargetPositioned = { settleTarget.value = it },
                 onSettled = viewModel.dragging::settled,
                 onHold = viewModel.itemMenu::hold,

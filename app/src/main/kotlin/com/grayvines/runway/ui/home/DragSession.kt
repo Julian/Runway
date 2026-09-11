@@ -1,7 +1,10 @@
 package com.grayvines.runway.ui.home
 
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
@@ -36,9 +39,14 @@ class DragSession(
     private val onMove: (Point) -> Unit,
     private val onEnd: () -> Unit,
     private val onCancel: () -> Unit,
+    /** What a lifted widget looks like, for the overlay to carry; see [carry]. */
+    private val pictureOf: MutableState<ImageBitmap?> = mutableStateOf(null),
 ) {
     val state: DragState?
         get() = stateOf.value
+
+    val picture: ImageBitmap?
+        get() = pictureOf.value
 
     val settling: Settling?
         get() = settlingOf.value
@@ -112,14 +120,13 @@ class DragSession(
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         handlers(
             onHold = { cell -> onHold(item, container, page, cell) },
-            onStart =
-                if (item.kind == ItemKind.WIDGET) {
-                    // A widget is not carried yet: its hold shows the menu, and that is all.
-                    { _, _ -> }
-                } else {
-                    { pointer, grab -> onStart(item, container, page, pointer, grab) }
-                },
+            onStart = { pointer, grab -> onStart(item, container, page, pointer, grab) },
         )
+
+    /** A widget is carried as a picture of itself, taken by its cell as it lifts. */
+    fun carry(picture: ImageBitmap?) {
+        pictureOf.value = picture
+    }
 
     /**
      * Handlers that also name the finger. Only while no drag is live: a second finger's long press

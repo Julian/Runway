@@ -147,6 +147,7 @@ fun HomeScreen(
         DragOverlay(
             drag = drag,
             item = draggedItem(state, drag),
+            picture = drag.picture,
             cell = cell,
             iconSize = iconSize,
             lift = lift,

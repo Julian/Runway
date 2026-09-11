@@ -1,8 +1,6 @@
 package com.grayvines.runway
 
-import android.content.ComponentName
 import android.graphics.Rect
-import android.os.Process
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -18,7 +16,6 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.shade.SHADE_HINT_TAG
@@ -35,13 +32,10 @@ import org.junit.runner.RunWith
 /** A widget stored in the layout is drawn by the system's host view over the cells it spans. */
 @RunWith(AndroidJUnit4::class)
 class WidgetTest : LauncherFixture() {
-    private val provider =
-        ComponentName("com.grayvines.runway.fixture", "com.grayvines.runway.fixture.FixtureWidget")
-
     @Test
     fun aStoredWidgetIsDrawnOverItsCellsAndNoOthers() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         val widget = device.findObject(By.text(FIXTURE_WIDGET_TEXT))
         assertNotNull("the widget's own view is not on screen", widget)
@@ -54,7 +48,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun theIconsAroundAWidgetStayWhereTheyWere() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         // The first home cell held our settings app; the widget took its cell and the next, and
         // the rest of the row is as it was.
@@ -74,7 +68,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun aWidgetIsDrawnAgainWhenTheLauncherIsRecreated() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         // Nothing is re-bound: the id is the host's, and a new view for it is all that is needed.
         compose.activityRule.scenario.recreate()
@@ -84,7 +78,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun aWidgetWhosePlacementIsRemovedLeavesTheScreen() {
-        val itemId = placeFixtureWidget()
+        val itemId = placeFixtureWidget(0, 0)
         awaitWidgetCell()
         assertTrue(device.hasObject(By.text(FIXTURE_WIDGET_TEXT)))
         runBlocking { graph.workspace.removeItem(itemId) }
@@ -97,7 +91,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun aSwipeAcrossAWidgetFlipsThePage() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         val onPageTwo = labelOnPage(1)
         val from = widgetCentre()
@@ -111,7 +105,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun aSwipeUpOnAWidgetLeavesTheDrawerClosed() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         val height = compose.onRoot().fetchSemanticsNode().boundsInRoot.height
         pullFrom(widgetCentre(), -height * OPENING_PULL)
@@ -123,7 +117,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun aSwipeDownOnAWidgetLeavesTheShadeAlone() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         val height = compose.onRoot().fetchSemanticsNode().boundsInRoot.height
         pullFrom(widgetCentre(), height * OPENING_PULL)
@@ -137,7 +131,7 @@ class WidgetTest : LauncherFixture() {
 
     @Test
     fun holdingAWidgetOffersRemove_whichDropsThePlacementAndTheHostId() {
-        val itemId = placeFixtureWidget()
+        val itemId = placeFixtureWidget(0, 0)
         awaitWidgetCell()
         val id =
             runBlocking { graph.workspace.observe(Container.HOME).first() }
@@ -164,12 +158,12 @@ class WidgetTest : LauncherFixture() {
     /** A widget's default view opens its app when tapped (the framework's doing, since 12). */
     @Test
     fun aTapOnAWidgetIsTheWidgets() {
-        placeFixtureWidget()
+        placeFixtureWidget(0, 0)
         awaitWidgetCell()
         compose.onRoot().performTouchInput { click(widgetCentre()) }
         assertTrue(
             "the widget's app never opened",
-            device.wait(Until.hasObject(By.pkg(provider.packageName)), TIMEOUT_MS),
+            device.wait(Until.hasObject(By.pkg(FIXTURE_WIDGET.packageName)), TIMEOUT_MS),
         )
         device.pressBack()
     }
@@ -185,38 +179,6 @@ class WidgetTest : LauncherFixture() {
                 moveBy(Offset(0f, dy / PULL_STEPS))
                 advanceEventTime(PULL_STEP_MS)
             }
-        }
-    }
-
-    /**
-     * Binds the fixture's widget the way the picker will, and puts it over the first two cells of
-     * the first page, whose icons make way. The bind right is granted through the shell, as the
-     * system's bind dialog would grant it.
-     */
-    private fun placeFixtureWidget(): Long {
-        allowWidgetBinding(true)
-        val id = graph.widgets.allocateId()
-        assertTrue(
-            "could not bind the fixture widget",
-            graph.widgets.bind(id, provider, Process.myUserHandle()),
-        )
-        return runBlocking {
-            val page = graph.workspace.observe(Container.HOME).first().pages.first()
-            page.items
-                .filter { it.y == 0 && it.x in 0..1 }
-                .forEach { graph.workspace.removeItem(it.id) }
-            graph.workspace.addWidget(id, provider.flattenToString(), 0, 0, 0, spanX = 2, spanY = 1)
-        }
-    }
-
-    /**
-     * Waits for the widget's cell to compose. Through Compose, not UiAutomator: the composition's
-     * frames only advance while the test drives them, so a UiAutomator wait alone would sit on a
-     * screen that never changes.
-     */
-    private fun awaitWidgetCell() {
-        waitUntil(LONG_TIMEOUT_MS) {
-            compose.onAllNodesWithTag(WIDGET_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
 

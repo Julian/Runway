@@ -19,6 +19,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -30,6 +36,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
@@ -54,6 +61,8 @@ internal fun GridPage(
     handlersFor: (HomeItem) -> DragHandlers?,
     onHoldEmpty: (Point) -> Unit,
     modifier: Modifier = Modifier,
+    /** The cells the carried item would take on this page if let go now; outlined while it is. */
+    landing: () -> Footprint? = { null },
 ) {
     val density = LocalDensity.current
     val cellW = with(density) { cell.width.roundToPx() }
@@ -61,7 +70,14 @@ internal fun GridPage(
     val positions = mutableListOf<State<IntOffset>>()
     // The page's own long press (on empty space) takes the same hold as an icon's lift.
     CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        GridLayout(items, cellW, cellH, positions, onHoldEmpty, modifier) {
+        GridLayout(
+            items,
+            cellW,
+            cellH,
+            positions,
+            onHoldEmpty,
+            modifier.outlines(landing, cellW, cellH),
+        ) {
             items.forEach { item ->
                 key(item.id) {
                     val cellDrag = rememberCellDrag(item, drag)
@@ -80,7 +96,14 @@ internal fun GridPage(
                             label = "cell",
                         )
                     if (item.kind == ItemKind.WIDGET) {
-                        WidgetCell(item, cell, drag = handlersFor(item))
+                        WidgetCell(
+                            item,
+                            cell,
+                            drag = handlersFor(item),
+                            session = drag,
+                            lifted = cellDrag.lifted || settlingHere != null,
+                            settlingHere = settlingHere,
+                        )
                     } else {
                         IconCell(item, cellDrag, iconSize, labels, onLaunch, handlersFor(item))
                     }
@@ -122,6 +145,36 @@ private fun IconCell(
             },
     )
 }
+
+/** A faint rounded outline over the cells the carried item would land on: a hint, not a target. */
+private const val LANDING_ALPHA = 0.45f
+private const val LANDING_FILL_ALPHA = 0.08f
+private val LANDING_INSET = 3.dp
+private val LANDING_STROKE = 1.5.dp
+private val LANDING_CORNER = 12.dp
+
+/**
+ * Draws [landing]'s cells, when there are any, as a subtle outline. Read in the draw phase only: a
+ * finger's every move changes the plan, and this must cost a redraw, not a recomposition.
+ */
+private fun Modifier.outlines(landing: () -> Footprint?, cellW: Int, cellH: Int): Modifier =
+    drawWithContent {
+        drawContent()
+        landing()?.let { f ->
+            val inset = LANDING_INSET.toPx()
+            val topLeft = Offset(f.x * cellW + inset, f.y * cellH + inset)
+            val size = Size(f.width * cellW - 2 * inset, f.height * cellH - 2 * inset)
+            val corner = CornerRadius(LANDING_CORNER.toPx())
+            drawRoundRect(Color.White.copy(alpha = LANDING_FILL_ALPHA), topLeft, size, corner)
+            drawRoundRect(
+                Color.White.copy(alpha = LANDING_ALPHA),
+                topLeft,
+                size,
+                corner,
+                style = Stroke(LANDING_STROKE.toPx()),
+            )
+        }
+    }
 
 /** Every item at its footprint, sized by its span; the page itself fills what it is given. */
 @Composable

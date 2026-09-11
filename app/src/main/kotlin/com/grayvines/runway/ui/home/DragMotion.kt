@@ -15,6 +15,9 @@ internal object DragMotion {
     /** The lifted icon grows: a finger covers it, and the growth says "picked up". */
     const val LIFTED_SCALE = 1.2f
 
+    /** A lifted widget, already large, grows only a little. */
+    const val WIDGET_LIFTED_SCALE = 1.05f
+
     /**
      * Over an icon it would fold into, the lifted icon shrinks to this, so the tile forming under
      * it and the icon it would join both stay in view.

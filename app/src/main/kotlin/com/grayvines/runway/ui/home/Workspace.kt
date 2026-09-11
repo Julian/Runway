@@ -56,6 +56,7 @@ fun Workspace(
                 drag = drag,
                 handlersFor = { item -> drag?.handlersFor(item, page) },
                 onHoldEmpty = onHoldEmpty,
+                landing = { drag?.plannedHomeFootprint(page) },
                 modifier =
                     Modifier.onGloballyPositioned { coords ->
                         onPagePositioned(page, coords.boundsInRoot().toBounds())
