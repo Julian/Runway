@@ -37,27 +37,47 @@ jobs:
       - name: Formatting, detekt, lint, unit tests, release build
         run: ./gradlew spotlessCheck detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease
 
+  plan:
+    name: Plan the shards
+    # The one place the shard count is written. A matrix is evaluated before a job's env and
+    # cannot read it, and expressions cannot count from a number, so the list the instrumented
+    # jobs fan out over and the count they hand the test runner are both derived here instead of
+    # being written twice and kept in step by hand. Nothing is checked out or built, so this
+    # costs the shards a runner's startup rather than any work.
+    runs-on: ubuntu-latest
+    outputs:
+      indices: ${{ steps.shards.outputs.indices }}
+      count: ${{ steps.shards.outputs.count }}
+    steps:
+      - id: shards
+        env:
+          COUNT: 6 # why six: see the instrumented job below
+        run: |
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "indices=$(jq -nc --argjson n "$COUNT" '[range($n)]')" >> "$GITHUB_OUTPUT"
+
   instrumented:
     name: Instrumented tests (${{ matrix.device.name }}, shard ${{ matrix.shard }})
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 45 # a hung emulator must not hold a runner for hours
-    env:
-      # Kept in step with the shard list below by hand; the matrix cannot count itself.
-      SHARDS: 4
     strategy:
       fail-fast: false # one device failing must not hide how the other did
       matrix:
         # A runner per device per shard; the devices themselves are declared in
         # app/build.gradle.kts. The suite is serial on one emulator and dwarfs everything else in
         # the run, so it is split: AndroidJUnitRunner hashes each test's name to a shard, and each
-        # shard boots its own emulator and runs only its own slice. Four is about where it stops
-        # paying, with a slice down to the couple of minutes the build and boot take anyway.
+        # shard boots its own emulator and runs only its own slice. Every shard builds and boots
+        # at the same time as the others rather than in turn, so a shard costs a runner, not wall
+        # clock. Six is where it stops paying: a job has a floor near six and a half minutes, four
+        # of build and boot and another two and three quarters the test harness takes to start on
+        # a fresh emulator, so thinner slices past this buy seconds.
         device:
           - name: Pixel 9, API 36
             task: pixel9Api36DebugAndroidTest
           - name: Pixel 10 Pro, API 37
             task: pixel10ProApi37DebugAndroidTest
-        shard: [0, 1, 2, 3]
+        shard: ${{ fromJSON(needs.plan.outputs.indices) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,6 +101,7 @@ jobs:
         env:
           TASK: ${{ matrix.device.task }}
           SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ needs.plan.outputs.count }}
         run: >
           ./gradlew ":app:$TASK"
           -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
