@@ -78,6 +78,12 @@ interface WorkspaceDao {
     )
     suspend fun leaveDrawerFolders(component: String, profile: Long)
 
+    /** Whether the folder has a placement in [container]: in the drawer, say. */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM items WHERE folder_id = :folderId AND container = :container)"
+    )
+    suspend fun isPlacedIn(folderId: Long, container: Container): Boolean
+
     /** The folder, its apps and (by cascade) every placement of it. */
     @Query("DELETE FROM folders WHERE id = :id") suspend fun deleteFolder(id: Long)
 

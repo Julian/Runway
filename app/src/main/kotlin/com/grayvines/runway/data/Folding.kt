@@ -40,27 +40,41 @@ fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
 
 /**
  * Drops [dropped] onto the placement [targetId]. An app there becomes a folder of the two; a folder
- * there takes the app in. A dropped placement is gone afterwards (its page is left for the drop to
- * prune). Anything else there, a dropped side that no longer exists, or an app dropped onto another
- * placement of itself leaves everything as it was, the dropped placement included. True when the
- * app went in.
+ * there takes the app in, and a folder placed in the drawer takes it out of any other drawer folder
+ * first. A dropped placement is gone afterwards (its page is left for the drop to prune). Anything
+ * else there, a dropped side that no longer exists, or an app dropped onto another placement of
+ * itself leaves everything as it was, the dropped placement included. True when the app went in.
  *
  * An app lifted [outOf] a folder leaves it as it goes in, and the folder goes too if that empties
- * it; dropped back onto its own folder, it simply stays.
+ * it. Dropped back onto its own folder, it simply stays (true); a placement of it picked up on the
+ * way is put back where it was (false: nothing changed).
  */
 suspend fun WorkspaceRepository.foldInto(
     targetId: Long,
     dropped: Dropped,
     outOf: Long? = null,
-): Boolean = write {
-    val target = dao.item(targetId)?.takeIf { it.folderId != null || it.appRef() != null }
-    val app = target?.let { dao.take(dropped, notOnto = it) }
-    val folderId = if (target != null && app != null) dao.folderOf(target) else null
-    if (folderId != null && app != null && folderId != outOf) {
-        dao.addToFolder(folderId, app)
-        if (outOf != null) dao.leave(outOf, app)
+): Boolean = write { dao.foldOnto(targetId, dropped, outOf) }
+
+private suspend fun WorkspaceDao.foldOnto(targetId: Long, dropped: Dropped, outOf: Long?): Boolean {
+    val target =
+        item(targetId)?.takeIf { it.kind == ItemKind.FOLDER || it.kind == ItemKind.APP }
+            ?: return false
+    val taken = take(dropped, notOnto = target) ?: return false
+    val folderId = folderOf(target) ?: return false
+    if (folderId == outOf) return taken.placementId == null
+    fold(folderId, taken, outOf)
+    return true
+}
+
+/** [taken] goes into [folderId], off its page and out of [outOf] and any other drawer folder. */
+private suspend fun WorkspaceDao.fold(folderId: Long, taken: Taken, outOf: Long?) {
+    taken.placementId?.let { deleteItem(it) }
+    if (isPlacedIn(folderId, Container.DRAWER)) {
+        leaveDrawerFolders(taken.app.component, taken.app.profile)
+        deleteEmptyFolders()
     }
-    folderId != null
+    addToFolder(folderId, taken.app)
+    if (outOf != null) leave(outOf, taken.app)
 }
 
 /**
@@ -153,12 +167,15 @@ private suspend fun WorkspaceDao.foldApp(item: ItemEntity): Long {
     return folderId
 }
 
+/** What a drop stands for: the app, and the placement it came off the page as, if any. */
+private class Taken(val app: AppRef, val placementId: Long?)
+
 /**
- * The app [dropped] stands for, taking its placement off its page if it had one; null, and nothing
- * taken, when it is gone, is [notOnto] itself, or is the very app [notOnto] holds: there is nothing
- * to fold two of the same into.
+ * The app [dropped] stands for, with its placement if it had one (nothing is deleted here; the fold
+ * decides that); null when it is gone, is [notOnto] itself, or is the very app [notOnto] holds:
+ * there is nothing to fold two of the same into.
  */
-private suspend fun WorkspaceDao.take(dropped: Dropped, notOnto: ItemEntity): AppRef? {
+private suspend fun WorkspaceDao.take(dropped: Dropped, notOnto: ItemEntity): Taken? {
     val placement = (dropped as? Dropped.Item)?.let { item(it.id) }?.takeIf { it.id != notOnto.id }
     val app =
         when (dropped) {
@@ -166,8 +183,7 @@ private suspend fun WorkspaceDao.take(dropped: Dropped, notOnto: ItemEntity): Ap
             is Dropped.Item -> placement?.appRef()
         }
     if (app == null || app == notOnto.appRef()) return null
-    placement?.let { deleteItem(it.id) }
-    return app
+    return Taken(app, placement?.id)
 }
 
 internal suspend fun WorkspaceDao.addToFolder(folderId: Long, app: AppRef) {

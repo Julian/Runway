@@ -321,6 +321,51 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `a placement picked up on the way back to its own folder is put back, not lost`() =
+        runTest {
+            // a and b fold into a folder on page 0; a is also placed loose on the page. Lifting a
+            // out of the folder over the page picks that loose placement up; dropping it back on
+            // the folder must leave both the folder and the placement as they were.
+            repo.autoFill(apps(3), columns = 4, pageRows = 1, dockSlots = 1)
+            val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
+            val folder = repo.observeFolders().first().single()
+            assertTrue(repo.addApp(a.appRef()!!, Container.HOME, 0, 3, 0))
+            val loose =
+                repo.observe(Container.HOME).first().pages.single().items.single { it.x == 3 }
+
+            assertFalse(
+                repo.foldInto(targetId = b.id, dropped = Dropped.Item(loose.id), outOf = folder.id)
+            )
+
+            val items = repo.observe(Container.HOME).first().pages.single().items
+            assertEquals(3 to 0, items.single { it.id == loose.id }.let { it.x to it.y })
+            assertEquals(listOf(b.appRef(), a.appRef()), folderApps(folder.id))
+        }
+
+    @Test
+    fun `dropping on a placed drawer folder moves the app out of its other drawer folder`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 4, pageRows = 1, dockSlots = 1)
+            val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            val first = repo.createDrawerFolder(a.appRef()!!)
+            val second = repo.createDrawerFolder(b.appRef()!!)
+            assertTrue(repo.placeFolder(second, Container.HOME, 0, 3, 0))
+            val tile =
+                repo.observe(Container.HOME).first().pages.single().items.single {
+                    it.folderId == second
+                }
+
+            assertTrue(repo.foldInto(targetId = tile.id, dropped = Dropped.Item(a.id)))
+
+            assertEquals(listOf(b.appRef(), a.appRef()), folderApps(second))
+            assertEquals(
+                listOf(second),
+                repo.observeFolders().first().map { it.id },
+            ) // first emptied
+        }
+
+    @Test
     fun `a fold with nothing to fold leaves the target as it was`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
