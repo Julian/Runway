@@ -4,7 +4,7 @@ An Android launcher because I couldn't find one I liked previously.
 
 ## Building
 
-Requires the Android SDK with platform 37 and a JDK 17 or newer on the path.
+Requires the Android SDK with platform 37 and a JDK 21 or newer on the path.
 On macOS with only Android Studio installed, register its bundled JDK once:
 
 ```sh
@@ -22,6 +22,7 @@ ln -s "/Applications/Android Studio.app/Contents/jbr" ~/Library/Java/JavaVirtual
 ```
 
 Unit tests run on the host.
+`./gradlew preflight` formats the code and then runs detekt, lint and the unit tests, which is what CI checks; run it before committing, since the git hooks do not.
 Instrumented tests drive the real launcher on an emulator, and replace its layout.
 Gradle can create the emulators itself, from the devices declared in the build, which is what CI does.
 It also installs the `fixture` module's app beside the launcher first: a stand-in that can be uninstalled and takes a web search, so those paths are tested on every image.
@@ -41,7 +42,8 @@ Debug builds use the application id `com.grayvines.runway.debug` so they can be 
 
 Settings has "Save a backup" and "Restore a backup".
 A backup is a JSON file of the settings and the layout: which apps and folders sit in which cells, and the folders in the drawer.
-Restoring replaces both; apps that are not installed are left out, and widgets are not carried between devices.
+Restoring replaces both; apps that are not installed are left out.
+Widgets are not in the file yet, so restoring removes the widgets on the device too.
 
 ## Baseline profile
 
@@ -57,6 +59,8 @@ The `baselineprofile` module records it by driving the launcher on a Gradle-mana
 Release builds are minified and use the application id `com.grayvines.runway`.
 They are signed when a PKCS#12 key (alias `runway`) is supplied through the `runwayStoreFile` and `runwayStorePassword` project properties, and left unsigned otherwise.
 
+An unsigned release build cannot be installed, so this needs the key.
+
 ```sh
-./gradlew installReleaseAsHome    # install the release build on a connected device as its home app
+./gradlew installReleaseAsHome    # install the signed release build on a connected device as its home app
 ```

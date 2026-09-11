@@ -38,3 +38,13 @@ detekt {
     allRules = true
     parallel = true
 }
+
+// `./gradlew preflight`: what CI's checks job runs, formatted first rather than checked, for a
+// pass by hand before committing. The git hooks stay fast and run none of this.
+tasks.register("preflight") {
+    group = "verification"
+    description = "Formats, then runs detekt, lint and the unit tests, as before a commit."
+    dependsOn("spotlessApply", "detekt", ":app:lintDebug", ":app:testDebugUnitTest")
+}
+
+tasks.named("detekt") { mustRunAfter("spotlessApply") }

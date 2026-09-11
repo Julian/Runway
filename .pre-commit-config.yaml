@@ -19,23 +19,3 @@ repos:
     hooks:
       - id: zizmor
         args: [--pedantic]
-  - repo: local
-    hooks:
-      - id: ktfmt
-        name: ktfmt (spotless)
-        entry: ./gradlew -q spotlessApply
-        language: system
-        pass_filenames: false
-        files: \.(kt|kts)$
-      - id: detekt
-        name: detekt
-        entry: ./gradlew -q detekt
-        language: system
-        pass_filenames: false
-        files: \.(kt|kts|yml)$
-      - id: android-lint
-        name: android lint
-        entry: ./gradlew -q :app:lintDebug
-        language: system
-        pass_filenames: false
-        files: ^app/
