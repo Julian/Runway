@@ -165,7 +165,24 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
-    fun aPartialSwipeUpRevealsTheDrawerAndLettingGoHidesItAgain() {
+    fun aPartialSwipeUpRevealsTheDrawerAndLettingGoHidesItAgain() = assertPartialPullFollowsFinger()
+
+    @Test
+    fun aPartialSwipeUpFollowsTheFingerWithTheSearchBarAboveTheDock() {
+        // The pages and the bar each pull the drawer; one gesture modifier shared between the two
+        // converted every page pull through the bar's position, and with the bar below the pages
+        // the drawer then never caught up with the finger.
+        runBlocking { graph.settings.update { it.copy(searchBarAtTop = false) } }
+        waitUntil(TIMEOUT_MS) {
+            val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot
+            val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+            bar.top >= pages.bottom
+        }
+        assertPartialPullFollowsFinger()
+    }
+
+    /** Pulls part way up from the middle of the pages: the drawer's top edge is at the finger. */
+    private fun assertPartialPullFollowsFinger() {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {

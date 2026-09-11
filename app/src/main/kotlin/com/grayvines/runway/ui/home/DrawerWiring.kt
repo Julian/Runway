@@ -16,12 +16,25 @@ import com.grayvines.runway.ui.drawer.releasesAbandonedPull
 /** What a vertical swipe on the home screen can ask for. */
 class DrawerActions(val open: () -> Unit, val close: () -> Unit, val openShade: () -> Unit)
 
-/** The drawer's motion, its release decision, and the pull gesture for the pages, wired once. */
+/** The drawer's motion, its release decision, and what a pull must know, wired once. */
 internal class DrawerControls(
     val motion: DrawerMotion,
     val release: (velocity: Float) -> Unit,
-    val pull: Modifier,
+    val startsOnWidget: (Point) -> Boolean,
 )
+
+/**
+ * The pull gesture, for one surface. Each surface that pulls the drawer (the pages, the search bar)
+ * builds its own: the modifier keeps that surface's coordinates, so one shared between two nodes
+ * converts one surface's fingers through the other's position.
+ */
+@Composable
+internal fun Modifier.drawerPull(drawer: DrawerControls): Modifier =
+    drawerPull(
+        drawer.motion,
+        drawer.release,
+        startsOnWidget = { drawer.startsOnWidget(Point(it.x, it.y)) },
+    )
 
 @Composable
 internal fun rememberDrawer(
@@ -38,9 +51,7 @@ internal fun rememberDrawer(
     val release = { velocity: Float ->
         motion.release(velocity, open, actions.open, actions.close, actions.openShade)
     }
-    val pull =
-        Modifier.drawerPull(motion, release, startsOnWidget = { startsOnWidget(Point(it.x, it.y)) })
-    return DrawerControls(motion, release, pull)
+    return DrawerControls(motion, release, startsOnWidget)
 }
 
 /** Told the screen height once it is known, so the motion knows how far a pull travels. */

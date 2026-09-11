@@ -123,7 +123,7 @@ fun HomeScreen(
             onSearch = onSearch,
             onMenu = homeMenu.onOpen,
             drag = drag,
-            pagesModifier = drawer.pull,
+            drawer = drawer,
             onHomePagePositioned = onHomePagePositioned,
             onDockPagePositioned = onDockPagePositioned,
             onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
@@ -221,9 +221,10 @@ private fun draggedItem(state: HomeState, drag: DragSession): HomeItem? {
     }
 }
 
-/** A vertical drag on the pages pulls the drawer with it; the pager keeps horizontal swipes. */
-
-/** Search bar, pages and dock, stacked; every page shares [cell]. */
+/**
+ * Search bar, pages and dock, stacked; every page shares [cell]. A vertical drag on the pages or
+ * the search bar pulls the drawer with it (the pager keeps horizontal swipes); the dock does not.
+ */
 @Composable
 private fun HomeColumn(
     state: HomeState,
@@ -239,9 +240,8 @@ private fun HomeColumn(
     onDockPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
     resize: WidgetResizeSession,
+    drawer: DrawerControls,
     modifier: Modifier = Modifier,
-    /** Applied to the pages alone: the dock and search bar do not pull the drawer. */
-    pagesModifier: Modifier = Modifier,
 ) {
     val settings = state.settings
     val dockSlot = DpSize(cell.width * settings.columns / settings.dockSlots, cell.height)
@@ -252,7 +252,7 @@ private fun HomeColumn(
                 target = state.searchTarget,
                 onSearch = onSearch,
                 onMenu = onMenu,
-                modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
+                modifier = Modifier.drawerPull(drawer),
             )
         }
         Workspace(
@@ -267,7 +267,7 @@ private fun HomeColumn(
             drag = drag,
             onPagePositioned = onHomePagePositioned,
             onHoldEmpty = onHoldEmpty,
-            modifier = Modifier.weight(1f).then(pagesModifier),
+            modifier = Modifier.weight(1f).drawerPull(drawer),
             resize = resize,
         )
         if (!settings.searchBarAtTop) {
@@ -276,7 +276,7 @@ private fun HomeColumn(
                 target = state.searchTarget,
                 onSearch = onSearch,
                 onMenu = onMenu,
-                modifier = pagesModifier, // a swipe up from the search bar opens the drawer too
+                modifier = Modifier.drawerPull(drawer),
             )
         }
         Dock(
