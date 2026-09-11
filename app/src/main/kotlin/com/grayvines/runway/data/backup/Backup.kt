@@ -106,4 +106,8 @@ data class Placement(
 @Serializable data class Folder(val name: String, val apps: List<AppRef>)
 
 /** How a restore went: the placements made, and the apps left out for not being installed. */
-data class Restored(val placed: Int, val skipped: Int)
+/**
+ * What a restore came to: [placed] placements written, [skipped] apps or placements left out, and
+ * [widgetsKept] widgets already on the device left as they were (a backup carries none).
+ */
+data class Restored(val placed: Int, val skipped: Int, val widgetsKept: Int = 0)

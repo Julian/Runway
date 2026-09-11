@@ -43,7 +43,7 @@ Debug builds use the application id `com.grayvines.runway.debug` so they can be 
 Settings has "Save a backup" and "Restore a backup".
 A backup is a JSON file of the settings and the layout: which apps and folders sit in which cells, and the folders in the drawer.
 Restoring replaces both; apps that are not installed are left out.
-Widgets are not in the file yet, so restoring removes the widgets on the device too.
+Widgets are not in the file yet, so the widgets already on the device stay where they are, and a restored icon that would land on one is left out.
 
 ## Baseline profile
 

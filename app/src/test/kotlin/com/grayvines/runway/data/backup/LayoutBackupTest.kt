@@ -5,8 +5,11 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.Dropped
+import com.grayvines.runway.data.ItemEntity
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.RunwayDatabase
 import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.foldInto
@@ -17,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 
 class LayoutBackupTest {
@@ -62,6 +66,31 @@ class LayoutBackupTest {
         assertEquals(Restored(placed = 4, skipped = 0), restored)
         assertEquals(layout, repo.layoutBackup())
     }
+
+    @Test
+    fun `widgets on the device stay through a restore, with their pages, and are not built over`() =
+        runTest {
+            val layout = seed() // page 0: a folder at (1,0) and an app at (2,0)
+            repo.autoFill(emptyList(), columns = 3, pageRows = 1, dockSlots = 1)
+            repo.addPage(Container.HOME, 1)
+            repo.addPage(Container.HOME, 2)
+            assertNotNull(repo.addWidget(7, "w/.One", 0, 0, 0, 2, 1)) // over (0,0) and (1,0)
+            assertNotNull(repo.addWidget(8, "w/.Two", 2, 0, 0, 1, 1)) // on a page the file lacks
+
+            val restored = repo.restoreLayout(layout, apps.toSet())
+
+            assertEquals(Restored(placed = 3, skipped = 1, widgetsKept = 2), restored)
+            val pages = repo.observe(Container.HOME).first().pages
+            assertEquals(listOf(0, 1, 2), pages.map { it.index })
+            val first = pages[0].items
+            assertEquals(setOf(7), first.mapNotNull { it.appWidgetId }.toSet())
+            assertEquals(
+                listOf(2 to 0),
+                first.filter { it.kind == ItemKind.APP }.map { it.x to it.y },
+            )
+            assertEquals(emptyList<ItemEntity>(), first.filter { it.kind == ItemKind.FOLDER })
+            assertEquals(listOf(8), pages[2].items.map { it.appWidgetId })
+        }
 
     @Test
     fun `apps that are not installed are left out, and a folder with none of its apps goes too`() =

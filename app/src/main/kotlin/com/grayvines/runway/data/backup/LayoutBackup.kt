@@ -58,12 +58,14 @@ private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>) =
     Folder(name, folderApps[id].orEmpty().sortedBy { it.position }.map { it.ref })
 
 /**
- * Replaces the whole layout with [layout], in one transaction. Apps are matched against [installed]
- * by component and profile, or by component alone where that app is installed in exactly one
- * profile (a new phone numbers its profiles differently); anything else is skipped, and a folder
- * none of whose apps are installed goes with them. Apps of a [quiet] profile, one that exists but
- * reports nothing (a work profile that is paused), are taken as they are: there is nothing to check
- * them against, and they come back with the profile.
+ * Replaces the layout with [layout], in one transaction, except for the widgets already placed: a
+ * backup carries none, so they stay where they are, their pages with them, and a restored placement
+ * that would land on one is skipped. Apps are matched against [installed] by component and profile,
+ * or by component alone where that app is installed in exactly one profile (a new phone numbers its
+ * profiles differently); anything else is skipped, and a folder none of whose apps are installed
+ * goes with them. Apps of a [quiet] profile, one that exists but reports nothing (a work profile
+ * that is paused), are taken as they are: there is nothing to check them against, and they come
+ * back with the profile.
  */
 suspend fun WorkspaceRepository.restoreLayout(
     layout: Layout,
@@ -71,17 +73,23 @@ suspend fun WorkspaceRepository.restoreLayout(
     quiet: Set<Long> = emptySet(),
 ): Restored = write {
     val match = AppMatcher(installed, quiet)
-    dao.deleteAllItems()
+    val widgets = dao.itemsOfKind(ItemKind.WIDGET)
+    dao.deleteItemsExceptKind(ItemKind.WIDGET)
     dao.deleteAllFolders()
     dao.deleteAllPages()
-    repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
+    val lastWidgetPage = widgets.maxOfOrNull { it.pageIndex ?: 0 } ?: -1
+    repeat(maxOf(layout.homePages, 1, lastWidgetPage + 1)) {
+        dao.insertPage(PageEntity(Container.HOME, it))
+    }
     repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
     val counts = Counts()
     // Drawer folders first: a placement may refer to one by index.
     val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
     var placed = counts.placed
     var skipped = counts.skipped
-    for (placement in layout.placements) {
+    val (blocked, open) = layout.placements.partition { p -> widgets.any { it.covers(p) } }
+    skipped += blocked.size
+    for (placement in open) {
         val folder = placement.folder
         val app = placement.app?.let(match::find)
         val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
@@ -110,7 +118,17 @@ suspend fun WorkspaceRepository.restoreLayout(
             }
         }
     }
-    Restored(placed, skipped)
+    Restored(placed, skipped, widgetsKept = widgets.size)
+}
+
+/** Whether this widget's cells include the one [placement] would take. */
+private fun ItemEntity.covers(placement: Placement): Boolean {
+    val x = x ?: return false
+    val y = y ?: return false
+    return container == placement.container &&
+        pageIndex == placement.page &&
+        placement.x in x until x + spanX &&
+        placement.y in y until y + spanY
 }
 
 private fun Placement.entity(kind: ItemKind, app: AppRef? = null, folderId: Long? = null) =
