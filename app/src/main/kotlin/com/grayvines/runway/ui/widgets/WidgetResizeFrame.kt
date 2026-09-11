@@ -5,7 +5,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -19,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +47,7 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.ui.home.HomeItem
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 const val WIDGET_RESIZE_TAG = "widget-resize"
@@ -99,15 +104,19 @@ fun WidgetResizeFrame(
         val anchor = session.anchorFor(item.id)
         if (anchor != null) {
             pull.anchor = anchor
-            Frame(pull, limits) { session.onRemove(item) }
+            Frame(pull, limits, onRemove = { session.onRemove(item) }, onTap = session.onDismiss)
         }
     }
 }
 
-/** The outline, handles and Remove; the outline is read as it is drawn, not composed. */
+/**
+ * The outline, handles and Remove; the outline is read as it is drawn, not composed. The widget
+ * under the frame is not live: what lands on its cells goes nowhere, and a tap there is [onTap].
+ */
 @Composable
-private fun Frame(pull: Pull, limits: ResizeLimits, onRemove: () -> Unit) {
+private fun Frame(pull: Pull, limits: ResizeLimits, onRemove: () -> Unit, onTap: () -> Unit) {
     Box(Modifier.fillMaxSize().testTag(WIDGET_RESIZE_TAG)) {
+        Cover(pull, onTap)
         Canvas(Modifier.fillMaxSize()) {
             val outline = pull.outline()
             val corner = CornerRadius(CORNER.toPx())
@@ -128,6 +137,29 @@ private fun Frame(pull: Pull, limits: ResizeLimits, onRemove: () -> Unit) {
         limits.edges.forEach { edge -> Handle(edge, pull) }
         RemoveChip(pull::outline, onRemove)
     }
+}
+
+/**
+ * Over the widget's cells, beneath the handles and Remove: takes every touch that lands there, so
+ * none reaches the widget, and a finger lifted there without moving away is a tap that puts the
+ * frame away. Sized to the anchor, not the screen: a full-size surface would take the pages'
+ * touches too.
+ */
+@Composable
+private fun Cover(pull: Pull, onTap: () -> Unit) {
+    val density = LocalDensity.current
+    val anchor = pull.anchor
+    val tap = rememberUpdatedState(onTap)
+    Box(
+        Modifier.offset { IntOffset(anchor.left.roundToInt(), anchor.top.roundToInt()) }
+            .size(with(density) { DpSize(anchor.width.toDp(), anchor.height.toDp()) })
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown().consume()
+                    if (waitForUpOrCancellation() != null) tap.value()
+                }
+            }
+    )
 }
 
 /** One edge's handle, centred on that edge of the outline; pulling it resizes the widget. */

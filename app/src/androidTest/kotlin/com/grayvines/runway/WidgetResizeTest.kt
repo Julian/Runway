@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
@@ -165,6 +167,25 @@ class WidgetResizeTest : LauncherFixture() {
     }
 
     @Test
+    fun aTapOnTheFramedWidgetPutsTheFrameAwayAndReachesNothing() {
+        placeFixtureWidget(0, 0)
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        compose.onRoot().performTouchInput { click(widgetCentre()) }
+        awaitGone(WIDGET_RESIZE_TAG)
+        assertNull(
+            "the tap reached the widget: its app opened",
+            device.wait(Until.findObject(By.pkg(FIXTURE_WIDGET.packageName)), APP_OPEN_MS),
+        )
+        compose.onNodeWithTag(WIDGET_TAG).assertIsDisplayed()
+        assertStillOnLauncher()
+    }
+
+    private fun widgetCentre() =
+        compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
+
+    @Test
     fun backPutsTheFrameAway() {
         placeFixtureWidget(0, 0)
         awaitWidgetCell()
@@ -240,5 +261,8 @@ class WidgetResizeTest : LauncherFixture() {
     private companion object {
         /** The fixture widget's maxResizeWidth. */
         const val FIXTURE_WIDGET_MAX_DP = 400f
+
+        /** Long enough for a tapped widget's app to come up, when one does. */
+        const val APP_OPEN_MS = 1_500L
     }
 }
