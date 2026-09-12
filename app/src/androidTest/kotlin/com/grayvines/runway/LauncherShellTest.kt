@@ -12,6 +12,8 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.SEARCH_MENU_TAG
@@ -42,6 +44,18 @@ class LauncherShellTest : LauncherFixture() {
         val before = icon(firstHomeApp).fetchSemanticsNode().size
         runBlocking { graph.settings.update { it.copy(columns = it.columns + 2) } }
         waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
+    }
+
+    @Test
+    fun dockIconsFitTheirSlotsHoweverManyThereAre() {
+        // Ten slots on three columns: a slot is far narrower than a page cell. The icon's size is
+        // the page's, but the slot's constraints shrink it to fit; this keeps it that way.
+        useGrid(columns = Settings.MIN_COLUMNS, rows = 7, dockSlots = Settings.MAX_DOCK_SLOTS)
+        val dock = compose.onNodeWithTag(DOCK_TAG).fetchSemanticsNode().boundsInRoot
+        val slot = dock.width / Settings.MAX_DOCK_SLOTS
+        waitUntil(TIMEOUT_MS) { icon(firstDockApp).fetchSemanticsNode().boundsInRoot.width <= slot }
+        val width = icon(firstDockApp).fetchSemanticsNode().boundsInRoot.width
+        assertTrue("a dock icon $width px wide in a $slot px slot", width <= slot)
     }
 
     @Test

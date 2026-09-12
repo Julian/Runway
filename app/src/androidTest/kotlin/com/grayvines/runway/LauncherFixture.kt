@@ -538,13 +538,14 @@ open class LauncherFixture {
         } finally {
             compose.mainClock.autoAdvance = true
         }
-        // And, once everything has come to rest, it is in the slot it was aimed at.
-        compose.waitForIdle()
-        val rest = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
-        assertTrue(
-            "came to rest at $rest, not $slotCentre",
-            (rest - slotCentre).getDistance() < SETTLE_REST_PX,
-        )
+        // And, once everything has come to rest, it is in the slot it was aimed at. The home area
+        // is zooming back out meanwhile, on a spring a slow runner draws late: wait for the icon to
+        // arrive rather than reading it once (CI, 2026-09-12: 58 px short, the zoom's worth).
+        fun rest() = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
+        val arrived = runCatching {
+            waitUntil(TIMEOUT_MS) { (rest() - slotCentre).getDistance() < SETTLE_REST_PX }
+        }
+        assertTrue("came to rest at ${rest()}, not $slotCentre", arrived.isSuccess)
     }
 
     /**
@@ -560,13 +561,19 @@ open class LauncherFixture {
     }
 
     /**
-     * [label] is still in the first home cell once the drop has fully played out: the lifted icon
-     * has settled and a write that was going to land has had time to. Idling alone does not wait on
-     * the database.
+     * The drop after a release has fully played out: the overlay is gone, the icon has settled, and
+     * a move the drop planned has been written and is on screen. Idling alone waits on none of
+     * that, and the database only on the coordinator's word.
      */
-    protected fun assertUnmoved(label: String) {
+    protected fun awaitDropSettled() {
         awaitGone(DRAG_OVERLAY_TAG)
-        SystemClock.sleep(WRITE_GRACE_MS)
+        val dragging = compose.activity.viewModel.dragging
+        waitUntil(TIMEOUT_MS) { dragging.pending.value == null && dragging.settling.value == null }
+    }
+
+    /** [label] is still in the first home cell once the drop has fully played out. */
+    protected fun assertUnmoved(label: String) {
+        awaitDropSettled()
         assertEquals(0 to 0, homeCellOf(label))
         assertEquals(Container.HOME, placementOf(label)?.container)
     }

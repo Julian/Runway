@@ -49,7 +49,8 @@ import kotlinx.coroutines.sync.withLock
 
 /** The HOME activity. Holds no state of its own. */
 class LauncherActivity : ComponentActivity() {
-    private val viewModel: HomeViewModel by viewModels {
+    // Internal for the instrumented tests, which wait on the drag coordinator's signals.
+    internal val viewModel: HomeViewModel by viewModels {
         viewModelFactory { initializer { HomeViewModel(appGraph) } }
     }
 

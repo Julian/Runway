@@ -65,7 +65,7 @@ class DropTest : LauncherFixture() {
         sendHomeIntent()
         awaitGone(DRAG_OVERLAY_TAG)
         release() // the finger lifting afterwards drops nothing
-        Thread.sleep(WRITE_GRACE_MS)
+        awaitDropSettled()
         assertEquals(0 to 0, homeCellOf(firstHomeApp))
         icon(firstHomeApp).assertIsDisplayed()
         assertStillOnLauncher()

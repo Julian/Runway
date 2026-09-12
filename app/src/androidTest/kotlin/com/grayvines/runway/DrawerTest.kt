@@ -40,7 +40,6 @@ import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.drawer.index
-import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.shade.SHADE_HINT_TAG
@@ -318,8 +317,7 @@ class DrawerTest : LauncherFixture() {
         val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot.center
         dragOn(to = bar) // over the search bar: no cell or slot there
         release()
-        awaitGone(DRAG_OVERLAY_TAG)
-        Thread.sleep(WRITE_GRACE_MS) // a write that was going to land has had time to
+        awaitDropSettled()
         assertEquals(1 to 0, homeCellOf(label))
     }
 
