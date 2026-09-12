@@ -1,6 +1,8 @@
 package com.grayvines.runway.data
 
+import androidx.room3.deferredTransaction
 import androidx.room3.immediateTransaction
+import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
@@ -173,6 +175,12 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     internal suspend fun <T> write(block: suspend () -> T): T =
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction { block() }
+        }
+
+    /** Several reads as one snapshot: a write landing between them cannot show through. */
+    internal suspend fun <T> read(block: suspend () -> T): T =
+        db.useReaderConnection { transactor ->
+            transactor.deferredTransaction { block() }
         }
 }
 

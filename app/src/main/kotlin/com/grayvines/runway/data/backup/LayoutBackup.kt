@@ -11,8 +11,12 @@ import com.grayvines.runway.data.WorkspaceDao
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.appRef
 
-/** The layout as it is now, as a backup carries it. */
-suspend fun WorkspaceRepository.layoutBackup(): Layout {
+/**
+ * The layout as it is now, as a backup carries it. One snapshot: the app list's reconciliation can
+ * prune pages or placements at any moment, and a file with half of that in it fails its own
+ * validation on restore.
+ */
+suspend fun WorkspaceRepository.layoutBackup(): Layout = read {
     val pages = dao.allPages()
     val folderApps = dao.folderApps().groupBy { it.folderId }
     val folders = dao.folders().associateBy { it.id }
@@ -26,7 +30,7 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout {
             .sortedBy { folders.getValue(it).name }
     val drawerIndex = drawerIds.withIndex().associate { (i, id) -> id to i }
     val placements = items.mapNotNull { it.placement(folders, folderApps, drawerIndex) }
-    return Layout(
+    Layout(
         homePages = pages.count { it.container == Container.HOME },
         dockPages = pages.count { it.container == Container.DOCK },
         placements =
