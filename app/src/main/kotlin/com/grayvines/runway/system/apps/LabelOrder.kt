@@ -12,12 +12,22 @@ import java.text.Normalizer
 object LabelOrder {
     const val NON_LETTER = '#'
 
+    /** The combining marks NFD splits off a letter: the accents. */
+    private val MARKS = Regex("\\p{M}+")
+
     /** The letter a label files under: its first letter, upper case and without accents, or '#'. */
     fun initial(label: String): Char {
         val first = label.trimStart().firstOrNull()?.takeIf { it.isLetter() } ?: return NON_LETTER
         val base = Normalizer.normalize(first.toString(), Normalizer.Form.NFD).first()
         return base.uppercaseChar()
     }
+
+    /**
+     * [text] as a search compares it: lower case, accents off, so "eclair" finds "Éclair" just as
+     * the order files it among the Es.
+     */
+    fun folded(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFD).replace(MARKS, "").lowercase()
 
     /** A comparator for the current locale; make one per sort, since the locale can change. */
     fun comparator(): Comparator<String> {
