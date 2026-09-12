@@ -86,8 +86,12 @@ object LayoutEngine {
         return moves
     }
 
-    /** Page count after dropping trailing empty pages, never below [minPages]. */
+    /**
+     * Page count after dropping trailing empty pages, never below [minPages]. A container with
+     * fewer pages than that (none yet, before the first is written) has nothing to prune.
+     */
     fun pageCountAfterPrune(pageCount: Int, nonEmptyPages: Set<Int>, minPages: Int = 1): Int {
+        if (pageCount < minPages) return pageCount
         val lastUsed = nonEmptyPages.maxOrNull() ?: -1
         return (lastUsed + 1).coerceIn(minPages, pageCount)
     }

@@ -178,6 +178,15 @@ class LayoutEngineTest {
         }
 
         @Test
+        fun `a container with no pages yet has nothing to prune`() {
+            // Reconciliation can run before the first page is written; it must not throw.
+            assertEquals(
+                0,
+                LayoutEngine.pageCountAfterPrune(pageCount = 0, nonEmptyPages = emptySet()),
+            )
+        }
+
+        @Test
         fun `keeps at least minPages`() {
             assertEquals(
                 1,
