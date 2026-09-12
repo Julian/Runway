@@ -141,6 +141,19 @@ class PageFlipTest : LauncherFixture() {
     }
 
     @Test
+    fun aHoldOnAnEmptyDockSlotDoesNotKeepTheFingerFromSwipingTheDock() {
+        // The dock has no home menu, so a hold on its empty slot means nothing; the finger must
+        // still be able to swipe the dock afterwards rather than being held until it lifts.
+        val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)
+        runBlocking { graph.workspace.addPage(Container.DOCK, 1) }
+        waitUntil(TIMEOUT_MS) { dockPageCount() == 2 }
+        val empty = grid.dockSlot(settings.dockSlots) // the spare, last slot
+        holdDragAt(empty, Offset(grid.dockSlot(0).x, empty.y))
+        waitUntil(TIMEOUT_MS) { !icon(firstDockApp).isDisplayedOrFalse() } // page 1 is shown
+        release()
+    }
+
+    @Test
     fun holdingAtTheDocksLeftEdgeFlipsBackAndTheIconCanBeDroppedThere() {
         // One spare slot on the first dock page, to come back to.
         val grid = useGrid(columns = 5, rows = 7, dockSlots = settings.dockSlots + 1)

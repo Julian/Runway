@@ -67,7 +67,7 @@ internal fun GridPage(
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
     handlersFor: (HomeItem) -> DragHandlers?,
-    onHoldEmpty: (Point) -> Unit,
+    onHoldEmpty: ((Point) -> Unit)?,
     modifier: Modifier = Modifier,
     resize: WidgetResizeSession? = null,
     /** The cells the carried item would take on this page if let go now; outlined while it is. */
@@ -227,7 +227,7 @@ private fun GridLayout(
     items: List<HomeItem>,
     cellW: Int,
     cellH: Int,
-    onHoldEmpty: (Point) -> Unit,
+    onHoldEmpty: ((Point) -> Unit)?,
     modifier: Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -249,15 +249,17 @@ private fun GridLayout(
 /**
  * A long press on a cell no item covers reports its root position; one on an item is that item's
  * own affair. The hold is the same as an icon's lift. Nothing is consumed before the press lands,
- * so a swipe that starts on empty space still scrolls or pulls as it did.
+ * so a swipe that starts on empty space still scrolls or pulls as it did. With no [onHold] (the
+ * dock, which has no menu) nothing is watched at all: a hold there must not keep the finger.
  */
 @Composable
 private fun Modifier.holdsEmptyCells(
     items: List<HomeItem>,
     cellW: Int,
     cellH: Int,
-    onHold: (Point) -> Unit,
+    onHold: ((Point) -> Unit)?,
 ): Modifier {
+    if (onHold == null) return this
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val current = rememberUpdatedState(items)
     val hold = rememberUpdatedState(onHold)

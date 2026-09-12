@@ -57,7 +57,7 @@ fun Dock(
                 handlersFor = { item ->
                     drag?.handlersFor(item, page, Container.DOCK)?.grabbedShiftedBy(grabShift)
                 },
-                onHoldEmpty = {}, // the dock is for reaching, not for the home menu
+                onHoldEmpty = null, // the dock is for reaching, not for the home menu
                 landing = { drag?.plannedDockFootprint(page) },
                 modifier =
                     Modifier.onGloballyPositioned { coords ->
