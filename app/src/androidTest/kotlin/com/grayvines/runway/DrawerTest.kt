@@ -4,7 +4,6 @@ import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -15,7 +14,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -34,6 +32,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.apps.LabelOrder
 import com.grayvines.runway.ui.drawer.DRAWER_INDEX_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_LIST_TAG
@@ -60,14 +59,24 @@ import org.junit.runner.RunWith
 class DrawerTest : LauncherFixture() {
     @Test
     fun swipingUpOnThePagesOpensTheDrawerListingEveryAppAlphabetically() {
+        // Every app, twins with one label included, in the drawer's order.
+        val all = runBlocking {
+            graph.appRepository.apps
+                .first { it.isNotEmpty() }
+                .map { it.label }
+                .sortedWith(LabelOrder.comparator())
+        }
         openDrawer()
-        compose
-            .onAllNodesWithTag(DRAWER_ITEM_TAG)
-            .onFirst()
-            .assertContentDescriptionEquals(labels.first())
-        compose.onNodeWithTag(DRAWER_TAG).performScrollToNode(hasContentDescription(labels.last()))
-        drawerApp(labels.last()).assertIsDisplayed()
+        // The grid composes a window of rows from its top; then from its bottom.
+        val top = shownDrawerLabels()
+        assertEquals(all.take(top.size), top)
+        compose.onNodeWithTag(DRAWER_TAG).performScrollToNode(hasContentDescription(all.last()))
+        val bottom = shownDrawerLabels()
+        assertEquals(all.takeLast(bottom.size), bottom)
     }
+
+    private fun shownDrawerLabels() =
+        drawerItems().map { it.config[SemanticsProperties.ContentDescription].single() }
 
     @Test
     fun tappingAnAppInTheDrawerLaunchesItAndClosesTheDrawer() {
@@ -368,9 +377,7 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun aSwipeUpFromTheSearchBarOpensTheDrawerToo() {
         compose.onNodeWithTag(SEARCH_BAR_TAG).performTouchInput { swipeUp() }
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
-        }
+        awaitDrawerOpen()
     }
 
     @Test

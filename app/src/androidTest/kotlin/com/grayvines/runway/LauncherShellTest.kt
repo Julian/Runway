@@ -41,9 +41,8 @@ class LauncherShellTest : LauncherFixture() {
 
     @Test
     fun columnsSettingRelaysOutTheGridLive() {
-        val before = icon(firstHomeApp).fetchSemanticsNode().size
         runBlocking { graph.settings.update { it.copy(columns = it.columns + 2) } }
-        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).fetchSemanticsNode().size != before }
+        awaitGrid(settings.columns + 2, settings.pageRows) // the icon is sized for the new cell
     }
 
     @Test

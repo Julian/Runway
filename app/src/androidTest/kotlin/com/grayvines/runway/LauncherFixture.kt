@@ -296,13 +296,20 @@ open class LauncherFixture {
     /** Swipes the pages up and waits for the drawer to be all the way up, not merely on its way. */
     protected fun openDrawer() {
         compose.onNodeWithTag(WORKSPACE_TAG).performTouchInput { swipeUp() }
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isNotEmpty()
-        }
-        // The drawer composes as soon as it starts up the screen. Its reveal runs on the
-        // composition's clock, so idle means it has arrived, and a swipe on a drawer still rising
-        // would be a pull, not a scroll of its list.
+        awaitDrawerOpen()
+    }
+
+    /**
+     * The drawer is open and has arrived. It composes as soon as it starts up the screen, so a node
+     * is not enough: a reveal too short to count falls back with the node there the whole way. The
+     * view model's word says the gesture committed; its reveal runs on the composition's clock, so
+     * idle then means it has arrived, and a swipe on a drawer still rising would be a pull, not a
+     * scroll of its list.
+     */
+    protected fun awaitDrawerOpen() {
+        waitUntil(TIMEOUT_MS) { compose.activity.viewModel.drawerOpen.value }
         compose.waitForIdle()
+        compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
     }
 
     protected fun drawerApp(label: String) =
@@ -378,7 +385,8 @@ open class LauncherFixture {
      * Waits until the first home icon is the size the grid [columns] × [pageRows] gives it: the
      * sign that settings and layout have both reached the screen.
      */
-    private fun awaitGrid(columns: Int, pageRows: Int) {
+    /** Waits until the first home icon is sized for a cell of a [columns] by [pageRows] grid. */
+    protected fun awaitGrid(columns: Int, pageRows: Int) {
         waitUntil(LONG_TIMEOUT_MS) {
             val page = compose.onAllNodesWithTag(WORKSPACE_TAG).fetchSemanticsNodes().firstOrNull()
             val icon =

@@ -151,9 +151,9 @@ class DropTest : LauncherFixture() {
     fun dockIconsCanBeDraggedOntoAHomePage() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstDockApp, to = grid.homeCell(4, 4))
-        waitUntil(TIMEOUT_MS) {
-            placementOf(firstDockApp)?.let { it.container == Container.HOME && it.x == 4 } ?: false
-        }
+        waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.container == Container.HOME }
+        val placed = placementOf(firstDockApp)!!
+        assertEquals(Triple(0, 4, 4), Triple(placed.pageIndex, placed.x, placed.y))
     }
 
     private companion object {

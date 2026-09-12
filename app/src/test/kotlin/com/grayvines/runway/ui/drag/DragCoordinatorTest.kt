@@ -385,9 +385,11 @@ class DragCoordinatorTest {
         assertEquals(listOf(1), flips)
         c.areas.homePagePositioned(1, Bounds(0f, 0f, 300f, 200f), 3, 2)
         c.areas.homePageShown(1, 3, 2) // now on the last page
-        advanceTimeBy(EdgeDwell.ADD_PAGE_MS + EdgeDwell.FLIP_MS)
+        // Up to the tick that adds the page, and not the one after: the fake's shown page only
+        // advances when told, and until it does that page is no longer the last.
+        advanceTimeBy(EdgeDwell.ADD_PAGE_MS)
         assertEquals(3, workspace.pages)
-        assertEquals(listOf(1, 1), flips.take(2)) // the second flip is onto the new page
+        assertEquals(listOf(1, 1), flips) // the second flip is onto the new page
         c.areas.homePagePositioned(2, Bounds(0f, 0f, 300f, 200f), 3, 2)
         c.areas.homePageShown(2, 3, 2)
         val flipsSoFar = flips.size
