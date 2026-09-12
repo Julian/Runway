@@ -52,30 +52,12 @@ class BackupTest : LauncherFixture() {
     fun settingsOfferToSaveAndRestoreABackup() {
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
-        // The backup section is near the bottom: on a short screen, below the fold. The Compose
-        // rule owns the frame clock, so the page only moves once the test idles.
-        val save = By.text("Save a backup")
-        if (!device.hasObject(save)) {
-            device.findObject(By.scrollable(true))?.visibleBounds?.let { page ->
-                device.swipe(
-                    page.centerX(),
-                    page.bottom - SWIPE_INSET_PX,
-                    page.centerX(),
-                    page.top + SWIPE_INSET_PX,
-                    SWIPE_STEPS,
-                )
-            }
-            compose.waitForIdle()
-        }
+        val save = By.text("Save a backup") // near the bottom
+        scrollSettingsTo(save)
         assertTrue("no backup buttons", device.wait(Until.hasObject(save), TIMEOUT_MS))
         assertTrue(device.hasObject(By.text("Restore a backup")))
         device.pressBack()
     }
 
     private fun currentColumns() = runBlocking { graph.settings.settings.first().columns }
-
-    private companion object {
-        const val SWIPE_INSET_PX = 100
-        const val SWIPE_STEPS = 20
-    }
 }

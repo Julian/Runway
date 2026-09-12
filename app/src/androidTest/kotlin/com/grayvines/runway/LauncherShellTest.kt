@@ -115,22 +115,9 @@ class LauncherShellTest : LauncherFixture() {
         other!!
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
-        // Nothing picked yet, so the dropdown button reads Automatic. On a short screen the
-        // "Search with" row starts below the fold: swipe the page up, then let it draw (the
-        // Compose rule owns the frame clock, so nothing moves until the test idles).
+        // Nothing picked yet, so the dropdown button reads Automatic.
         val automatic = By.text("Automatic")
-        if (!device.hasObject(automatic)) {
-            device.findObject(By.scrollable(true))?.visibleBounds?.let { page ->
-                device.swipe(
-                    page.centerX(),
-                    page.bottom - SWIPE_INSET_PX,
-                    page.centerX(),
-                    page.top + SWIPE_INSET_PX,
-                    SWIPE_STEPS,
-                )
-            }
-            compose.waitForIdle()
-        }
+        scrollSettingsTo(automatic)
         assertTrue(
             "no Automatic search target in settings",
             device.wait(Until.hasObject(automatic), TIMEOUT_MS),
@@ -181,8 +168,6 @@ class LauncherShellTest : LauncherFixture() {
     private companion object {
         /** Long enough for a finish, had Back caused one, to have gone through. */
         const val BACK_GRACE_MS = 1_000L
-        const val SWIPE_INSET_PX = 100
-        const val SWIPE_STEPS = 20
         const val NO_HANDLER =
             "no web-search handler: the fixture app is one, and Gradle installs it for the tests"
         const val ONE_HANDLER =

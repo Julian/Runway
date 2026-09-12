@@ -344,19 +344,7 @@ class DrawerTest : LauncherFixture() {
 
     private fun firstDrawerLabel() = labels.first()
 
-    /** Long-presses [label] in the open drawer and nudges it, so the drag has begun. */
-    private fun liftFromDrawer(label: String) {
-        val start = drawerApp(label).fetchSemanticsNode().boundsInRoot.center
-        compose.onRoot().performTouchInput { down(start) }
-        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
-        waitUntil(TIMEOUT_MS) {
-            compose
-                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-    }
+    private fun liftFromDrawer(label: String) = lift(drawerApp(label))
 
     @Test
     fun aQuickShortSwipeOpensTheDrawer() {
@@ -677,12 +665,7 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed()
     }
 
-    private fun drawerGoneWithin(ms: Long) = runCatching {
-        waitUntil(ms) {
-            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
-        }
-    }
-        .isSuccess
+    private fun drawerGoneWithin(ms: Long) = runCatching { awaitDrawerClosed(ms) }.isSuccess
 
     /**
      * The fewest columns the settings allow, on a home grid of the same few columns and few rows:
@@ -711,12 +694,6 @@ class DrawerTest : LauncherFixture() {
         waitUntil(TIMEOUT_MS) {
             val items = drawerItems()
             items.size > columns && items.map { it.boundsInRoot.left }.toSet().size == columns
-        }
-    }
-
-    private fun awaitDrawerClosed() {
-        waitUntil(TIMEOUT_MS) {
-            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
         }
     }
 

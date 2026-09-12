@@ -1,7 +1,6 @@
 package com.grayvines.runway
 
 import android.os.SystemClock
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -9,10 +8,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -244,19 +241,7 @@ class WidgetPickerTest : LauncherFixture() {
         compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText(label))
     }
 
-    /** Long-presses the fixture widget's row and nudges it, so the drag has begun. */
-    private fun liftFromPicker() {
-        val start = fixtureChoice().fetchSemanticsNode().boundsInRoot.center
-        compose.onRoot().performTouchInput { down(start) }
-        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
-        waitUntil(TIMEOUT_MS) {
-            compose
-                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-    }
+    private fun liftFromPicker() = lift(fixtureChoice())
 
     private fun fixtureChoice() = choice(FIXTURE_WIDGET_LABEL)
 

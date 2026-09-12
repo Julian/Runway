@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsCompat.Type
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
@@ -314,6 +315,29 @@ open class LauncherFixture {
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
         waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /** A long press on [node] and a nudge past touch slop: the drag has begun, overlay showing. */
+    protected fun lift(node: SemanticsNodeInteraction) =
+        liftAt(node.fetchSemanticsNode().boundsInRoot.center)
+
+    /** [lift] at [start] (root px). */
+    protected fun liftAt(start: Offset) {
+        compose.onRoot().performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
+        waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    protected fun awaitDrawerClosed(timeoutMs: Long = TIMEOUT_MS) {
+        waitUntil(timeoutMs) {
+            compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()
         }
     }
 
@@ -638,7 +662,7 @@ open class LauncherFixture {
     }
 
     protected fun labelOnPage(page: Int): String = runBlocking {
-        val item =
+        labelOf(
             graph.workspace
                 .observe(Container.HOME)
                 .first()
@@ -646,32 +670,46 @@ open class LauncherFixture {
                 .first { it.index == page }
                 .items
                 .first()
-        graph.appRepository.apps
-            .first { it.isNotEmpty() }
-            .first { it.ref.component == item.component }
-            .label
+        )
     }
 
     protected fun labelAtDockSlot(slot: Int): String = runBlocking {
-        val item =
+        labelOf(
             graph.workspace.observe(Container.DOCK).first().pages.first().items.first {
                 it.x == slot
             }
-        graph.appRepository.apps
-            .first { it.isNotEmpty() }
-            .first { it.ref.component == item.component }
-            .label
+        )
     }
 
     protected fun labelAtHomeCell(x: Int, y: Int): String = runBlocking {
-        val item =
+        labelOf(
             graph.workspace.observe(Container.HOME).first().pages.first().items.first {
                 it.x == x && it.y == y
             }
-        graph.appRepository.apps
-            .first { it.isNotEmpty() }
-            .first { it.ref.component == item.component }
-            .label
+        )
+    }
+
+    /** The label of the app placed as [item]. */
+    protected fun labelOf(item: ItemEntity): String =
+        apps.first { it.ref.component == item.component }.label
+
+    /**
+     * Settings rows near the bottom start below the fold on a short screen: swipes the page up once
+     * if [row] is not showing, then lets it draw (the Compose rule owns the frame clock, so the
+     * page only moves once the test idles).
+     */
+    protected fun scrollSettingsTo(row: BySelector) {
+        if (device.hasObject(row)) return
+        device.findObject(By.scrollable(true))?.visibleBounds?.let { page ->
+            device.swipe(
+                page.centerX(),
+                page.bottom - SWIPE_INSET_PX,
+                page.centerX(),
+                page.top + SWIPE_INSET_PX,
+                SWIPE_STEPS,
+            )
+        }
+        compose.waitForIdle()
     }
 
     /**
@@ -772,6 +810,10 @@ const val LIFT_NUDGE_PX = 60f
 
 /** How often a refused tap is tried before giving up. */
 const val TAP_ATTEMPTS = 3
+
+/** A settings page swipe: in from the scrollable's ends, slow enough not to fling. */
+const val SWIPE_INSET_PX = 100
+const val SWIPE_STEPS = 20
 
 /** Icon sizes are rounded to pixels on the way; this much slack covers it. */
 const val GRID_TOLERANCE_PX = 2f

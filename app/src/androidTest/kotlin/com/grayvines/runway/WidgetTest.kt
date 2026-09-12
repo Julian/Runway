@@ -55,7 +55,7 @@ class WidgetTest : LauncherFixture() {
                 it.x == 2 && it.y == 0
             }
         }
-        val label = apps.first { it.ref.component == third.component }.label
+        val label = labelOf(third)
         val centre = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
         val cell = Grid(settings.columns, settings.pageRows, settings.dockSlots).homeCell(2, 0)
         assertTrue(

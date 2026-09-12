@@ -1,6 +1,5 @@
 package com.grayvines.runway
 
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -11,14 +10,11 @@ import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
@@ -31,7 +27,6 @@ import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
-import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -189,16 +184,7 @@ class DrawerFolderTest : LauncherFixture() {
             graph.workspace.observeDrawerPlacements().first().single().folderId
         }
 
-        val tile = compose.onNodeWithTag(DRAWER_FOLDER_TAG).fetchSemanticsNode().boundsInRoot
-        compose.onRoot().performTouchInput { down(tile.center) }
-        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
-        waitUntil {
-            compose
-                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
+        lift(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
         dragOn(to = grid.homeCell(0, 0))
         release()
 
