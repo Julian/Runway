@@ -22,6 +22,7 @@ jobs:
   checks:
     name: Build, lint and unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30 # about five minutes warm; a stuck daemon must not hold a runner for hours
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,8 +35,12 @@ jobs:
         with:
           cache-read-only: ${{ github.ref_name != 'main' }}
           cache-disabled: ${{ github.ref_type == 'tag' }} # zizmor: ignore[cache-poisoning]
-      - name: Formatting, detekt, lint, unit tests, release build
-        run: ./gradlew spotlessCheck detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease
+      # The test APK is built here too: the instrumented shards read the Gradle cache this job
+      # writes and never write it themselves, so the androidTest-only dependencies are fetched
+      # here once rather than by every shard on every run. It also fails a test that does not
+      # compile in minutes rather than after an emulator has booted.
+      - name: Formatting, detekt, lint, unit tests, release and test builds
+        run: ./gradlew spotlessCheck detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease :app:assembleDebugAndroidTest
 
   plan:
     name: Plan the shards
@@ -108,7 +113,9 @@ jobs:
           "-Pandroid.testInstrumentationRunnerArguments.numShards=$SHARDS"
           "-Pandroid.testInstrumentationRunnerArguments.shardIndex=$SHARD"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
+        # A job that hits its timeout is cancelled, not failed, and those are the runs whose
+        # report matters most.
+        if: failure() || cancelled()
         with:
           name: instrumented-test-report-${{ matrix.device.task }}-shard${{ matrix.shard }}
           path: |
@@ -153,13 +160,28 @@ jobs:
           path: app/src/release/generated/baselineProfiles/
           if-no-files-found: error # a release must never quietly ship without one
 
+  signing:
+    name: Check the signing secrets
+    # An unset secret would otherwise decode to an empty key file, and the build would only
+    # complain about it after the profile and the instrumented tests had spent their time.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          KEY_B64: ${{ secrets.RUNWAY_RELEASE_KEY_B64 }}
+          KEY_PASSWORD: ${{ secrets.RUNWAY_RELEASE_KEY_PASSWORD }}
+        run: |
+          test -n "$KEY_B64" || { echo "::error::RUNWAY_RELEASE_KEY_B64 is not set"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::RUNWAY_RELEASE_KEY_PASSWORD is not set"; exit 1; }
+
   release:
     name: Publish the release
     # A version tag (v0.1.0) publishes a signed APK as a GitHub release, which Obtainium watches,
     # once every check above has passed. Signing needs two repository secrets:
     # RUNWAY_RELEASE_KEY_B64 (the PKCS#12 key file, base64) and RUNWAY_RELEASE_KEY_PASSWORD.
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: [checks, instrumented, profile]
+    needs: [signing, checks, instrumented, profile]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -197,6 +219,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+        # The mapping file goes up beside the APK: without it no stack trace from this build can
+        # be read back, since the release is minified.
         run: |
           cp app/build/outputs/apk/release/app-release.apk "runway-$TAG.apk"
-          gh release create "$TAG" "runway-$TAG.apk" --title "Runway $TAG" --generate-notes
+          cp app/build/outputs/mapping/release/mapping.txt "runway-$TAG-mapping.txt"
+          gh release create "$TAG" "runway-$TAG.apk" "runway-$TAG-mapping.txt" --title "Runway $TAG" --generate-notes

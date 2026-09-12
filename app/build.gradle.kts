@@ -22,23 +22,42 @@ val releaseStore = providers.gradleProperty("runwayStoreFile").orElse(defaultSto
 
 // Versioning: the name is the release tag (runwayVersionName, "v0.1.0" -> "0.1.0"), locally a
 // dev marker; the code is the commit count, which only ever grows, so every build can update
-// the one before it.
+// the one before it. The count is read when a variant is packaged, not at configuration, so a
+// tree without git still configures, and packages with code 1; so does a shallow clone, which
+// is why the release job checks out the whole history.
 val versionNameFromTag =
     providers.gradleProperty("runwayVersionName").map { it.removePrefix("v") }.orElse("0.0-dev")
 val commitCount =
     providers
-        .exec { commandLine("git", "rev-list", "--count", "HEAD") }
-        .standardOutput
-        .asText
-        .map { it.trim().toInt() }
-val keychainPassword =
-    providers
         .exec {
-            commandLine("security", "find-generic-password", "-s", "runway-release-signing", "-w")
+            commandLine("git", "rev-list", "--count", "HEAD")
+            isIgnoreExitValue = true
         }
         .standardOutput
         .asText
-        .map { it.trim() }
+        .map { it.trim().toIntOrNull() ?: 1 }
+// The Keychain is asked only when a release task was requested: `security` costs a moment on
+// every invocation otherwise, and a missing entry must fail the release build, not `installDebug`.
+val wantsRelease = gradle.startParameter.taskNames.any { "Release" in it }
+val keychainPassword =
+    if (wantsRelease) {
+        providers
+            .exec {
+                commandLine(
+                    "security",
+                    "find-generic-password",
+                    "-s",
+                    "runway-release-signing",
+                    "-w",
+                )
+                isIgnoreExitValue = true
+            }
+            .standardOutput
+            .asText
+            .map { it.trim() }
+    } else {
+        provider { "" }
+    }
 val releasePassword = providers.gradleProperty("runwayStorePassword").orElse(keychainPassword)
 
 android {
@@ -49,18 +68,22 @@ android {
         applicationId = "com.grayvines.runway"
         minSdk = 36
         targetSdk = 37
-        versionCode = commitCount.get()
         versionName = versionNameFromTag.get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        if (releaseStore.get().exists()) {
+        if (releaseStore.get().exists() && wantsRelease) {
+            val password = releasePassword.get()
+            check(password.isNotEmpty()) {
+                "${releaseStore.get()} exists but no password was found: neither the " +
+                    "runwayStorePassword property nor a Keychain entry runway-release-signing."
+            }
             create("release") {
                 storeFile = releaseStore.get()
-                storePassword = releasePassword.get()
+                storePassword = password
                 keyAlias = "runway"
-                keyPassword = releasePassword.get()
+                keyPassword = password
             }
         }
     }
@@ -133,6 +156,10 @@ android {
     }
 }
 
+androidComponents {
+    onVariants { variant -> variant.outputs.forEach { it.versionCode.set(commitCount) } }
+}
+
 room3 { schemaDirectory("$projectDir/schemas") }
 
 // The exported schemas ride along with the instrumented tests for the migration test.
@@ -183,10 +210,11 @@ registerInstallAsHome("installAsHome", "installDebug", "com.grayvines.runway.deb
 registerInstallAsHome("installReleaseAsHome", "installRelease", "com.grayvines.runway")
 
 // The instrumented test tasks only say "there were failing tests"; name them, with messages.
-// Covers a connected device and the managed ones alike.
-val printConnectedTestFailures =
-    tasks.register("printConnectedTestFailures") {
-        val results = layout.buildDirectory.dir("outputs/androidTest-results")
+// One printer per test task, reading that run's own results directory, so a connected run does
+// not reprint a managed device's failures from last week, nor one device the other's.
+fun registerFailurePrinter(testTask: String, resultsDir: String) =
+    tasks.register("print${testTask.replaceFirstChar(Char::uppercase)}Failures") {
+        val results = layout.buildDirectory.dir("outputs/androidTest-results/$resultsDir")
         doLast {
             val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
             results
@@ -205,12 +233,8 @@ val printConnectedTestFailures =
                     val failure =
                         case.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
                     val message = failure.getAttribute("message").ifEmpty { failure.textContent }
-                    // A failed assumption is a skip, which the XML records as a failure anyway.
-                    val verdict =
-                        if ("AssumptionViolatedException" in message) "SKIPPED" else "FAILED"
                     logger.error(
-                        "{} {}.{}\n    {}",
-                        verdict,
+                        "FAILED {}.{}\n    {}",
                         case.getAttribute("classname"),
                         case.getAttribute("name"),
                         message.lineSequence().first(),
@@ -220,16 +244,20 @@ val printConnectedTestFailures =
     }
 
 // Instrumented tests on a connected device uninstall the app afterwards; put the debug build
-// back as home. Managed devices are thrown away, so there is nothing to put back.
-tasks
-    .matching { it.name == "connectedDebugAndroidTest" }
-    .configureEach {
-        finalizedBy(printConnectedTestFailures, "installAsHome")
-    }
+// back as home. Managed devices are thrown away, so there is nothing to put back. A device
+// group's task runs each device's own task, which prints for itself.
+val connectedTest = "connectedDebugAndroidTest"
+val managedDeviceTests =
+    android.testOptions.managedDevices.localDevices.names.associateBy { "${it}DebugAndroidTest" }
 
-tasks
-    .matching { it.name.endsWith("DebugAndroidTest") && it.name != "connectedDebugAndroidTest" }
-    .configureEach { finalizedBy(printConnectedTestFailures) }
+val connectedPrinter = registerFailurePrinter(connectedTest, "connected/debug")
+
+tasks.named { it == connectedTest }.configureEach { finalizedBy(connectedPrinter, "installAsHome") }
+
+managedDeviceTests.forEach { (testTask, device) ->
+    val printer = registerFailurePrinter(testTask, "managedDevice/debug/$device")
+    tasks.named { it == testTask }.configureEach { finalizedBy(printer) }
+}
 
 // The baseline profile tells ART which code to compile at install time: the startup, drawer and
 // drag paths the baselineprofile module's journey walks. CI records it in a job of its own,
