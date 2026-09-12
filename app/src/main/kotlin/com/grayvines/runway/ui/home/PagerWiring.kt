@@ -81,6 +81,7 @@ private suspend fun PagerState.knows(page: Int): Boolean =
         withTimeoutOrNull(PAGE_COUNT_LAG_MS) { snapshotFlow { pageCount }.first { it > page } } !=
             null
 
-private const val FLIP_SCROLL_MS = 250
+/** How long a flip's scroll takes. */
+internal const val FLIP_SCROLL_MS = 250
 /** How long a flip waits for the pager to learn of a page just added: a few compositions. */
 private const val PAGE_COUNT_LAG_MS = 250L

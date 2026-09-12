@@ -40,10 +40,12 @@ import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
+import com.grayvines.runway.ui.drag.EdgeDwell
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.FLIP_SCROLL_MS
 import com.grayvines.runway.ui.home.ICON_INSET
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
@@ -750,14 +752,20 @@ const val NO_COMPOSITION = "No compose hierarchies found"
  */
 const val FIXTURE_PACKAGE = "com.grayvines.runway.fixture"
 const val LONG_PRESS_MS = 1_000L
+
+/** Real time past a dwell and the scroll it starts, for a runner that is slow to draw either. */
+const val DWELL_MARGIN_MS = 900L
 /** Longer than the dwell that adds a page, in real time. */
-const val EDGE_ADD_MS = 2_500L
+const val EDGE_ADD_MS = EdgeDwell.ADD_PAGE_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 /** Longer than the dwell that flips a page, in real time. */
-const val EDGE_FLIP_MS = 1_200L
+const val EDGE_FLIP_MS = EdgeDwell.FLIP_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 const val FLIP_SAMPLE_MS = 30L
 const val FLIP_WATCH_MS = 2_500L
-const val MIN_REST_MS = 100L // the dwell is 450 ms and the scroll 250 ms
-const val LIFT_HOLD_MS = 550L
+/** Well under the flip dwell, so a page seen this long at rest was not flipped straight through. */
+const val MIN_REST_MS = 100L
+
+/** The launcher's own hold, under the name the tests in this package have always used. */
+const val LIFT_HOLD_MS = com.grayvines.runway.ui.home.LIFT_HOLD_MS
 
 /** Past touch slop: enough movement after a hold to turn it into a drag. */
 const val LIFT_NUDGE_PX = 60f

@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
 
 /** How long a finger must rest on an icon before it lifts; longer than the platform default. */
-private const val LIFT_HOLD_MS = 550L
+internal const val LIFT_HOLD_MS = 550L
 
 /**
  * An icon over its label, the way everything in a grid is drawn: on the home screen, in the drawer

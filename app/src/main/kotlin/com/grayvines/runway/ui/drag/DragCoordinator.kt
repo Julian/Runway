@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.drag
 
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.ui.home.FLIP_SCROLL_MS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -342,12 +343,11 @@ class DragCoordinator(
     }
 
     companion object {
-        private const val SETTLE_TIMEOUT_MS = 2_000L
+        /** The safety net: a drop the layout never reflects is given up on after this long. */
+        const val SETTLE_TIMEOUT_MS = 2_000L
 
-        /**
-         * Longer than a flip's scroll (250 ms) by a margin: a page that never settles still drops.
-         */
-        const val SETTLE_WAIT_MS = 600L
+        /** Longer than a flip's scroll by a margin: a page that never settles still drops. */
+        const val SETTLE_WAIT_MS = FLIP_SCROLL_MS + 350L
 
         /** How long a finger rests on a cell before its neighbours slide aside. */
         const val REST_MS = 300L

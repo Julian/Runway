@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.DragMotion
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
@@ -131,11 +132,11 @@ class DragFeedbackTest : LauncherFixture() {
                 abs(iconPeak - areaTrough) <= 1,
             )
             assertTrue(
-                "no overshoot on lift: ${icons.max()} vs ${restingIcon * 1.2f}",
-                icons.max() > restingIcon * 1.2f,
+                "no overshoot on lift: ${icons.max()} vs ${restingIcon * DragMotion.LIFTED_SCALE}",
+                icons.max() > restingIcon * DragMotion.LIFTED_SCALE,
             )
-            assertEquals(restingIcon * 1.2f, icons.last(), 2f)
-            assertEquals(restingArea * 0.94f, areas.last(), 2f)
+            assertEquals(restingIcon * DragMotion.LIFTED_SCALE, icons.last(), 2f)
+            assertEquals(restingArea * DragMotion.ZOOM, areas.last(), 2f)
         } finally {
             compose.mainClock.autoAdvance = true
         }

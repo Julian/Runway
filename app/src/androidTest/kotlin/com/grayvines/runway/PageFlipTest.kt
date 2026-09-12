@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
@@ -283,7 +284,7 @@ class PageFlipTest : LauncherFixture() {
     }
 
     private companion object {
-        /** Less than the overlay's two-second safety net: the icon must come back sooner. */
-        const val SETTLE_MS = 1_500L
+        /** Less than the safety net: the icon must come back sooner than a given-up drop. */
+        const val SETTLE_MS = DragCoordinator.SETTLE_TIMEOUT_MS - 500L
     }
 }
