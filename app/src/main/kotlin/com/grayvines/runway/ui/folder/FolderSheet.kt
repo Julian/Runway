@@ -96,9 +96,12 @@ fun FolderSheet(
     iconSize: Dp,
     actions: FolderActions,
     drag: DragSession?,
+    /** Asked to go (an app was dragged out): the sheet runs its close motion, then closes. */
+    leaving: Boolean = false,
 ) {
     val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
+    LaunchedEffect(leaving) { if (leaving) motion.close() }
     // Whatever had the keyboard (the drawer's search field) gives it up as the sheet opens: what
     // is typed now is for the folder, not for a field hidden behind it.
     val focusManager = LocalFocusManager.current

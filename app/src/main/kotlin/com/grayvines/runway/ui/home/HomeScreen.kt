@@ -391,7 +391,7 @@ private fun OpenFolder(
     drag: DragSession,
 ) {
     val folder = state.item(open.itemId) ?: return
-    FolderSheet(folder, open.from, iconSize, actions, drag)
+    FolderSheet(folder, open.from, iconSize, actions, drag, leaving = open.leaving)
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */

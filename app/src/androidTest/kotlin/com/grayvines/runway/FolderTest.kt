@@ -357,19 +357,28 @@ class FolderTest : LauncherFixture() {
         return neighbour
     }
 
-    /** Long-presses [label] in the open folder and nudges it, so the drag has begun. */
-    private fun liftFromFolder(label: String) {
-        val start = folderApp(label).fetchSemanticsNode().boundsInRoot.center
+    @Test
+    fun liftingAnAppOutOfTheFolderSlidesTheSheetAwayRatherThanCuttingIt() {
+        makeFolder()
+        val start = folderApp(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput { down(start) }
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-        compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
-        waitUntil(TIMEOUT_MS) {
-            compose
-                .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+        // Hold the clock: the frame after the drag begins must still show the sheet, on its way
+        // out, not a hole where it was.
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onRoot().performTouchInput { moveBy(Offset(0f, -LIFT_NUDGE_PX)) }
+            compose.mainClock.advanceTimeByFrame()
+            compose.onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag(FOLDER_TAG).assertExists()
+        } finally {
+            compose.mainClock.autoAdvance = true
         }
+        awaitFolderClosed()
+        release()
     }
+
+    private fun liftFromFolder(label: String) = lift(folderApp(label))
 
     private fun folderName() = runBlocking {
         graph.workspace.observeFolders().first().singleOrNull()?.name

@@ -65,7 +65,11 @@ fun HomeState.allItems(): List<HomeItem> =
     (homePages + dockPages).flatMap { it.items } + drawerFolders
 
 /** A folder placement that is open, and the cell it opened out of. */
-data class OpenFolder(val itemId: Long, val from: Bounds)
+/**
+ * The folder whose sheet is up, opened out of [from]; [leaving] once something was dragged out of
+ * it, when the sheet slides away under the finger before it goes.
+ */
+data class OpenFolder(val itemId: Long, val from: Bounds, val leaving: Boolean = false)
 
 /** One thing drawn in a cell. */
 data class HomeItem(
@@ -354,7 +358,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         widgetResize.dismiss()
         widgetPicker.dismiss()
         closeDrawer()
-        closeFolder()
+        // The open folder's sheet slides away, as the drawer does under a drag; it closes after.
+        _openFolder.value = _openFolder.value?.copy(leaving = true)
         dragging.startDrag(source, pointer, grab)
     }
 
