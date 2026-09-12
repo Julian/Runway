@@ -194,11 +194,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                                 "the plan was made; nothing saved"
                         }
                     }
-                // A moved widget gets its frame, as a placed one does: the size may want changing
-                // in the new spot.
-                if (saved && state.value.item(move.itemId)?.kind == ItemKind.WIDGET) {
-                    widgetResize.show(move.itemId)
-                }
                 return saved
             }
 
@@ -313,6 +308,23 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
                 val framed = widgetResize.shown.value
                 if (framed != null && s.loaded && s.item(framed) == null) widgetResize.dismiss()
+            }
+        }
+        // A placed widget's drag ends with the widget framed, wherever it came to rest: moved,
+        // refused (nowhere to go) or put back by Back alike. The frame waits for the settle.
+        viewModelScope.launch {
+            var carried: DragSource? = null
+            dragging.drag.collect { drag ->
+                val source = drag?.source
+                if (source != null) {
+                    carried = source
+                } else {
+                    val ended = carried ?: return@collect
+                    carried = null
+                    if (ended.kind == ItemKind.WIDGET && ended.itemId != 0L) {
+                        widgetResize.show(ended.itemId)
+                    }
+                }
             }
         }
     }

@@ -50,7 +50,10 @@ class WidgetResizeSession(
     var pulling by mutableStateOf(false)
         internal set
 
-    /** The outline as a pulled handle has it (root px), while a handle is pulled; else null. */
+    /**
+     * The finger's whole pull on a handle as a rectangle (root px), beyond what the widget can take
+     * too, while a handle is pulled; else null. What the search bar sees pressing against it.
+     */
     var outline by mutableStateOf<Rect?>(null)
         internal set
 

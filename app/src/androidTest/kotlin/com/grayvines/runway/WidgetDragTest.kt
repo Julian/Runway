@@ -143,6 +143,28 @@ class WidgetDragTest : LauncherFixture() {
         awaitGone(DRAG_OVERLAY_TAG)
         assertEquals(0 to 0, widget().let { it.x to it.y })
         assertEquals(Container.HOME, widget().container)
+        awaitFrame() // back where it was, the widget is framed as after any drop
+    }
+
+    @Test
+    fun aWidgetPutBackByBackIsFramedAgain() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        placeFixtureWidget(0, 0)
+        awaitWidgetCell()
+        holdDragAt(widgetCentre(), grid.homeCell(2, 2))
+        device.pressBack()
+        awaitGone(DRAG_OVERLAY_TAG)
+        assertEquals(0 to 0, widget().let { it.x to it.y })
+        awaitFrame()
+    }
+
+    /**
+     * The resize frame is up: a widget drag that ends, however it ends, leaves the widget framed.
+     */
+    private fun awaitFrame() {
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(WIDGET_RESIZE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /** On a full page the only room is what the widget itself leaves, and that is enough. */

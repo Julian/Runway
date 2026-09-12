@@ -128,14 +128,34 @@ class WidgetResizeTest : LauncherFixture() {
 
     @Test
     fun aPulledHandleStopsAtANeighbour() {
+        // Small cells, so the provider's largest size is several of them and the neighbour, not
+        // that, is what stops the pull.
+        val grid = useGrid(columns = 10, rows = 7)
         placeFixtureWidget(0, 0) // (2, 0) stays the seed's icon
         awaitWidgetCell()
         holdWidget()
         release()
-        pull("Right edge", Offset(grid.cellWidth() * 2, 0f))
-        // The cell would already be drawn at the pulled size were the pull taken.
+        val start = handle("Right edge").boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(start)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += Offset(grid.cellWidth() * 2 / DRAG_STEPS, 0f)
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+        }
+        // The cell would already be drawn at the pulled size were the pull taken, and the outline
+        // (the handle rides its edge) stops where the widget does rather than following the finger
+        // over the neighbour.
         val shown = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot
         assertTrue("drawn ${shown.width} wide", abs(shown.width - grid.cellWidth() * 2) < 2f)
+        val edge = handle("Right edge").boundsInRoot.center.x
+        assertTrue(
+            "the outline ran on to $edge past the widget's edge at ${shown.right}",
+            abs(edge - shown.right) < 2f,
+        )
+        compose.onRoot().performTouchInput { up() }
         assertEquals(2 to 1, widget().let { it.spanX to it.spanY })
     }
 

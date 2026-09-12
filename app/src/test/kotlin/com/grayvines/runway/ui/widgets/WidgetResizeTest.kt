@@ -81,6 +81,19 @@ class WidgetResizeTest {
     }
 
     @Test
+    fun `the reach of an edge is as far as the neighbours, the grid and the sizes allow, both ways`() {
+        val at = Footprint(1, 1, 2, 1)
+        val neighbour = listOf(Placed(9, Footprint(4, 1)))
+        assertEquals(
+            -1..1,
+            reach(at, Edge.RIGHT, both, grid, neighbour),
+        ) // one cell to the neighbour
+        assertEquals(-1..1, reach(at, Edge.LEFT, both, grid, emptyList())) // one cell to the grid
+        assertEquals(0..2, reach(at, Edge.BOTTOM, both, grid, emptyList())) // the largest height
+        assertEquals(0..0, reach(at, Edge.RIGHT, both.copy(horizontal = false), grid, emptyList()))
+    }
+
+    @Test
     fun `a pull that cannot move at all changes nothing`() {
         val at = Footprint(0, 0, 2, 1)
         assertEquals(at, resized(at, Edge.LEFT, 2, both, grid, emptyList()))

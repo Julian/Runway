@@ -242,8 +242,16 @@ private class Pull(
 
     private var edge: Edge? = null
 
-    /** How far outward the finger has pulled the edge, in px, read as the frame is drawn. */
+    /**
+     * How far outward the edge is drawn pulled, in px, read as the frame is drawn: the finger's
+     * pull, kept within what the widget can take ([reach]), so the outline never shows room it
+     * cannot have.
+     */
     private var px by mutableStateOf(0f)
+
+    /** The finger's whole pull, px, unclamped: what presses against the search bar. */
+    private var pulled = 0f
+    private var within = 0f..0f
     private var base = Rect.Zero
     private var origin = Footprint(0, 0)
 
@@ -254,9 +262,13 @@ private class Pull(
         session.pulling = true
         this.edge = edge
         px = 0f
+        pulled = 0f
         cells = 0
         origin = footprint
         base = anchor
+        val cell = if (edge.horizontal) cellPx.width else cellPx.height
+        val cellsWithin = reach(origin, edge, limits, grid, others)
+        within = cellsWithin.first * cell..cellsWithin.last * cell
     }
 
     fun moved(delta: Offset) {
@@ -269,13 +281,11 @@ private class Pull(
                 Edge.BOTTOM -> delta.y
             }
         val cell = if (e.horizontal) cellPx.width else cellPx.height
-        val span = if (e.horizontal) origin.width else origin.height
-        val least = if (e.horizontal) limits.minWidth else limits.minHeight
-        val most = if (e.horizontal) limits.maxWidth else limits.maxHeight
-        px = (px + outward).coerceIn((least - span) * cell, (most - span) * cell)
+        pulled += outward
+        px = pulled.coerceIn(within.start, within.endInclusive)
         cells = cellsPulled(px, cell, cells)
         session.preview = itemId to resized(origin, e, cells, limits, grid, others)
-        session.outline = outline()
+        session.outline = outline(pulled)
     }
 
     fun end() {
@@ -284,18 +294,22 @@ private class Pull(
         val to = session.previewFor(itemId)
         edge = null
         px = 0f
+        pulled = 0f
         if (to != null && to != origin) session.onResize(itemId, to)
     }
 
-    /** The outline: the widget's cell with the pulled edge where the finger has it. */
-    fun outline(): Rect {
+    /** The outline as drawn: the widget's cell with the pulled edge as far as it can go. */
+    fun outline(): Rect = outline(px)
+
+    /** The widget's cell with the pulled edge [by] px outward. */
+    private fun outline(by: Float): Rect {
         val a = anchor
         return when (edge) {
             null -> a
-            Edge.LEFT -> Rect(base.left - px, a.top, a.right, a.bottom)
-            Edge.RIGHT -> Rect(a.left, a.top, base.right + px, a.bottom)
-            Edge.TOP -> Rect(a.left, base.top - px, a.right, a.bottom)
-            Edge.BOTTOM -> Rect(a.left, a.top, a.right, base.bottom + px)
+            Edge.LEFT -> Rect(base.left - by, a.top, a.right, a.bottom)
+            Edge.RIGHT -> Rect(a.left, a.top, base.right + by, a.bottom)
+            Edge.TOP -> Rect(a.left, base.top - by, a.right, a.bottom)
+            Edge.BOTTOM -> Rect(a.left, a.top, a.right, base.bottom + by)
         }
     }
 }

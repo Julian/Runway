@@ -96,6 +96,25 @@ fun resized(
     return best
 }
 
+/**
+ * How far [edge] can move, in cells, from [current]: inward (negative) to outward (positive), as
+ * far as the provider's sizes, the grid and the [others] allow. The outline a handle drags is kept
+ * within this, so it never shows room the widget cannot take.
+ */
+fun reach(
+    current: Footprint,
+    edge: Edge,
+    limits: ResizeLimits,
+    grid: GridSize,
+    others: List<Placed>,
+): IntRange {
+    val most = maxOf(grid.columns, grid.rows)
+    fun along(f: Footprint) = if (edge.horizontal) f.width else f.height
+    val outward = along(resized(current, edge, most, limits, grid, others)) - along(current)
+    val inward = along(resized(current, edge, -most, limits, grid, others)) - along(current)
+    return inward..outward
+}
+
 private fun Footprint.fits(limits: ResizeLimits, grid: GridSize, others: List<Placed>) =
     width in limits.minWidth..limits.maxWidth &&
         height in limits.minHeight..limits.maxHeight &&
