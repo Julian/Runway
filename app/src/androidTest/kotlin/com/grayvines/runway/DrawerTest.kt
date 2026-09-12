@@ -291,7 +291,7 @@ class DrawerTest : LauncherFixture() {
         val label = labelOnPage(1) // not on the first page: a fresh drop, not a pick-up
         openDrawer()
         liftFromDrawer(label)
-        dragOn(to = grid.homeCell(1, 1) - Offset(grid.cellWidth() * FRESH_BESIDE, 0f))
+        dragOn(to = grid.homeCell(1, 1) - Offset(grid.cellWidth() * WELL_BESIDE, 0f))
         awaitDrawerClosed()
         release()
         waitUntil(TIMEOUT_MS) { homeCellOf(label) in occupants.keys }
@@ -705,8 +705,6 @@ class DrawerTest : LauncherFixture() {
     private companion object {
         /** Frames into the drawer's close at which it is still on its way out. */
         const val CLOSE_FRAMES = 3
-        /** Outside the fold zone of the icon the finger is beside. */
-        const val FRESH_BESIDE = 0.45f
         const val PULL_STEPS = 10
         const val TYPED = "quickbrownfox"
         const val QUICK_SWIPE = 0.08f

@@ -11,7 +11,6 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
-import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -252,21 +251,17 @@ class PageFlipTest : LauncherFixture() {
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
         // Which page is settled, sampled in real time until the last page shows. Fetching a node
         // blocks while the pager animates, so a sample is (started, finished, page): -1 while
-        // scrolling. The home area is zoomed out during a drag, so cells are measured from the
-        // workspace as it is drawn.
+        // scrolling. The home area is zoomed out during a drag, so cells are measured by a grid
+        // made from the workspace as it is drawn.
         val samples = mutableListOf<Triple<Long, Long, Int>>()
         val deadline = SystemClock.uptimeMillis() + FLIP_WATCH_MS
         while (SystemClock.uptimeMillis() < deadline && samples.lastOrNull()?.third != 2) {
             Thread.sleep(FLIP_SAMPLE_MS)
             val started = SystemClock.uptimeMillis()
-            val area = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
+            val drawn = Grid(settings.columns, settings.pageRows, settings.dockSlots)
             val page = pages.indexOfFirst { label ->
                 val (x, y) = cells[pages.indexOf(label)]
-                val expected =
-                    Offset(
-                        area.left + (x + 0.5f) * area.width / settings.columns,
-                        area.top + (y + 0.5f) * area.height / settings.pageRows,
-                    )
+                val expected = drawn.homeCell(x, y)
                 // A page flipped away from may be disposed, and with it the marker's cell.
                 val cell =
                     compose

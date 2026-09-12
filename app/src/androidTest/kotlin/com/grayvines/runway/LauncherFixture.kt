@@ -39,9 +39,23 @@ import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
+import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.DropAreas
+import com.grayvines.runway.ui.drag.DropTarget
+import com.grayvines.runway.ui.drag.EDGE_CELL_FRACTION
+import com.grayvines.runway.ui.drag.Edge
 import com.grayvines.runway.ui.drag.EdgeDwell
+import com.grayvines.runway.ui.drag.EdgeHover
+import com.grayvines.runway.ui.drag.FOLD_KEEP_ZONE
+import com.grayvines.runway.ui.drag.FOLD_ZONE
+import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.drag.cellUnder
+import com.grayvines.runway.ui.drag.centreOf
+import com.grayvines.runway.ui.drag.edgeAt
+import com.grayvines.runway.ui.drag.homeCellAt
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
@@ -401,32 +415,53 @@ open class LauncherFixture {
     }
 
     /** Screen geometry after switching to a grid, in root pixels. */
+    /**
+     * Where things are on screen, in root pixels, through the launcher's own drop geometry: a
+     * [DropAreas] over the workspace and dock as drawn when the grid was made. Made at rest, that
+     * is the layout before any drag zoom, which is what sizes are compared against; a grid made
+     * mid-drag measures the zoomed areas, as the launcher itself does.
+     */
     protected inner class Grid(val columns: Int, val pageRows: Int, val dockSlots: Int) {
-        private val page = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
-        private val dock = compose.onNodeWithTag(DOCK_TAG).fetchSemanticsNode().boundsInRoot
-
-        fun homeCell(x: Int, y: Int) =
-            Offset(
-                page.left + (x + 0.5f) * page.width / columns,
-                page.top + (y + 0.5f) * page.height / pageRows,
+        private val page = bounds(WORKSPACE_TAG)
+        private val dock = bounds(DOCK_TAG)
+        private val areas =
+            DropAreas(
+                home = page,
+                columns = columns,
+                rows = pageRows,
+                dock = dock,
+                dockSlots = dockSlots,
             )
 
-        fun dockSlot(slot: Int) =
-            Offset(dock.left + (slot + 0.5f) * dock.width / dockSlots, dock.center.y)
+        private fun bounds(tag: String) =
+            compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.let {
+                Bounds(it.left, it.top, it.right, it.bottom)
+            }
 
-        fun searchBar() = Offset(page.center.x, page.top / 2)
+        fun homeCell(x: Int, y: Int) = areas.centreOf(Container.HOME, Footprint(x, y))!!.offset
 
-        /** Just inside the right edge zone, on [row]. */
+        fun dockSlot(slot: Int) = areas.centreOf(Container.DOCK, Footprint(slot, 0))!!.offset
+
+        fun searchBar() = Offset((page.left + page.right) / 2, page.top / 2)
+
+        /** The middle of the right edge zone, on [row]: a rest here flips the page. */
         fun rightEdge(row: Int) =
-            Offset(
-                page.right - page.width * 0.02f,
-                page.top + (row + 0.5f) * page.height / pageRows,
-            )
+            Offset(page.right - edgeZone(page, columns) / 2, homeCell(0, row).y).also {
+                check(areas.edgeAt(it.point) == EdgeHover(Container.HOME, Edge.RIGHT))
+            }
 
-        /** Just inside the dock's right or left edge zone. */
-        fun dockRightEdge() = Offset(dock.right - dock.width * 0.02f, dock.center.y)
+        /** The middle of the dock's right or left edge zone. */
+        fun dockRightEdge() =
+            Offset(dock.right - edgeZone(dock, dockSlots) / 2, dockSlot(0).y).also {
+                check(areas.edgeAt(it.point) == EdgeHover(Container.DOCK, Edge.RIGHT))
+            }
 
-        fun dockLeftEdge() = Offset(dock.left + dock.width * 0.02f, dock.center.y)
+        fun dockLeftEdge() =
+            Offset(dock.left + edgeZone(dock, dockSlots) / 2, dockSlot(0).y).also {
+                check(areas.edgeAt(it.point) == EdgeHover(Container.DOCK, Edge.LEFT))
+            }
+
+        private fun edgeZone(area: Bounds, across: Int) = area.width / across * EDGE_CELL_FRACTION
 
         fun dockSlotWidth() = dock.width / dockSlots
 
@@ -434,21 +469,19 @@ open class LauncherFixture {
 
         fun cellHeight() = page.height / pageRows
 
-        /** The dock slot a root-pixel point falls in. */
-        fun dockSlotAt(p: Offset) = ((p.x - dock.left) / (dock.width / dockSlots)).toInt()
+        /** The dock slot a root-pixel point in the dock falls in. */
+        fun dockSlotAt(p: Offset) =
+            (areas.cellUnder(p.point, zone = 1f) as DropTarget.DockSlot).slot
 
-        /** The home cell a root-pixel point falls in. */
-        fun cellAt(p: Offset) =
-            ((p.x - page.left) / (page.width / columns)).toInt() to
-                ((p.y - page.top) / (page.height / pageRows)).toInt()
+        /** The home cell a root-pixel point on the page falls in. */
+        fun cellAt(p: Offset) = areas.homeCellAt(p.point)!!.let { it.x to it.y }
     }
 
     protected fun useGrid(columns: Int, rows: Int, dockSlots: Int = settings.dockSlots): Grid {
-        runBlocking {
-            graph.settings.update { it.copy(columns = columns, rows = rows, dockSlots = dockSlots) }
-        }
-        awaitGrid(columns, rows - Settings.RESERVED_ROWS)
-        return Grid(columns, rows - Settings.RESERVED_ROWS, dockSlots)
+        val wanted = settings.copy(columns = columns, rows = rows, dockSlots = dockSlots)
+        runBlocking { graph.settings.update { wanted } }
+        awaitGrid(wanted.columns, wanted.pageRows)
+        return Grid(wanted.columns, wanted.pageRows, wanted.dockSlots)
     }
 
     /** A long press on [from]'s icon, then a drag to [to], all in root coordinates. */
@@ -548,7 +581,7 @@ open class LauncherFixture {
         }
         // And, once everything has come to rest, it is in the slot it was aimed at. The home area
         // is zooming back out meanwhile, on a spring a slow runner draws late: wait for the icon to
-        // arrive rather than reading it once (CI, 2026-09-12: 58 px short, the zoom's worth).
+        // arrive rather than reading it once.
         fun rest() = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
         val arrived = runCatching {
             waitUntil(TIMEOUT_MS) { (rest() - slotCentre).getDistance() < SETTLE_REST_PX }
@@ -649,7 +682,7 @@ open class LauncherFixture {
 
     /**
      * The settings screen has come up, after a tap on our icon or a menu's "Settings". A cold
-     * activity launch on a loaded runner can take eight seconds (CI, 2026-09-11), so the long wait.
+     * activity launch on a loaded runner can take many seconds, so the long wait.
      */
     protected fun awaitSettingsOpen() {
         assertTrue(
@@ -836,8 +869,17 @@ const val GRID_TOLERANCE_PX = 2f
 /** How long a database write that was going to happen takes to show up. */
 const val WRITE_GRACE_MS = 500L
 
-/** Of a cell's width from its middle: outside the middle 60% where a drop folds. */
-const val BESIDE = 0.35f
+/** Of a cell's width from its middle: just outside the middle share where a drop folds. */
+const val BESIDE = FOLD_ZONE / 2 + 0.05f
+
+/** Outside even the wider zone a fold, once begun, keeps to, so beside by any measure. */
+const val WELL_BESIDE = FOLD_KEEP_ZONE / 2
+
+private val Point.offset: Offset
+    get() = Offset(x, y)
+
+private val Offset.point: Point
+    get() = Point(x, y)
 const val FRAME_MS = 16L
 const val LIFT_FRAMES = 60
 const val DRAG_STEPS = 10

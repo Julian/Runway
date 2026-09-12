@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.observeDrawerPlacements
@@ -223,14 +224,27 @@ class DrawerFolderTest : LauncherFixture() {
     private fun drawerFolderTiles() =
         compose.onAllNodesWithTag(DRAWER_FOLDER_TAG).fetchSemanticsNodes()
 
-    /** Each drawer folder's app labels, in the order the folders were made. */
+    /**
+     * Each drawer folder's app labels, in the order the folders were made. One read: a write
+     * landing between a folders query and a placements query showed placements of a folder the
+     * other query had not seen, and so nothing at all.
+     */
     private fun drawerFolders(): List<List<String>> = runBlocking {
-        val folders = graph.workspace.observeFolders().first().associateBy { it.id }
         val installed = graph.appRepository.apps.first()
-        graph.workspace.observeDrawerPlacements().first().mapNotNull { placement ->
-            folders[placement.folderId]?.apps?.map { ref ->
-                installed.first { it.ref == ref }.label
-            }
+        val workspace = graph.workspace
+        workspace.read {
+            val apps = workspace.dao.folderApps().groupBy { it.folderId }
+            val folders = workspace.dao.folders().associateBy { it.id }
+            workspace.dao
+                .items()
+                .filter { it.container == Container.DRAWER }
+                .mapNotNull { placement ->
+                    folders[placement.folderId]?.let { folder ->
+                        apps[folder.id].orEmpty().map { row ->
+                            installed.first { it.ref == AppRef(row.component, row.profile) }.label
+                        }
+                    }
+                }
         }
     }
 }

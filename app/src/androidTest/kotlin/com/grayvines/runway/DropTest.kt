@@ -155,9 +155,4 @@ class DropTest : LauncherFixture() {
         val placed = placementOf(firstDockApp)!!
         assertEquals(Triple(0, 4, 4), Triple(placed.pageIndex, placed.x, placed.y))
     }
-
-    private companion object {
-        /** Outside even the wider zone a fold, once begun, keeps to. */
-        const val WELL_BESIDE = 0.45f
-    }
 }

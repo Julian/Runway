@@ -316,14 +316,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             var carried: DragSource? = null
             dragging.drag.collect { drag ->
                 val source = drag?.source
-                if (source != null) {
-                    carried = source
-                } else {
-                    val ended = carried ?: return@collect
-                    carried = null
-                    if (ended.kind == ItemKind.WIDGET && ended.itemId != 0L) {
-                        widgetResize.show(ended.itemId)
-                    }
+                val ended = carried
+                carried = source
+                if (source == null && ended?.kind == ItemKind.WIDGET && ended.itemId != 0L) {
+                    widgetResize.show(ended.itemId)
                 }
             }
         }
