@@ -44,6 +44,8 @@ import com.grayvines.runway.ui.widgets.WidgetPrompts
 import com.grayvines.runway.ui.widgets.rememberWidgetResizeSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The HOME activity. Holds no state of its own. */
 class LauncherActivity : ComponentActivity() {
@@ -75,6 +77,13 @@ class LauncherActivity : ComponentActivity() {
     private var pendingBind: CompletableDeferred<Boolean>? = null
     private var pendingSetup: CompletableDeferred<Boolean>? = null
 
+    /**
+     * One prompt at a time: a second widget asked for while a prompt is up waits for that answer,
+     * then asks its own, rather than overwriting the first's slot (which would leave the first
+     * waiting for good and hand the second an answer meant for another id).
+     */
+    private val prompting = Mutex()
+
     /** The dialogs a widget may need before it is added; each answers when the user has. */
     private val widgetPrompts =
         object : WidgetPrompts {
@@ -82,24 +91,24 @@ class LauncherActivity : ComponentActivity() {
                 id: Int,
                 provider: ComponentName,
                 profile: UserHandle,
-            ): Boolean {
+            ): Boolean = prompting.withLock {
                 val answer = CompletableDeferred<Boolean>()
                 pendingBind = answer
                 bindRequest.launch(bindWidgetRequest(id, provider, profile))
-                return answer.await()
+                answer.await()
             }
 
-            override suspend fun configure(id: Int): Boolean {
+            override suspend fun configure(id: Int): Boolean = prompting.withLock {
                 val answer = CompletableDeferred<Boolean>()
                 pendingSetup = answer
                 try {
                     appGraph.widgets.configure(this@LauncherActivity, id, REQUEST_WIDGET_SETUP)
+                    answer.await()
                 } catch (e: ActivityNotFoundException) {
                     Log.w(TAG, "no setup screen for widget $id", e)
                     pendingSetup = null
-                    return false
+                    false
                 }
-                return answer.await()
             }
         }
 
@@ -167,8 +176,11 @@ class LauncherActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // The view model outlives this activity, and must not keep it through the prompts.
+        // The view model outlives this activity, and must not keep it through the prompts. A
+        // prompt still up answers a later instance, which has no one waiting: the add is dropped.
         if (viewModel.widgetPicker.prompts === widgetPrompts) viewModel.widgetPicker.prompts = null
+        pendingBind?.complete(false)
+        pendingSetup?.complete(false)
         super.onDestroy()
     }
 
