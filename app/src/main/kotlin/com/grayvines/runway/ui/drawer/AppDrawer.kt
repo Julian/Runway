@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,8 +51,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
@@ -89,6 +93,8 @@ private const val ICON_SHARE = 0.7f
 
 /** The search field matches the home screen's bar: the same height, glass, and quiet white. */
 private const val HINT_ALPHA = 0.5f
+private const val CHOSEN_ALPHA = 0.18f
+private val CHOSEN_CORNER = 16.dp
 
 /**
  * Every launchable app, alphabetically, on an opaque surface, under a search field that narrows the
@@ -103,6 +109,8 @@ private const val HINT_ALPHA = 0.5f
 fun AppDrawer(
     shown: State<Float>,
     open: Boolean,
+    /** Something (a folder's sheet) is over the drawer, with the keyboard's focus. */
+    covered: Boolean,
     apps: List<AppEntry>,
     folders: List<HomeItem>,
     query: DrawerQuery,
@@ -158,7 +166,7 @@ fun AppDrawer(
             SearchField(
                 query,
                 keyboard,
-                open,
+                open && !covered,
                 Modifier.padding(top = insets.calculateTopPadding() + MARGIN / 2)
                     .padding(horizontal = MARGIN),
             )
@@ -167,6 +175,7 @@ fun AppDrawer(
                 shownApps,
                 list,
                 indexed = index && !searching,
+                firstMatch = if (searching) shownApps.firstOrNull() else null,
                 columns = columns,
                 iconSize = icon,
                 labels = labels,
@@ -190,6 +199,8 @@ private fun DrawerGrid(
     apps: List<AppEntry>,
     state: LazyGridState,
     indexed: Boolean,
+    /** The app Enter would launch, shown as such; null while nothing is typed. */
+    firstMatch: AppEntry?,
     columns: Int,
     iconSize: Dp,
     labels: Boolean,
@@ -230,6 +241,7 @@ private fun DrawerGrid(
                     labels,
                     onClick = { onLaunch(app) },
                     drag = drag?.handlersForDrawer(app),
+                    chosen = app == firstMatch,
                 )
             }
         }
@@ -301,12 +313,17 @@ private fun PaddingValues.aboveKeyboard(keyboard: Dp, indexed: Boolean): Padding
 
 /**
  * Narrows the list as you type; Enter launches the best match. Takes focus, and with it the
- * keyboard, as the drawer opens when [keyboard] is set; the field is still there to tap otherwise.
+ * keyboard, as the drawer opens when [keyboard] is set, and again when what covered it has gone;
+ * the field is still there to tap otherwise. Gives focus up as the drawer closes, so the keyboard
+ * leaves with it rather than after it.
  */
 @Composable
 private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, modifier: Modifier) {
     val focus = remember { FocusRequester() }
-    LaunchedEffect(open, keyboard) { if (open && keyboard) focus.requestFocus() }
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(open, keyboard) {
+        if (open && keyboard) focus.requestFocus() else if (!open) focusManager.clearFocus()
+    }
     SearchRow(glassDescription = null, modifier = modifier) { ink ->
         BasicTextField(
             value = query.text,
@@ -359,6 +376,7 @@ private fun DrawerFolder(
     }
 }
 
+/** One app of the grid; [chosen] is the one Enter would launch, lit behind so that shows. */
 @Composable
 private fun DrawerApp(
     app: AppEntry,
@@ -366,13 +384,28 @@ private fun DrawerApp(
     labels: Boolean,
     onClick: () -> Unit,
     drag: DragHandlers?,
+    chosen: Boolean = false,
 ) {
+    // Selected, as far as semantics go: what Enter launches, said out loud and testable.
+    val lit =
+        if (chosen) {
+            Modifier.background(
+                    Color.White.copy(alpha = CHOSEN_ALPHA),
+                    RoundedCornerShape(CHOSEN_CORNER),
+                )
+                .semantics { selected = true }
+        } else {
+            Modifier
+        }
     AppTile(
         app,
         iconSize,
         labels,
         onClick,
-        Modifier.liftable(app.key, drag).padding(vertical = 8.dp).testTag(DRAWER_ITEM_TAG),
+        Modifier.liftable(app.key, drag)
+            .then(lit)
+            .padding(vertical = 8.dp)
+            .testTag(DRAWER_ITEM_TAG),
     )
 }
 

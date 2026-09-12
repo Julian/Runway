@@ -388,9 +388,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         _drawerOpen.value = true
     }
 
+    /**
+     * The query stays until the next open resets it: emptying it now would reflow the rows
+     * mid-close.
+     */
     fun closeDrawer() {
         _drawerOpen.value = false
-        drawerQuery = ""
     }
 
     /**

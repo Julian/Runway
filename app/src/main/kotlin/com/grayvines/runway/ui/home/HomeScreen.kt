@@ -145,6 +145,7 @@ fun HomeScreen(
             state = state,
             drawer = drawer,
             open = drawerOpen,
+            covered = openFolder != null,
             query = drawerQuery,
             iconSize = iconSize,
             insets = insets,
@@ -348,6 +349,7 @@ private fun DrawerOverlay(
     state: HomeState,
     drawer: DrawerControls,
     open: Boolean,
+    covered: Boolean,
     query: DrawerQuery,
     iconSize: Dp,
     insets: PaddingValues,
@@ -360,6 +362,7 @@ private fun DrawerOverlay(
     AppDrawer(
         shown = drawer.motion.shown,
         open = open,
+        covered = covered,
         apps = state.apps,
         folders = state.drawerFolders,
         query = query,

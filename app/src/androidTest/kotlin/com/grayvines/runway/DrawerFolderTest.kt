@@ -1,6 +1,7 @@
 package com.grayvines.runway
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
@@ -127,11 +128,14 @@ class DrawerFolderTest : LauncherFixture() {
                 .getOrNull(SemanticsProperties.EditableText)
                 ?.text
         assertEquals("", typed)
-        // And with no keyboard up, back closes the sheet itself.
+        // And with no keyboard up, back closes the sheet itself, and the field has focus again.
         device.pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag(DRAWER_TAG).assertExists()
+        waitUntil { compose.onNodeWithTag(DRAWER_SEARCH_TAG).fetchSemanticsNode().isFocused() }
     }
+
+    private fun SemanticsNode.isFocused() = config.getOrNull(SemanticsProperties.Focused) == true
 
     @Test
     fun addToFolderMovesAnAppIntoIt_andAnAppIsInOneDrawerFolderAtMost() {

@@ -1,5 +1,6 @@
 package com.grayvines.runway
 
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
@@ -23,6 +26,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -392,6 +397,47 @@ class DrawerTest : LauncherFixture() {
     }
 
     @Test
+    fun theAppEnterWouldLaunchIsLitWhileATextIsTyped() {
+        openDrawer()
+        litApps().assertCountEquals(0) // nothing typed, nothing picked
+        searchField().performTextInput(firstHomeApp.take(1))
+        waitUntil(TIMEOUT_MS) { litApps().fetchSemanticsNodes().size == 1 }
+        // The lit tile is the first shown, the one Enter launches.
+        val lit = litApps().fetchSemanticsNodes().single().boundsInRoot
+        val first =
+            drawerItems().minWith(compareBy({ it.boundsInRoot.top }, { it.boundsInRoot.left }))
+        assertEquals(first.boundsInRoot.center, lit.center)
+    }
+
+    private fun litApps() = compose.onAllNodes(hasTestTag(DRAWER_ITEM_TAG) and isSelected())
+
+    @Test
+    fun closingTheDrawerTakesFocusOffTheSearchFieldAtOnce() {
+        openDrawer()
+        searchField().assertIsFocused()
+        awaitKeyboard()
+        device.pressBack() // the keyboard's own Back: it goes, the field keeps focus
+        waitUntil(LONG_TIMEOUT_MS) { !keyboardVisible() }
+        searchField().assertIsFocused()
+        // Hold the clock: with it running, the first look would already be the finished close.
+        compose.mainClock.autoAdvance = false
+        try {
+            device.pressBack() // the drawer's: focus leaves the field as the close begins
+            SystemClock.sleep(PRESS_SETTLE_MS) // the key lands
+            repeat(CLOSE_FRAMES) { compose.mainClock.advanceTimeByFrame() }
+            compose.onNodeWithTag(DRAWER_TAG).assertExists() // still on its way out
+            searchField().assertIsNotFocused()
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        awaitDrawerClosed()
+    }
+
+    private fun keyboardVisible() =
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+    @Test
     fun typingQuicklyKeepsEveryCharacter() {
         openDrawer()
         searchField().assertIsFocused()
@@ -675,6 +721,8 @@ class DrawerTest : LauncherFixture() {
     }
 
     private companion object {
+        /** Frames into the drawer's close at which it is still on its way out. */
+        const val CLOSE_FRAMES = 3
         /** Outside the fold zone of the icon the finger is beside. */
         const val FRESH_BESIDE = 0.45f
         const val PULL_STEPS = 10
