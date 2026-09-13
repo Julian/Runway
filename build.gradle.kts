@@ -43,8 +43,15 @@ detekt {
 // pass by hand before committing. The git hooks stay fast and run none of this.
 tasks.register("preflight") {
     group = "verification"
-    description = "Formats, then runs detekt, lint and the unit tests, as before a commit."
-    dependsOn("spotlessApply", "detekt", ":app:lintDebug", ":app:testDebugUnitTest")
+    description =
+        "Formats, then runs detekt, lint, the unit tests and the test build, as before a commit."
+    dependsOn(
+        "spotlessApply",
+        "detekt",
+        ":app:lintDebug",
+        ":app:testDebugUnitTest",
+        ":app:compileDebugAndroidTestKotlin",
+    )
 }
 
 tasks.named("detekt") { mustRunAfter("spotlessApply") }
