@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -85,6 +86,21 @@ class WidgetTest : LauncherFixture() {
             "the widget's view is still on screen",
             device.hasObject(By.text(FIXTURE_WIDGET_TEXT)),
         )
+    }
+
+    @Test
+    fun aWidgetWithNoProviderBehindItsIdStandsInForItAndThePageStaysUp() {
+        placeFixtureWidget(0, 0, bound = false)
+        waitUntil {
+            compose
+                .onAllNodes(hasText(FIXTURE_WIDGET.flattenToString()), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        val beside = labelAtHomeCell(2, 0)
+        val cell = Grid(settings.columns, settings.pageRows, settings.dockSlots).homeCell(2, 0)
+        val centre = cellIcon(beside).fetchSemanticsNode().boundsInRoot.center
+        assertTrue("$beside drawn at $centre, not at $cell", (centre - cell).getDistance() < 2f)
     }
 
     @Test

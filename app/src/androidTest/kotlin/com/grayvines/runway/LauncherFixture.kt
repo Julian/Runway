@@ -265,15 +265,24 @@ open class LauncherFixture {
 
     /**
      * Binds the fixture's widget the way the picker does and puts it over [spanX] × [spanY] cells
-     * of the first page from ([x], [y]), whose icons make way; the placement's id.
+     * of the first page from ([x], [y]), whose icons make way; the placement's id. Not [bound], the
+     * id has no provider behind it, as when the widget's app has been uninstalled.
      */
-    protected fun placeFixtureWidget(x: Int, y: Int, spanX: Int = 2, spanY: Int = 1): Long {
+    protected fun placeFixtureWidget(
+        x: Int,
+        y: Int,
+        spanX: Int = 2,
+        spanY: Int = 1,
+        bound: Boolean = true,
+    ): Long {
         allowWidgetBinding(true)
         val id = graph.widgets.allocateId()
-        assertTrue(
-            "could not bind the fixture widget",
-            graph.widgets.bind(id, FIXTURE_WIDGET, Process.myUserHandle()),
-        )
+        if (bound) {
+            assertTrue(
+                "could not bind the fixture widget",
+                graph.widgets.bind(id, FIXTURE_WIDGET, Process.myUserHandle()),
+            )
+        }
         return runBlocking {
             val page = graph.workspace.observe(Container.HOME).first().pages.first()
             page.items

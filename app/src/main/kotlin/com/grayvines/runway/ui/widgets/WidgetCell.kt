@@ -76,7 +76,8 @@ fun WidgetCell(
     val id = item.appWidgetId
     val info = remember(id) { id?.let(host::info) }
     if (id == null || info == null) {
-        Text(item.label, color = Color.White, style = MaterialTheme.typography.labelSmall)
+        // Placed like any cell: the page cannot lay out a child that lacks the modifier.
+        Text(item.label, modifier, color = Color.White, style = MaterialTheme.typography.labelSmall)
         return
     }
     val label = remember(info) { info.loadLabel(context.packageManager) }
