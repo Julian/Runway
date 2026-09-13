@@ -51,6 +51,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -500,10 +501,15 @@ class DrawerTest : LauncherFixture() {
         val letter = listOf(drawerLabelAThirdIn()).index { it }.single().letter
         val target = labels.first { listOf(it).index { l -> l }.single().letter == letter }
         compose.onNodeWithTag(DRAWER_INDEX_TAG).assertIsDisplayed()
+        // A list short enough to show its end unscrolled could not be jumped anywhere.
+        assumeFalse(
+            "the whole list fits the screen",
+            drawerApp(lastDrawerLabel()).isDisplayedOrFalse(),
+        )
         compose.onNode(hasContentDescription("Jump to $letter")).performTouchInput { click() }
         waitUntil(TIMEOUT_MS) { drawerApp(target).isDisplayedOrFalse() }
         // At the top of the list, not merely somewhere on the screen; unless the list ran out
-        // first, on a device with few apps, in which case its end is showing.
+        // first, in which case its end is showing, which it was not before.
         val list = compose.onNodeWithTag(DRAWER_LIST_TAG).fetchSemanticsNode().boundsInRoot
         val item = drawerApp(target).fetchSemanticsNode().boundsInRoot
         val atTop = item.top - list.top < list.height * JUMP_TOLERANCE

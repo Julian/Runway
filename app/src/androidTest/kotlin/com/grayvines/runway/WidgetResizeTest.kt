@@ -29,6 +29,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -166,7 +167,7 @@ class WidgetResizeTest : LauncherFixture() {
         awaitWidgetCell()
         val density = app.resources.displayMetrics.density
         val most = floor(FIXTURE_WIDGET_MAX_DP / (grid.cellWidth() / density)).toInt()
-        assertTrue("the grid's cells give no room to show the limit", most in 2 until 4)
+        assumeTrue("the grid's cells give no room to show the limit", most in 2 until 4)
         holdWidget()
         release()
         pull("Right edge", Offset(grid.cellWidth() * 3, 0f))

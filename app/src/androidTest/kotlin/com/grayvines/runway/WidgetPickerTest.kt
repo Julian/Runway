@@ -31,6 +31,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -112,7 +113,11 @@ class WidgetPickerTest : LauncherFixture() {
         val allow = device.wait(Until.findObject(BIND_ALLOW), LONG_TIMEOUT_MS)
         assertNotNull("the system never asked whether Runway may bind widgets", allow)
         // Ticked, the dialog grants Runway for good; unticked it binds this one widget only.
-        device.findObject(BIND_ALWAYS).click()
+        val always = device.findObject(BIND_ALWAYS)
+        // A skipped test must not leave the dialog over the next test's launcher.
+        if (always == null) device.findObject(BIND_CANCEL)?.click()
+        assumeTrue("this image's bind dialog has no 'always allow' tick", always != null)
+        always.click()
         allow.click()
         val widget = awaitPlacedWidget()
         assertEquals(0 to 0, widget.x to widget.y)

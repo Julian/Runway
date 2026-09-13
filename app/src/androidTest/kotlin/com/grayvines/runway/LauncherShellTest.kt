@@ -24,8 +24,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -92,7 +92,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun tappingTheSearchBarHandsOffToTheTargetApp() {
         val target = graph.searchTargets.resolve(null)
-        assertNotNull(NO_HANDLER, target)
+        assumeTrue(NO_HANDLER, target != null)
         compose.onNodeWithTag(SEARCH_BAR_TAG).performClick()
         assertTrue(
             "${target!!.label} did not come to the front",
@@ -107,7 +107,7 @@ class LauncherShellTest : LauncherFixture() {
         // A handler other than the automatic choice, or the setting changes nothing.
         val automatic = graph.searchTargets.resolve(null)?.packageName
         val picked = graph.searchTargets.handlers().firstOrNull { it.packageName != automatic }
-        assertNotNull(ONE_HANDLER, picked)
+        assumeTrue(ONE_HANDLER, picked != null)
         picked!!
         runBlocking { graph.settings.update { it.copy(searchTarget = picked.packageName) } }
         waitUntil(TIMEOUT_MS) {
@@ -122,9 +122,9 @@ class LauncherShellTest : LauncherFixture() {
     fun pickingASearchTargetInSettingsIsSaved() {
         val handlers = graph.searchTargets.handlers()
         val current = graph.searchTargets.resolve(null)
-        assertNotNull(NO_HANDLER, current)
+        assumeTrue(NO_HANDLER, current != null)
         val other = handlers.firstOrNull { it.packageName != current!!.packageName }
-        assertNotNull(ONE_HANDLER, other)
+        assumeTrue(ONE_HANDLER, other != null)
         other!!
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
@@ -163,7 +163,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun searchBarShowsTheHandoffTarget() {
         val target = graph.searchTargets.resolve(null)
-        assertNotNull(NO_HANDLER, target)
+        assumeTrue(NO_HANDLER, target != null)
         compose
             .onNodeWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
             .assertIsDisplayed()

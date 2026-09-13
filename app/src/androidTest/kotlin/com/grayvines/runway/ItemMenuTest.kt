@@ -1,5 +1,7 @@
 package com.grayvines.runway
 
+import android.content.Intent
+import android.provider.Settings
 import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
@@ -26,6 +28,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -130,6 +133,7 @@ class ItemMenuTest : LauncherFixture() {
 
     @Test
     fun appInfoOpensTheSystemPageForTheApp() {
+        assumeTrue("no app to show app info", handles(Settings.ACTION_APPLICATION_DETAILS_SETTINGS))
         longPress(firstDockApp)
         release()
         menuRow("App info").performClick()
@@ -190,6 +194,7 @@ class ItemMenuTest : LauncherFixture() {
             )
         }
         waitUntil(TIMEOUT_MS) { homeCellOf(removable.label) == 0 to 0 }
+        assumeTrue("no app to uninstall packages", handles(Intent.ACTION_DELETE))
         longPress(removable.label)
         release()
         menuRow("Uninstall").performClick()
@@ -203,6 +208,17 @@ class ItemMenuTest : LauncherFixture() {
     }
 
     private fun longPress(label: String) = hold(icon(label))
+
+    /**
+     * Whether the image ships something that takes [action] for a package. Asked of the shell,
+     * which sees every package; the app's own package manager only shows it what its manifest
+     * queries for, and starting an activity needs no such query.
+     */
+    private fun handles(action: String) =
+        "No activity found" !in
+            device.executeShellCommand(
+                "cmd package resolve-activity --brief -a $action -d package:${app.packageName}"
+            )
 
     private fun awaitMenuGone() {
         waitUntil(TIMEOUT_MS) {

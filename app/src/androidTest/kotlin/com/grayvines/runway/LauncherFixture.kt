@@ -75,6 +75,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 
@@ -670,14 +671,16 @@ open class LauncherFixture {
     }
 
     /**
-     * A pull that shows the drawer without opening it: past touch slop, short of the default
-     * setting's threshold, on any screen.
+     * A pull that shows the drawer without opening it: well past touch slop, short of the default
+     * setting's threshold. A screen so short that no pull fits between the two skips the test.
      */
     protected fun partialPullPx(): Float {
         val slop = ViewConfiguration.get(app).scaledTouchSlop
         val opens =
             compose.onRoot().fetchSemanticsNode().boundsInRoot.height * DrawerSwipe.MEDIUM.openAt
-        return (slop + opens) / 2
+        val pull = maxOf((slop + opens) / 2, slop * PAST_SLOP)
+        assumeTrue("a $pull px pull would open the drawer at $opens px", pull < opens)
+        return pull
     }
 
     /** Every placement of [label], across home and dock. */
@@ -899,3 +902,6 @@ const val PRESS_SETTLE_MS = 250L
 const val SETTLE_FRAMES = 24
 const val SETTLE_TOLERANCE_PX = 2f
 const val SETTLE_REST_PX = 4f
+
+/** A partial pull is at least this many touch slops, so that it is a move on any screen. */
+const val PAST_SLOP = 2f
