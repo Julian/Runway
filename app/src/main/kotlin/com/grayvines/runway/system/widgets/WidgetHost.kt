@@ -107,6 +107,10 @@ class WidgetHost(context: Context) {
         return userManager.userProfiles
             .flatMap { manager.getInstalledProvidersForProfile(it) }
             .filter { it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0 }
+            // Some ask to be kept out of pickers: a launcher's own internal widgets, say.
+            .filter {
+                it.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_HIDE_FROM_PICKER == 0
+            }
             .mapNotNull { info -> info.toProvider(pm, density) }
             .sortedWith(
                 compareBy<WidgetProvider, String>(order) { it.appLabel }.thenBy(order) { it.label }

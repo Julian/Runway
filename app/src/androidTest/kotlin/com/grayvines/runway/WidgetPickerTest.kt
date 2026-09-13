@@ -44,9 +44,10 @@ class WidgetPickerTest : LauncherFixture() {
     fun widgetsOnTheHomeMenuListsTheDevicesWidgetsByAppAndBackClosesTheList() {
         openPicker()
         fixtureChoice().assertIsDisplayed()
-        compose
-            .onNode(hasText("Fixture") and hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG)))
-            .assertIsDisplayed()
+        // The scroll to a row goes a whole screen at a time, so it can stop with the row at the top
+        // and its app's name just above: that is scrolled to on its own.
+        compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText(FIXTURE_APP_LABEL))
+        compose.onNode(hasText(FIXTURE_APP_LABEL) and inPicker()).assertIsDisplayed()
         device.pressBack()
         awaitGone(WIDGET_PICKER_TAG)
         assertStillOnLauncher()
@@ -241,6 +242,23 @@ class WidgetPickerTest : LauncherFixture() {
         compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText(label))
     }
 
+    @Test
+    fun aWidgetThatAsksToStayOutOfPickersIsNotListed() {
+        openPicker() // the fixture's other widgets are listed
+        // Only rows on screen are composed, so the whole list is scrolled through looking for it.
+        val miss = runCatching {
+            compose
+                .onNodeWithTag(WIDGET_LIST_TAG)
+                .performScrollToNode(hasText(FIXTURE_HIDDEN_WIDGET_LABEL))
+        }
+            .exceptionOrNull()
+        assertNotNull("the hidden widget is listed", miss)
+        // Any other failure says nothing about the list.
+        if ("No node found that matches" !in miss!!.message.orEmpty()) throw miss
+    }
+
+    private fun inPicker() = hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG))
+
     private fun liftFromPicker() = lift(fixtureChoice())
 
     private fun fixtureChoice() = choice(FIXTURE_WIDGET_LABEL)
@@ -260,7 +278,9 @@ class WidgetPickerTest : LauncherFixture() {
     }
 
     private companion object {
+        const val FIXTURE_APP_LABEL = "Fixture"
         const val FIXTURE_WIDGET_LABEL = "Fixture widget"
+        const val FIXTURE_HIDDEN_WIDGET_LABEL = "Fixture hidden widget"
         const val SETUP_WIDGET = "Fixture setup widget"
 
         /** The system's "may this launcher create widgets?" dialog, by its buttons' ids. */
