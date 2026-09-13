@@ -8,7 +8,10 @@ import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
@@ -58,6 +61,7 @@ import com.grayvines.runway.ui.drag.edgeAt
 import com.grayvines.runway.ui.drag.homeCellAt
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.folder.FOLDER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.FLIP_SCROLL_MS
@@ -108,6 +112,9 @@ open class LauncherFixture {
     protected val labels: List<String>
         get() = apps.map { it.label }
 
+    /** Widget host ids allocated by this test, to give back after it. */
+    private val boundIds = mutableListOf<Int>()
+
     @Before
     fun seed() {
         runBlocking {
@@ -139,6 +146,7 @@ open class LauncherFixture {
         // Compose's idling does not track; the activity was up before either, so the screen may
         // still show the previous test's grid until they land.
         awaitGrid(settings.columns, settings.pageRows)
+        awaitSeededLayout()
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
         awaitWindowFocus()
@@ -158,6 +166,38 @@ open class LauncherFixture {
         if (activity.isDestroyed) return
         // Never masks the test's own failure: a keyboard that will not go is not this test's fault.
         runCatching { dismissKeyboard() }
+    }
+
+    /**
+     * The host ids allocated for this test are given back: the layout they sat in is reseeded
+     * anyway, and on a device that is not thrown away after the run they would otherwise pile up.
+     */
+    @After
+    fun releaseBoundWidgets() {
+        boundIds.forEach { runCatching { graph.widgets.deleteId(it) } }
+        boundIds.clear()
+    }
+
+    /** The shade outlives a test that pulled it down; the next test wants the home screen. */
+    @After
+    fun collapseShade() {
+        if (!device.hasObject(SHADE)) return
+        device.executeShellCommand("cmd statusbar collapse")
+        device.wait(Until.gone(SHADE), TIMEOUT_MS)
+    }
+
+    /**
+     * A slow pull of [dy] (root px, negative up) from [start], the finger left down at the end: a
+     * drawer or shade gesture rather than a flick.
+     */
+    protected fun pullFrom(start: Offset, dy: Float) {
+        compose.onRoot().performTouchInput {
+            down(start)
+            repeat(PULL_STEPS) {
+                moveBy(Offset(0f, dy / PULL_STEPS))
+                advanceEventTime(PULL_STEP_MS)
+            }
+        }
     }
 
     private fun dismissKeyboard() {
@@ -277,7 +317,7 @@ open class LauncherFixture {
         bound: Boolean = true,
     ): Long {
         allowWidgetBinding(true)
-        val id = graph.widgets.allocateId()
+        val id = graph.widgets.allocateId().also { boundIds += it }
         if (bound) {
             assertTrue(
                 "could not bind the fixture widget",
@@ -406,15 +446,42 @@ open class LauncherFixture {
             .ifEmpty { "dumpsys window said nothing about focus" }
 
     /**
-     * Waits until the first home icon is the size the grid [columns] × [pageRows] gives it: the
-     * sign that settings and layout have both reached the screen.
+     * The seed on screen rather than the previous test's layout, which the grid's size alone cannot
+     * tell apart: our app in the first home cell and the first dock app in the first slot, where
+     * the seed puts them and a test that moved either left them elsewhere.
      */
-    /** Waits until the first home icon is sized for a cell of a [columns] by [pageRows] grid. */
+    private fun awaitSeededLayout() {
+        waitUntil(LONG_TIMEOUT_MS) {
+            runCatching {
+                    val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+                    val home = cellIcon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
+                    val dock = cellIcon(firstDockApp).fetchSemanticsNode().boundsInRoot.center
+                    grid.cellAt(home) == 0 to 0 && grid.dockSlotAt(dock) == 0
+                }
+                .getOrDefault(false)
+        }
+    }
+
+    /**
+     * Waits until the app icons on the pages are sized for a cell of a [columns] by [pageRows]
+     * grid. Any app's icon will do: a test may have folded the first one away.
+     */
     protected fun awaitGrid(columns: Int, pageRows: Int) {
+        val described = labels.toSet()
+        val appIcon =
+            SemanticsMatcher("an app's icon") { node ->
+                node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().any {
+                    it in described
+                }
+            }
+        val onPages = hasAnyAncestor(hasTestTag(WORKSPACE_TAG)) and !hasTestTag(DRAG_OVERLAY_TAG)
         waitUntil(LONG_TIMEOUT_MS) {
             val page = compose.onAllNodesWithTag(WORKSPACE_TAG).fetchSemanticsNodes().firstOrNull()
             val icon =
-                icon(firstHomeApp).let { runCatching { it.fetchSemanticsNode() }.getOrNull() }
+                compose
+                    .onAllNodes(appIcon and onPages, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .firstOrNull()
             if (page == null || icon == null) {
                 false
             } else {
@@ -559,8 +626,14 @@ open class LauncherFixture {
                 val cell = cellIcon(label).fetchSemanticsNode().boundsInRoot.center
                 return (icon().boundsInRoot.center - cell).getDistance()
             }
+            fun carried() =
+                compose
+                    .onAllNodesWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
             compose.mainClock
                 .advanceTimeByFrame() // the first held frame is still the pre-release one
+            assertTrue("nothing was being carried when released", carried())
             var distance = gap()
             var width = icon().boundsInRoot.width
             android.util.Log.d(
@@ -569,6 +642,11 @@ open class LauncherFixture {
             )
             repeat(SETTLE_FRAMES) { frame ->
                 compose.mainClock.advanceTimeByFrame()
+                // The overlay may only go once it has all but arrived: a cut to the cell from
+                // anywhere further off would read as "closer" too.
+                if (!carried()) {
+                    assertTrue("cut to the cell from $distance px away", distance <= JUMP_CUT_PX)
+                }
                 val bounds = icon().boundsInRoot
                 val now = gap()
                 android.util.Log.d(
@@ -709,13 +787,8 @@ open class LauncherFixture {
         assertTrue("a drag must not also launch the app", !device.hasObject(By.text("Grid")))
     }
 
-    protected fun placementOf(label: String): ItemEntity? = runBlocking {
-        val component = labelToComponent(label)
-        listOf(Container.HOME, Container.DOCK)
-            .flatMap { graph.workspace.observe(it).first().pages }
-            .flatMap { it.items }
-            .firstOrNull { it.component == component }
-    }
+    /** The placement of [label], by component and profile, so a work-profile twin is its own. */
+    protected fun placementOf(label: String): ItemEntity? = placementsOf(label).firstOrNull()
 
     protected fun dockPageCount() = runBlocking {
         graph.workspace.observe(Container.DOCK).first().pages.size
@@ -801,36 +874,46 @@ open class LauncherFixture {
     protected fun homeCellOf(label: String): Pair<Int?, Int?>? =
         placementOf(label)?.takeIf { it.container == Container.HOME }?.let { it.x to it.y }
 
-    protected fun labelToComponent(label: String): String = runBlocking {
-        graph.appRepository.apps.first { it.isNotEmpty() }.first { it.label == label }.ref.component
-    }
-
-    /** Icons live inside clickable cells, whose semantics merge; look at the unmerged tree. */
     /**
-     * The app's icon. Not the search bar's glass, which is described by the search app's name and
-     * so shares a label with that app's icon.
+     * The app's icon on the home pages or in the dock, or the overlay's copy of it while it is
+     * being dragged: two nodes then, so a drag's questions go to [cellIcon] or the overlay. Icons
+     * live inside clickable cells, whose semantics merge, so the unmerged tree is searched. Not the
+     * search bar's glass, which is described by the search app's name, and not the drawer's, an
+     * open folder's or the item menu's copies, which have lookups of their own.
      */
     protected fun icon(label: String) =
-        compose.onNode(
-            hasContentDescription(label) and !hasTestTag(SEARCH_TARGET_ICON_TAG),
-            useUnmergedTree = true,
-        )
+        compose.onNode(hasContentDescription(label) and onTheHomeScreen(), useUnmergedTree = true)
 
     /** The icon in its cell, even while a copy of it is being dragged in the overlay. */
     protected fun cellIcon(label: String) =
         compose.onNode(
-            hasContentDescription(label) and
-                !hasTestTag(DRAG_OVERLAY_TAG) and
-                !hasTestTag(SEARCH_TARGET_ICON_TAG),
+            hasContentDescription(label) and !hasTestTag(DRAG_OVERLAY_TAG) and onTheHomeScreen(),
             useUnmergedTree = true,
         )
 
-    protected fun SemanticsNodeInteraction.isDisplayedOrFalse() = runCatching {
+    private fun onTheHomeScreen() =
+        !hasTestTag(SEARCH_TARGET_ICON_TAG) and
+            !hasAnyAncestor(hasTestTag(DRAWER_TAG)) and
+            !hasAnyAncestor(hasTestTag(FOLDER_TAG)) and
+            !hasAnyAncestor(hasTestTag(ITEM_MENU_TAG))
+}
+
+/**
+ * Displayed, or not: absent counts as not displayed, but a lookup that matches more than one node
+ * is a question with no answer and fails as such, rather than passing as "not shown".
+ */
+fun SemanticsNodeInteraction.isDisplayedOrFalse(): Boolean =
+    try {
         assertIsDisplayed()
         true
+    } catch (e: AssertionError) {
+        val message = e.message.orEmpty()
+        if ("is not displayed" in message || "could not find any node" in message) {
+            false
+        } else {
+            throw e
+        }
     }
-        .getOrDefault(false)
-}
 
 const val TIMEOUT_MS = 5_000L
 
@@ -871,6 +954,19 @@ const val LIFT_NUDGE_PX = 60f
 /** How often a refused tap is tried before giving up. */
 const val TAP_ATTEMPTS = 3
 
+/** A slow pull, in steps far enough apart not to count as a flick. */
+const val PULL_STEPS = 10
+const val PULL_STEP_MS = 40L
+
+/** Of the screen height: well past the third of the way that opens the drawer or the shade. */
+const val OPENING_PULL = 0.35f
+
+/** Long enough for a shade that was going to come down. */
+const val SHADE_GRACE_MS = 1_000L
+
+/** The system's notification shade, once down. */
+val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
+
 /** A settings page swipe: in from the scrollable's ends, slow enough not to fling. */
 const val SWIPE_INSET_PX = 100
 const val SWIPE_STEPS = 20
@@ -902,6 +998,9 @@ const val PRESS_SETTLE_MS = 250L
 const val SETTLE_FRAMES = 24
 const val SETTLE_TOLERANCE_PX = 2f
 const val SETTLE_REST_PX = 4f
+
+/** How far from its cell a settling icon may still be when the overlay hands over to the cell. */
+const val JUMP_CUT_PX = 2 * SETTLE_REST_PX
 
 /** A partial pull is at least this many touch slops, so that it is a move on any screen. */
 const val PAST_SLOP = 2f

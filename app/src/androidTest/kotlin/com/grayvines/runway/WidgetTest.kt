@@ -13,7 +13,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
@@ -139,7 +138,7 @@ class WidgetTest : LauncherFixture() {
         release()
         assertFalse(
             "the shade came down from a swipe on a widget",
-            device.wait(Until.hasObject(SHADE), GRACE_MS),
+            device.wait(Until.hasObject(SHADE), SHADE_GRACE_MS),
         )
     }
 
@@ -149,35 +148,21 @@ class WidgetTest : LauncherFixture() {
         placeFixtureWidget(0, 0)
         awaitWidgetCell()
         compose.onRoot().performTouchInput { click(widgetCentre()) }
-        assertTrue(
-            "the widget's app never opened",
-            device.wait(Until.hasObject(By.pkg(FIXTURE_WIDGET.packageName)), TIMEOUT_MS),
-        )
+        // The package in front, not any node of the fixture's: the widget's own views on the home
+        // screen carry the package too.
+        val opened = runCatching {
+            waitUntil(TIMEOUT_MS) { device.currentPackageName == FIXTURE_WIDGET.packageName }
+        }
+        assertTrue("the widget's app never opened", opened.isSuccess)
         device.pressBack()
     }
 
     private fun widgetCentre() =
         compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
 
-    /** A slow pull of [dy] (root px, negative up) from [start], the finger left down at the end. */
-    private fun pullFrom(start: Offset, dy: Float) {
-        compose.onRoot().performTouchInput {
-            down(start)
-            repeat(PULL_STEPS) {
-                moveBy(Offset(0f, dy / PULL_STEPS))
-                advanceEventTime(PULL_STEP_MS)
-            }
-        }
-    }
-
     private fun Rect.covers(p: Offset) = contains(p.x.toInt(), p.y.toInt())
 
     private companion object {
         const val FIXTURE_WIDGET_TEXT = "Fixture widget"
-        const val PULL_STEPS = 10
-        const val PULL_STEP_MS = 40L // slow enough not to count as a flick
-        const val OPENING_PULL = 0.35f // would open the drawer or the shade from an icon
-        const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
-        val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }
 }

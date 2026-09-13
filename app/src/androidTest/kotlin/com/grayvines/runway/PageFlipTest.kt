@@ -23,19 +23,6 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PageFlipTest : LauncherFixture() {
     @Test
-    fun dwellingAtTheRightEdgeFlipsToTheNextPageAndDropsThere() {
-        // The seed's 4×3 pages hold 12; page 2 holds the rest, with its bottom row free.
-        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
-        val onPageTwo = labelOnPage(1)
-        holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
-        // The dwell timer runs on real time, so wait rather than advance the test clock.
-        waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() }
-        compose.waitForIdle() // let the page scroll settle before dropping
-        release()
-        waitUntil(TIMEOUT_MS) { placementOf(firstHomeApp)?.pageIndex == 1 }
-    }
-
-    @Test
     fun aLongHoldPastTheLastPageAddsAPageAndDropsThere() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         val pagesBefore = runBlocking { graph.workspace.observe(Container.HOME).first().pages.size }

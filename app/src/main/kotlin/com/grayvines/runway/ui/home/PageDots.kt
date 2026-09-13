@@ -29,7 +29,7 @@ private const val CURRENT_ALPHA = 0.9f
 private const val OTHER_ALPHA = 0.4f
 
 /** How long the dots stay after the pages stop moving. */
-private const val LINGER_MS = 900L
+internal const val LINGER_MS = 900L
 
 /**
  * One dot per page of [pager], the current one bright. Shown while the pages move and for a moment

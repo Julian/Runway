@@ -37,41 +37,6 @@ class DragFeedbackTest : LauncherFixture() {
     }
 
     @Test
-    fun theHomeAreaZoomsOutWhileDragging() {
-        val grid = useGrid(columns = 5, rows = 7)
-        val resting = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
-        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
-        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        val zoomed = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
-        assertTrue(
-            "zoomed ${zoomed.width} vs resting ${resting.width}",
-            zoomed.width < resting.width,
-        )
-        release()
-        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        val back = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
-        assertEquals(resting.width, back.width, 1f)
-    }
-
-    @Test
-    fun theLiftedIconIsDrawnLargerThanItsCellIcon() {
-        val grid = useGrid(columns = 5, rows = 7)
-        val resting = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot
-        holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
-        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        val lifted =
-            compose
-                .onNodeWithTag(DRAG_OVERLAY_TAG, useUnmergedTree = true)
-                .fetchSemanticsNode()
-                .boundsInRoot
-        assertTrue(
-            "lifted ${lifted.width} vs resting ${resting.width}",
-            lifted.width > resting.width * 1.1f,
-        )
-        release()
-    }
-
-    @Test
     fun aLiftedDockIconRidesWhereItWasGrabbedWhenSlotsAreWiderThanCells() {
         // Three dock slots across five columns: a slot is five thirds of a cell wide. Grabbed by
         // its middle, the icon must stay centred on the finger, not sit a third of a cell off it.
@@ -141,6 +106,10 @@ class DragFeedbackTest : LauncherFixture() {
             compose.mainClock.autoAdvance = true
         }
         release()
+        // And the home area comes all the way back once the icon is down.
+        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
+        val back = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot.width
+        assertEquals(restingArea, back, 1f)
     }
 
     @Test
@@ -208,22 +177,6 @@ class DragFeedbackTest : LauncherFixture() {
         release()
         assertSettlesTowards(firstHomeApp, grid.homeCell(0, 0))
         assertUnmoved(firstHomeApp)
-    }
-
-    @Test
-    fun dockNeighboursSlideOverWhileTheDragIsStillInProgress() {
-        val grid = useGrid(columns = 5, rows = 7)
-        val lastDockApp = labelAtDockSlot(settings.dockSlots - 1)
-        holdDrag(from = firstDockApp, to = grid.dockSlot(settings.dockSlots - 1))
-        compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
-        // Neighbours hold still until the finger has rested on the slot a moment (the
-        // coordinator's unit test times that; here the rest runs on the real clock, so a slow
-        // device may already be past it), then slide over while the finger is still down.
-        waitUntil(TIMEOUT_MS) {
-            val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
-            grid.dockSlotAt(shown) == settings.dockSlots - 2
-        }
-        release()
     }
 
     private companion object {

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.ui.home.DOCK_TAG
+import com.grayvines.runway.ui.home.LINGER_MS
 import com.grayvines.runway.ui.home.PAGE_DOTS_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlinx.coroutines.flow.first
@@ -43,17 +44,16 @@ class PageIndicatorTest : LauncherFixture() {
     @Test
     fun aSinglePageShowsNoDots() {
         compose.onNodeWithTag(DOCK_TAG).performTouchInput { swipeLeft() } // the dock has one page
-        compose.mainClock.advanceTimeBy(LINGER_CHECK_MS)
-        assertTrue(dots().isEmpty())
+        compose.waitForIdle()
+        assertTrue("dots for a single page", dots().isEmpty())
+        // Nor after the settle, when dots that had shown would still be lingering.
+        compose.mainClock.advanceTimeBy(LINGER_MS / 2)
+        assertTrue("dots for a single page, after the swipe", dots().isEmpty())
     }
 
     private fun dots() = compose.onAllNodesWithTag(PAGE_DOTS_TAG).fetchSemanticsNodes()
 
     private fun pageCount(container: Container) = runBlocking {
         graph.workspace.observe(container).first().pages.size
-    }
-
-    private companion object {
-        const val LINGER_CHECK_MS = 500L
     }
 }

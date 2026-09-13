@@ -24,6 +24,7 @@ import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import java.util.regex.Pattern
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -35,6 +36,9 @@ import org.junit.runner.RunWith
 /** The long-press item menu: showing it, its actions, and how a drag takes over from it. */
 @RunWith(AndroidJUnit4::class)
 class ItemMenuTest : LauncherFixture() {
+    /** The setting the delay test changed, or null when it did not get that far. */
+    private var longPressTimeoutWas: String? = null
+
     @Test
     fun aLongPressShowsTheMenuWithoutLiftingTheIcon() {
         longPress(firstHomeApp)
@@ -70,25 +74,31 @@ class ItemMenuTest : LauncherFixture() {
     @Test
     fun aLongerTouchAndHoldDelayFromAccessibilityIsHonoured() {
         // The accessibility setting, as "Long" sets it; the system hands it to running apps.
-        val was = device.executeShellCommand("settings get secure long_press_timeout").trim()
+        longPressTimeoutWas =
+            device.executeShellCommand("settings get secure long_press_timeout").trim()
         device.executeShellCommand("settings put secure long_press_timeout $LONG_DELAY_MS")
-        try {
-            waitUntil(LONG_TIMEOUT_MS) { ViewConfiguration.getLongPressTimeout() == LONG_DELAY_MS }
-            val start = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
-            compose.onRoot().performTouchInput { down(start) }
-            compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
-            compose.waitForIdle()
-            compose.onAllNodesWithTag(ITEM_MENU_TAG).assertCountEquals(0) // not yet
-            compose.mainClock.advanceTimeBy(LONG_DELAY_MS - LIFT_HOLD_MS + FRAME_MS)
-            waitUntil(TIMEOUT_MS) {
-                compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
-            }
-            release()
-        } finally {
-            val restore = if (was == "null") "delete" else "put"
-            device.executeShellCommand(
-                "settings $restore secure long_press_timeout ${if (was == "null") "" else was}"
-            )
+        waitUntil(LONG_TIMEOUT_MS) { ViewConfiguration.getLongPressTimeout() == LONG_DELAY_MS }
+        val start = icon(firstHomeApp).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        compose.waitForIdle()
+        compose.onAllNodesWithTag(ITEM_MENU_TAG).assertCountEquals(0) // not yet
+        compose.mainClock.advanceTimeBy(LONG_DELAY_MS - LIFT_HOLD_MS + FRAME_MS)
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        release()
+    }
+
+    /** Put back whichever way the test ended; a restore slow to land is not its failure. */
+    @After
+    fun restoreLongPressTimeout() {
+        val was = longPressTimeoutWas ?: return
+        val restore = if (was == "null") "delete" else "put"
+        device.executeShellCommand(
+            "settings $restore secure long_press_timeout ${if (was == "null") "" else was}"
+        )
+        runCatching {
             waitUntil(LONG_TIMEOUT_MS) { ViewConfiguration.getLongPressTimeout() != LONG_DELAY_MS }
         }
     }

@@ -27,8 +27,6 @@ import androidx.compose.ui.test.swipeUp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
@@ -45,7 +43,6 @@ import com.grayvines.runway.ui.shade.SHADE_HINT_TAG
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -103,7 +100,7 @@ class DrawerTest : LauncherFixture() {
         // The list's fling once slipped through as a second pull, down from the closed drawer.
         assertTrue(
             "closing the drawer must not pull the shade",
-            !device.wait(Until.hasObject(SHADE), GRACE_MS),
+            !device.wait(Until.hasObject(SHADE), SHADE_GRACE_MS),
         )
     }
 
@@ -148,14 +145,11 @@ class DrawerTest : LauncherFixture() {
         // never reports letting go. The drawer must still end up somewhere definite.
         openDrawer()
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithTag(DRAWER_LIST_TAG).performTouchInput {
-            down(center)
-            repeat(PULL_STEPS) {
-                moveBy(Offset(0f, partialPullPx() / PULL_STEPS))
-                advanceEventTime(PULL_STEP_MS)
-            }
-            cancel()
-        }
+        val list = compose.onNodeWithTag(DRAWER_LIST_TAG).fetchSemanticsNode().boundsInRoot
+        pullFrom(list.center, partialPullPx())
+        val pulled = compose.onNodeWithTag(DRAWER_TAG).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the pull never moved the drawer ($pulled)", pulled > root.top + 1f)
+        compose.onRoot().performTouchInput { cancel() }
         waitUntil(TIMEOUT_MS) {
             val drawer = compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().firstOrNull()
             drawer == null || abs(drawer.boundsInRoot.top - root.top) < 1f
@@ -311,8 +305,9 @@ class DrawerTest : LauncherFixture() {
         openDrawer()
         liftFromDrawer(label)
         dragOn(to = grid.homeCell(4, 4))
-        // The one already there is what is being carried now: its cell has emptied.
-        waitUntil { icon(label).isDisplayedOrFalse().not() || homeCellOf(label) == 1 to 0 }
+        // The one already there is what is being carried now.
+        val placed = placementOf(label)!!.id
+        waitUntil { compose.activity.viewModel.dragging.drag.value?.source?.itemId == placed }
         release()
         waitUntil { homeCellOf(label) == 4 to 4 }
         assertEquals(before, placementsOf(label).size) // moved, not added
@@ -626,7 +621,7 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed()
         assertTrue(
             "a reversed swipe must not open the shade",
-            !device.wait(Until.hasObject(SHADE), GRACE_MS),
+            !device.wait(Until.hasObject(SHADE), SHADE_GRACE_MS),
         )
         compose.onAllNodesWithTag(SHADE_HINT_TAG, useUnmergedTree = true).assertCountEquals(0)
     }
@@ -643,30 +638,19 @@ class DrawerTest : LauncherFixture() {
     @Test
     fun aShortSwipeDownLeavesTheHomeScreenAsItWas() {
         pullDown(partialPullPx())
-        assertFalse("no shade for a pull this short", device.wait(Until.hasObject(SHADE), GRACE_MS))
+        assertFalse(
+            "no shade for a pull this short",
+            device.wait(Until.hasObject(SHADE), SHADE_GRACE_MS),
+        )
         assertTrue(
             "nor any drawer",
             compose.onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty(),
         )
     }
 
-    /** The shade outlives a test that pulled it down; the next test wants the home screen. */
-    @After
-    fun collapseShade() {
-        device.executeShellCommand("cmd statusbar collapse")
-        device.wait(Until.gone(SHADE), TIMEOUT_MS)
-    }
-
     private fun pullDown(px: Float) {
-        val pages = compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot
-        compose.onRoot().performTouchInput {
-            down(pages.center)
-            repeat(PULL_STEPS) {
-                moveBy(Offset(0f, px / PULL_STEPS))
-                advanceEventTime(PULL_STEP_MS)
-            }
-            up()
-        }
+        pullFrom(compose.onNodeWithTag(WORKSPACE_TAG).fetchSemanticsNode().boundsInRoot.center, px)
+        release()
     }
 
     /** With the keyboard up the first back only hides that, as in any app; then back closes. */
@@ -711,19 +695,14 @@ class DrawerTest : LauncherFixture() {
     private companion object {
         /** Frames into the drawer's close at which it is still on its way out. */
         const val CLOSE_FRAMES = 3
-        const val PULL_STEPS = 10
         const val TYPED = "quickbrownfox"
         const val QUICK_SWIPE = 0.08f
         const val QUICK_STEP_MS = 16L
-        const val PULL_STEP_MS = 40L // slow enough not to count as a flick
-        const val OPENING_PULL = 0.35f // well past a third of the pull distance
         const val MODEST_PULL = 0.05f // between High's 1% and Low's 8%
         const val JUMP_TOLERANCE = 0.1f // the list's top padding, and then some
         const val DRAWER_COLUMNS = 6 // more than the fixture's 4 home columns
         const val KEYBOARD_GRACE_MS = 1_000L // a closing drawer is long gone by then
-        const val GRACE_MS = 1_000L // long enough for a shade that was going to come down
         const val AT_FINGER_PX = 24f // the drawer's top edge is under the finger, give or take
         const val EASE_BACK_PX = 40f // slightly: over the 8 dp that reads as a change of mind
-        val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
     }
 }
