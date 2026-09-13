@@ -233,8 +233,11 @@ fun registerFailurePrinter(testTask: String, resultsDir: String) =
                     val failure =
                         case.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
                     val message = failure.getAttribute("message").ifEmpty { failure.textContent }
+                    // A failed assumption is written as a failure too, but the test was skipped.
+                    val skipped = "AssumptionViolatedException" in message
                     logger.error(
-                        "FAILED {}.{}\n    {}",
+                        "{} {}.{}\n    {}",
+                        if (skipped) "SKIPPED" else "FAILED",
                         case.getAttribute("classname"),
                         case.getAttribute("name"),
                         message.lineSequence().first(),
