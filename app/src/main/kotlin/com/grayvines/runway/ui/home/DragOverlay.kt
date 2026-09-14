@@ -32,6 +32,7 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
+import kotlinx.coroutines.delay
 
 const val DRAG_OVERLAY_TAG = "drag-overlay"
 
@@ -147,12 +148,15 @@ private fun Settle(
     // Dock slots and home cells differ in size, so aim centre at centre, not corner at corner.
     val half = with(LocalDensity.current) { Point(size.width.toPx() / 2, size.height.toPx() / 2) }
     val from = Point(settling.from.x + half.x, settling.from.y + half.y)
-    // Wait for the destination cell to report where it is before setting off.
+    // Wait for the destination cell to report where it is before setting off, though not for
+    // ever; the report restarts this, ending the wait.
     LaunchedEffect(settling, target != null) {
         if (target != null) {
             progress.animateTo(1f, DragMotion.settle)
-            onDone()
+        } else {
+            delay(DragMotion.SETTLE_TIMEOUT_MS)
         }
+        onDone()
     }
     val t = progress.value
     val centre =

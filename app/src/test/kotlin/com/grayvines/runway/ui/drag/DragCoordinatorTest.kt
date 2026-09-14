@@ -94,10 +94,8 @@ class DragCoordinatorTest {
         c.endDrag()
         runCurrent()
         val move = workspace.moves.single()
-        assertEquals(
-            Triple(1L, true, Point(100f, 155f)),
-            Triple(move.itemId, move.removed, move.from),
-        )
+        assertEquals(true, move.removed)
+        assertEquals(Point(100f, 155f), move.from) // where it was let go
         assertEquals(move, c.pending.value) // shown gone until the database says so
         assertNull(c.settling.value)
         workspace.reflected.complete(Unit)
@@ -245,13 +243,15 @@ class DragCoordinatorTest {
     }
 
     @Test
-    fun `an undrawn settle is dropped after a timeout`() = runTest {
+    fun `only the UI ends a settle, however slowly its frames come`() = runTest {
         val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
         c.layOut()
         c.startDrag(source, Point(50f, 50f), grab)
         c.dragTo(Point(250f, 150f))
         c.endDrag()
-        advanceTimeBy(2_001)
+        advanceTimeBy(60_000) // far longer than any landing takes
+        assertEquals(1L, c.settling.value?.itemId)
+        c.settled(1)
         assertNull(c.settling.value)
     }
 

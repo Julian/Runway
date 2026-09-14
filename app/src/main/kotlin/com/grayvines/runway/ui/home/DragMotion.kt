@@ -35,4 +35,11 @@ internal object DragMotion {
 
     /** Landing does not bounce. */
     val settle = spring<Float>(stiffness = Spring.StiffnessMediumLow)
+
+    /**
+     * How long a settle waits for its cell to say where it is before giving up and letting the item
+     * simply appear there (on a page that is not drawn, say). Only the wait is timed, never the
+     * landing: frames that are slow to come must not cut short a settle already under way.
+     */
+    const val SETTLE_TIMEOUT_MS = 2_000L
 }

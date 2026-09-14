@@ -8,8 +8,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.ui.drag.DragCoordinator
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
+import com.grayvines.runway.ui.home.DragMotion
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -281,6 +281,6 @@ class PageFlipTest : LauncherFixture() {
 
     private companion object {
         /** Less than the safety net: the icon must come back sooner than a given-up drop. */
-        const val SETTLE_MS = DragCoordinator.SETTLE_TIMEOUT_MS - 500L
+        const val SETTLE_MS = DragMotion.SETTLE_TIMEOUT_MS - 500L
     }
 }

@@ -227,14 +227,7 @@ class DragCoordinator(
         val source = state.source
         val fresh = source.newApp != null || source.newFolder != null || source.newWidget != null
         if (!fresh && plan !is DropPlan.Fold && plan != DropPlan.Remove) {
-            val settling = Settling(state.source.itemId, from)
-            _settling.value = settling
-            scope.launch {
-                delay(
-                    SETTLE_TIMEOUT_MS
-                ) // safety net if the item never draws (e.g. off-screen page)
-                if (_settling.value == settling) _settling.value = null
-            }
+            _settling.value = Settling(state.source.itemId, from)
         }
         if (plan == null) {
             showSourcePage(state.source)
@@ -325,7 +318,7 @@ class DragCoordinator(
         }
     }
 
-    /** The UI finished animating [itemId] into its cell. */
+    /** The UI finished animating [itemId] into its cell, or gave up waiting for the cell. */
     fun settled(itemId: Long) {
         if (_settling.value?.itemId == itemId) _settling.value = null
     }
@@ -369,9 +362,6 @@ class DragCoordinator(
     }
 
     companion object {
-        /** The safety net: a drop the layout never reflects is given up on after this long. */
-        const val SETTLE_TIMEOUT_MS = 2_000L
-
         /** Longer than a flip's scroll by a margin: a page that never settles still drops. */
         const val SETTLE_WAIT_MS = FLIP_SCROLL_MS + 350L
 
