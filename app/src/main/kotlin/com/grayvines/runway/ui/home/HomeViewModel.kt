@@ -188,6 +188,15 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
             override suspend fun move(move: PendingMove): Boolean {
                 if (move.newWidget != null) return widgetPicker.place(move)
+                if (move.removed) {
+                    // A widget's host id goes with it, or the provider would go on thinking it is
+                    // placed.
+                    val widget = state.value.item(move.itemId)?.appWidgetId
+                    return attempt("remove the item; it stays where it was") {
+                        graph.workspace.removeItem(move.itemId)
+                        widget?.let(graph.widgets::deleteId)
+                    }
+                }
                 val saved =
                     attempt("save the move; the item snaps back") {
                         check(graph.workspace.apply(move)) {
@@ -312,15 +321,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             }
         }
         // A placed widget's drag ends with the widget framed, wherever it came to rest: moved,
-        // refused (nowhere to go) or put back by Back alike. The frame waits for the settle.
+        // refused (nowhere to go) or put back by Back alike, each of which settles it into a cell.
+        // One put in the bin has no cell to settle into, and nothing to frame. The frame waits for
+        // the settle.
         viewModelScope.launch {
-            var carried: DragSource? = null
-            dragging.drag.collect { drag ->
-                val source = drag?.source
-                val ended = carried
-                carried = source
-                if (source == null && ended?.kind == ItemKind.WIDGET && ended.itemId != 0L) {
-                    widgetResize.show(ended.itemId)
+            dragging.settling.collect { settling ->
+                val id = settling?.itemId
+                if (id != null && state.value.item(id)?.kind == ItemKind.WIDGET) {
+                    widgetResize.show(id)
                 }
             }
         }
@@ -502,11 +510,12 @@ internal fun HomeState.stillHas(menu: ItemMenuState): Boolean =
 
 /**
  * True once the drawn layout shows [move] applied: the item, or the new app, is in its cell; for a
- * fold, the app is in the folder there, or the placement it came from is gone.
+ * fold, the app is in the folder there, or the placement it came from is gone; for a removal, the
+ * placement is gone.
  */
 internal fun HomeState.reflects(move: PendingMove): Boolean {
     val newApp = move.newApp
-    if (move.foldInto != null && newApp == null) {
+    if (move.removed || move.foldInto != null && newApp == null) {
         return allItems().none { it.id == move.itemId }
     }
     return pages(move.container).any { p ->

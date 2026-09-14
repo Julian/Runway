@@ -30,4 +30,9 @@ data class PendingMove(
     /** With [newWidget]: how many cells it covers. */
     val spanX: Int = 1,
     val spanY: Int = 1,
+    /**
+     * Set when the drop takes [itemId] away instead, let go on the bin; the cell is the one it
+     * leaves.
+     */
+    val removed: Boolean = false,
 )

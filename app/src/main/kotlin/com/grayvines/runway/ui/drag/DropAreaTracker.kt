@@ -33,6 +33,8 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
         refreshDock(slots)
     }
 
+    fun binPositioned(bounds: Bounds) = update(areas.copy(bin = bounds))
+
     private fun refreshHome(columns: Int, rows: Int) =
         update(
             areas.copy(

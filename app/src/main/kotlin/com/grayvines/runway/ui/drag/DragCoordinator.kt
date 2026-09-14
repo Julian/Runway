@@ -18,7 +18,10 @@ data class Settling(val itemId: Long, val from: Point)
 interface DragWorkspace {
     fun pageCount(container: Container): Int
 
-    /** Writes the move (or, for a [PendingMove.newApp], the new placement); false if not saved. */
+    /**
+     * Writes the move (or, for a [PendingMove.newApp], the new placement, and for a
+     * [PendingMove.removed] one, the removal); false if not saved.
+     */
     suspend fun move(move: PendingMove): Boolean
 
     /** Returns once the observed layout shows [move] applied. */
@@ -143,8 +146,13 @@ class DragCoordinator(
     /** Plans for the item at [pointer] against the areas as they are now. */
     private fun follow(pointer: Point) {
         val arrived = drag.value ?: return
+        // The bin sits over cells and slots; a placement on it is going, and lands in none of
+        // them. To anything else it is not there.
+        val onBin = arrived.removable && areas.areas.onBin(pointer)
         val target =
-            areas.areas.targetFor(pointer, arrived.grab, arrived.source.spanX, arrived.source.spanY)
+            areas.areas
+                .targetFor(pointer, arrived.grab, arrived.source.spanX, arrived.source.spanY)
+                .takeUnless { onBin }
         val edge = areas.areas.edgeAt(pointer)
         // Only a page at rest, away from its edges, is one the finger is on: mid-scroll the cell
         // under it belongs to a page passing by, and at an edge the finger is flipping, not
@@ -156,7 +164,13 @@ class DragCoordinator(
         edgeDwell.hover(hovered)
         // Already folding: stay folding until the finger is nearly off the icon.
         val zone = if (current.plan is DropPlan.Fold) FOLD_KEEP_ZONE else FOLD_ZONE
-        controller.move(pointer, target, hovered, over = areas.areas.cellUnder(pointer, zone))
+        controller.move(
+            pointer,
+            target,
+            hovered,
+            over = areas.areas.cellUnder(pointer, zone).takeUnless { onBin },
+            onBin = onBin,
+        )
         if (target != current.target) restOn(target)
     }
 
@@ -174,13 +188,14 @@ class DragCoordinator(
     /**
      * The finger has lifted. The drop lands now, or, while a page flip is still scrolling under the
      * item, once the page has settled (and the still finger has been re-planned against it); a
-     * pager that never reports settling is waited on for [SETTLE_WAIT_MS] at most.
+     * pager that never reports settling is waited on for [SETTLE_WAIT_MS] at most. The bin is not
+     * on a page, and takes what it is given at once.
      */
     fun endDrag() {
         edgeDwell.stop()
         resting?.cancel()
-        if (drag.value == null) return
-        if (areas.areas.settled) {
+        val state = drag.value ?: return
+        if (areas.areas.settled || state.plan == DropPlan.Remove) {
             drop()
         } else {
             released = true
@@ -207,11 +222,11 @@ class DragCoordinator(
         val plan = controller.drop()
         val from = Point(state.pointer.x - state.grab.x, state.pointer.y - state.grab.y)
         // Whether the drop lands or is refused, the icon settles from where it was released. An
-        // app from the drawer has no cell to settle into or back to, and one folded away has no
-        // cell of its own any more: those simply appear, or do not.
+        // app from the drawer has no cell to settle into or back to, and one folded away or put
+        // in the bin has no cell of its own any more: those simply appear, or go.
         val source = state.source
         val fresh = source.newApp != null || source.newFolder != null || source.newWidget != null
-        if (!fresh && plan !is DropPlan.Fold) {
+        if (!fresh && plan !is DropPlan.Fold && plan != DropPlan.Remove) {
             val settling = Settling(state.source.itemId, from)
             _settling.value = settling
             scope.launch {
@@ -228,7 +243,7 @@ class DragCoordinator(
         }
         val pendingMove =
             plan
-                .asPendingMove(state.source.itemId)
+                .asPendingMove(state.source)
                 .copy(
                     from = from,
                     newApp = state.source.newApp,
@@ -327,11 +342,22 @@ class DragCoordinator(
         drop()
     }
 
-    private fun DropPlan.asPendingMove(itemId: Long): PendingMove {
+    private fun DropPlan.asPendingMove(source: DragSource): PendingMove {
+        val itemId = source.itemId
         val (target, displaced, into) =
             when (this) {
                 is DropPlan.Move -> Triple(target, displaced, null)
                 is DropPlan.Fold -> Triple(target, emptyMap(), into)
+                DropPlan.Remove ->
+                    return PendingMove(
+                        itemId,
+                        source.container,
+                        source.page,
+                        source.x,
+                        source.y,
+                        emptyMap(),
+                        removed = true,
+                    )
                 DropPlan.Invalid -> error("an invalid plan is never dropped")
             }
         return when (target) {

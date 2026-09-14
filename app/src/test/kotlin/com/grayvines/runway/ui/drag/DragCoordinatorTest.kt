@@ -70,11 +70,65 @@ class DragCoordinatorTest {
     private val source = DragSource(1, ItemKind.APP, Container.HOME, 0, 0, 0)
     private val grab = Point(50f, 50f)
 
+    /** The bin, over where the pages meet the dock; the point is in the dock's slot. */
+    private val bin = Bounds(125f, 185f, 175f, 215f)
+    private val onBin = Point(150f, 205f)
+
     // Home area 300×200 at the top, dock 300×50 below it; 3 columns, 2 rows.
     private fun DragCoordinator.layOut() {
         areas.homePagePositioned(0, Bounds(0f, 0f, 300f, 200f), 3, 2)
         areas.homePageShown(0, 3, 2)
         areas.dockPagePositioned(0, Bounds(0f, 200f, 300f, 250f), 1)
+    }
+
+    @Test
+    fun `a placement let go on the bin is removed, and has no cell to settle into`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.areas.binPositioned(bin)
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(onBin)
+        assertEquals(DropPlan.Remove, c.drag.value?.plan)
+        assertNull(c.drag.value?.target) // the slot under it does not count
+        c.endDrag()
+        runCurrent()
+        val move = workspace.moves.single()
+        assertEquals(
+            Triple(1L, true, Point(100f, 155f)),
+            Triple(move.itemId, move.removed, move.from),
+        )
+        assertEquals(move, c.pending.value) // shown gone until the database says so
+        assertNull(c.settling.value)
+        workspace.reflected.complete(Unit)
+        runCurrent()
+        assertNull(c.pending.value)
+        assertEquals(1, workspace.prunes)
+    }
+
+    @Test
+    fun `the bin takes at once, even while a page is still scrolling`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.areas.binPositioned(bin)
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.areas.homePageShown(1, 3, 2, settled = false) // a flip is under way
+        c.dragTo(onBin)
+        c.endDrag()
+        runCurrent()
+        assertEquals(true, workspace.moves.single().removed)
+        assertNull(c.drag.value)
+    }
+
+    @Test
+    fun `to a drag out of the drawer the bin is not there`() = runTest {
+        val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
+        c.layOut()
+        c.areas.binPositioned(bin)
+        c.startDrag(fromDrawer(AppRef("new/.Main", 0)), Point(50f, 50f), grab)
+        c.dragTo(onBin)
+        assertEquals(DropTarget.DockSlot(0, 0), c.drag.value?.target)
     }
 
     @Test

@@ -54,6 +54,16 @@ class DropAreaTrackerTest {
     }
 
     @Test
+    fun `the bin is wherever it was last laid out, whichever page shows`() {
+        val bin = Bounds(40f, 0f, 60f, 20f)
+        assertEquals(false, tracker.areas.onBin(Point(50f, 10f)))
+        tracker.binPositioned(bin)
+        tracker.homePageShown(1, 4, 3)
+        assertEquals(true, tracker.areas.onBin(Point(50f, 10f)))
+        assertEquals(false, tracker.areas.onBin(Point(50f, 30f)))
+    }
+
+    @Test
     fun `changes are reported once each and only when something changed`() {
         tracker.homePagePositioned(0, page0, 4, 3)
         tracker.homePagePositioned(0, page0, 4, 3)

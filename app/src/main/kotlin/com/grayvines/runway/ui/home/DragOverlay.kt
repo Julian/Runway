@@ -61,16 +61,17 @@ fun DragOverlay(
     within: () -> Rect? = { null },
 ) {
     if (item == null) return
-    // Which phase, and whether a fold is on: derived, so the finger's moves change nothing here.
+    // Which phase, and whether a fold or the bin is under the finger: derived, so the finger's
+    // moves change nothing here.
     val dragging by remember(drag) { derivedStateOf { drag.state != null } }
-    val folds by remember(drag) { derivedStateOf { drag.foldTargetId != null } }
+    val shrinks by remember(drag) { derivedStateOf { drag.foldTargetId != null || drag.removing } }
     val settling = drag.settling
     val size = DpSize(cell.width * item.spanX, cell.height * item.spanY)
     when {
         dragging -> {
             val folding by
                 animateFloatAsState(
-                    if (folds) DragMotion.FOLDING_SCALE else 1f,
+                    if (shrinks) DragMotion.FOLDING_SCALE else 1f,
                     tween(DragMotion.FOLDING_MS),
                     label = "folding",
                 )

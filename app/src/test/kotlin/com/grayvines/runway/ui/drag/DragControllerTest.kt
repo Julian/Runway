@@ -241,6 +241,35 @@ class DragControllerTest {
     }
 
     @Test
+    fun `on the bin a placement plans its removal, and off it plans as before`() {
+        lift(9, Container.DOCK)
+        controller.move(origin, target = null, onBin = true)
+        assertEquals(DropPlan.Remove, controller.state.value?.plan)
+        controller.move(origin, DropTarget.HomeCell(0, 2, 1))
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 2, 1), emptyMap()),
+            controller.state.value?.plan,
+        )
+        controller.move(origin, target = null, onBin = true)
+        assertEquals(DropPlan.Remove, controller.drop())
+    }
+
+    @Test
+    fun `nothing out of the drawer goes in the bin, even once it has picked up a placement`() {
+        val app = AppRef("a/.Main", 0)
+        controller.start(
+            DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app),
+            origin,
+            origin,
+        )
+        controller.move(origin, target = null, onBin = true)
+        assertNull(controller.state.value?.plan)
+        controller.adopt(DragSource(1, ItemKind.APP, Container.HOME, 0, 0, 0), from = origin)
+        controller.move(origin, target = null, onBin = true)
+        assertNull(controller.state.value?.plan)
+    }
+
+    @Test
     fun `no target means no plan`() {
         lift(1)
         controller.move(Point(5f, 5f), null)

@@ -20,7 +20,8 @@ internal object DragMotion {
 
     /**
      * Over an icon it would fold into, the lifted icon shrinks to this, so the tile forming under
-     * it and the icon it would join both stay in view.
+     * it and the icon it would join both stay in view; over the bin, so the bin lit up under it
+     * does.
      */
     const val FOLDING_SCALE = 0.6f
     const val FOLDING_MS = 150

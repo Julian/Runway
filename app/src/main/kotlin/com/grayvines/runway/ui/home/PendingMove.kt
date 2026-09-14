@@ -16,9 +16,10 @@ fun HomeState.applying(move: PendingMove?): HomeState {
 /**
  * Home and dock pages with [move] applied. Idempotent: applying to already-moved data is a no-op. A
  * fold takes the mover off its page; the folder it went into draws itself once the data shows it. A
- * mover with no placement yet (an app or widget fresh from the drawer or picker) is not drawn, but
- * the neighbours it displaced move aside all the same: a widget's bind prompt and setup screen can
- * keep its row from being written for as long as the user likes.
+ * removal takes it off and puts it nowhere. A mover with no placement yet (an app or widget fresh
+ * from the drawer or picker) is not drawn, but the neighbours it displaced move aside all the same:
+ * a widget's bind prompt and setup screen can keep its row from being written for as long as the
+ * user likes.
  */
 fun PendingMove.applyTo(
     home: List<HomePage>,
@@ -27,7 +28,7 @@ fun PendingMove.applyTo(
     val moved = (home + dock).flatMap { it.items }.firstOrNull { it.id == itemId }
     val relocated = moved?.copy(x = x, y = y)
     fun List<HomePage>.without() = map { p -> p.copy(items = p.items.filter { it.id != itemId }) }
-    if (foldInto != null) return home.without() to dock.without()
+    if (foldInto != null || removed) return home.without() to dock.without()
     fun List<HomePage>.receiving() = map { p ->
         if (p.index != page) {
             p

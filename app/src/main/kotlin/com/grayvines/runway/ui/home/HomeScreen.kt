@@ -161,6 +161,11 @@ fun HomeScreen(
         openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
         WidgetResizeOverlay(state, widgetResize, cell, drag)
         Menus(state, itemMenu, homeMenu, widgetPicker, cell, drag)
+        // Between the dock and the pages' last row, across the search bar when it sits there, as
+        // drawn once the home area has stepped back about the screen's middle.
+        val dockTop = maxHeight - insets.calculateBottomPadding() - cell.height
+        val between = if (settings.searchBarAtTop) dockTop else dockTop - cell.height / 2
+        RemoveBin(drag, at = maxHeight / 2 + (between - maxHeight / 2) * DragMotion.ZOOM)
         // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
         DragOverlay(
             drag = drag,
@@ -174,11 +179,15 @@ fun HomeScreen(
     }
 }
 
-/** The cells a carried widget is drawn on (root px), or null when nothing carried is a widget. */
+/**
+ * The cells a carried widget is drawn on (root px), or null when nothing carried is a widget, or it
+ * is on the bin: going, and pressing against nothing (the bin sits over a search bar below the
+ * pages).
+ */
 private fun carriedWidget(drag: DragSession, cellPx: Size): Rect? {
     val state = drag.state ?: return null
     val source = state.source
-    if (source.kind != ItemKind.WIDGET && source.newWidget == null) return null
+    if (source.kind != ItemKind.WIDGET && source.newWidget == null || drag.removing) return null
     val left = state.pointer.x - state.grab.x
     val top = state.pointer.y - state.grab.y
     return Rect(left, top, left + cellPx.width * source.spanX, top + cellPx.height * source.spanY)

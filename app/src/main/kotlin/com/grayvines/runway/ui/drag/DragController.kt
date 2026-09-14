@@ -56,6 +56,9 @@ sealed interface DropPlan {
      */
     data class Fold(val target: DropTarget, val into: Long) : DropPlan
 
+    /** The dragged placement goes: it is over the bin. */
+    data object Remove : DropPlan
+
     data object Invalid : DropPlan
 }
 
@@ -83,6 +86,12 @@ data class DragState(
      * from there into the finger.
      */
     val pickedUpFrom: Point? = null,
+    /**
+     * Lifted from a page or the dock, so the bin is there to take it. Settled at the lift: a drag
+     * out of the drawer or a folder that picks up a placement on its way is still adding, not
+     * clearing away.
+     */
+    val removable: Boolean = false,
 )
 
 /** What the controller needs to know about the workspace to plan a drop. */
@@ -101,7 +110,7 @@ class DragController(private val lookup: WorkspaceLookup) {
     val state: StateFlow<DragState?> = _state
 
     fun start(source: DragSource, pointer: Point, grab: Point) {
-        _state.value = DragState(source, pointer, grab)
+        _state.value = DragState(source, pointer, grab, removable = source.itemId != 0L)
     }
 
     /**
@@ -122,10 +131,17 @@ class DragController(private val lookup: WorkspaceLookup) {
         target: DropTarget?,
         edge: EdgeHover? = null,
         over: DropTarget? = null,
+        /** The finger is on the bin, which is only there for what [DragState.removable] says. */
+        onBin: Boolean = false,
     ) {
         val current = _state.value ?: return
         val plan =
-            over?.let { planFold(current.source, it) } ?: target?.let { plan(current.source, it) }
+            if (onBin && current.removable) {
+                DropPlan.Remove
+            } else {
+                over?.let { planFold(current.source, it) }
+                    ?: target?.let { plan(current.source, it) }
+            }
         _state.value =
             current.copy(
                 pointer = pointer,
@@ -141,7 +157,7 @@ class DragController(private val lookup: WorkspaceLookup) {
         _state.value = _state.value?.copy(rested = true)
     }
 
-    /** Ends the drag; the move or fold to apply, or null if nothing changes. */
+    /** Ends the drag; the move, fold or removal to apply, or null if nothing changes. */
     fun drop(): DropPlan? {
         val plan = _state.value?.plan
         _state.value = null

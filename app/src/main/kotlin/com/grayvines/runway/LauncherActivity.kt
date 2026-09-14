@@ -260,6 +260,7 @@ class LauncherActivity : ComponentActivity() {
                 pictureOf = picture,
                 onSettleTargetPositioned = { settleTarget.value = it },
                 onSettled = viewModel.dragging::settled,
+                onBinPositioned = viewModel.dragging.areas::binPositioned,
                 onHold = viewModel.hold,
                 onStart = viewModel::startDrag,
                 onStartNew = viewModel::startNewDrag,

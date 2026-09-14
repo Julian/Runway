@@ -49,6 +49,16 @@ class PendingMoveTest {
     }
 
     @Test
+    fun `a removal takes the item off its page and moves nothing else`() {
+        val removal = PendingMove(9, Container.DOCK, 0, 0, 0, emptyMap(), removed = true)
+        val (h, d) = removal.applyTo(home, dock)
+        assertEquals(cells(home), cells(h))
+        assertEquals(emptySet<Triple<Int, Long, Pair<Int, Int>>>(), cells(d))
+        val (again, _) = removal.applyTo(h, d)
+        assertEquals(cells(h), cells(again))
+    }
+
+    @Test
     fun `is a no-op once the data already reflects it`() {
         val move = PendingMove(1, Container.HOME, 0, 1, 0, displaced = mapOf(2L to Footprint(0, 0)))
         val (once, _) = move.applyTo(home, dock)

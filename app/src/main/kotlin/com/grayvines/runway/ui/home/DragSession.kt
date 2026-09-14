@@ -35,6 +35,8 @@ class DragSession(
     private val settleTargetOf: State<Point?>,
     val onSettleTargetPositioned: (Point) -> Unit = {},
     val onSettled: (itemId: Long) -> Unit = {},
+    /** Where the bin is (root px), whenever it is laid out. */
+    val onBinPositioned: (Bounds) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onStartNew: (DragSource, Point, Point) -> Unit,
@@ -70,6 +72,14 @@ class DragSession(
     /** The item the dragged app would fold into if let go now. */
     val foldTargetId: Long?
         get() = (state?.plan as? DropPlan.Fold)?.into
+
+    /** A drag of a placement is live, so the bin is there to take it. */
+    val removable: Boolean
+        get() = state?.removable == true
+
+    /** The dragged placement would be removed if let go now: it is on the bin. */
+    val removing: Boolean
+        get() = state?.plan == DropPlan.Remove
 
     /** Where a displaced item is previewed, once the finger has rested on its target. */
     fun previewFor(id: Long): Footprint? =

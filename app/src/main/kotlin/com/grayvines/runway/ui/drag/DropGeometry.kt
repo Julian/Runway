@@ -31,11 +31,16 @@ data class DropAreas(
     /** False while the home pager is scrolling: [home] is then a page part-way across. */
     val homeSettled: Boolean = true,
     val dockSettled: Boolean = true,
+    /** Where a placement let go is removed, whether or not the bin is showing right now. */
+    val bin: Bounds? = null,
 ) {
     /** Neither pager is mid-scroll: what the areas say is where things will stay. */
     val settled: Boolean
         get() = homeSettled && dockSettled
 }
+
+/** Whether [pointer] is on the bin. */
+fun DropAreas.onBin(pointer: Point): Boolean = bin?.contains(pointer) == true
 
 /**
  * Maps the dragged item's position to a drop target. The item's top-left corner (pointer minus grab
