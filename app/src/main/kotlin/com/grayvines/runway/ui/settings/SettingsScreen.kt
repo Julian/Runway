@@ -37,12 +37,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
 
 @Composable
 fun SettingsScreen(
     settings: Settings,
     searchTargets: List<SearchTarget>,
+    /** Every launchable app, for what a swipe can open. */
+    apps: List<AppEntry>,
     onChange: ((Settings) -> Settings) -> Unit,
     onOpenHome: (() -> Unit)?,
     backupActions: BackupActions,
@@ -65,6 +68,11 @@ fun SettingsScreen(
             Toggle("Drawer", settings.drawerLabels) { v -> onChange { it.copy(drawerLabels = v) } }
 
             DrawerSection(settings, onChange)
+
+            Section("Swipe right")
+            SwipeRightPicker(settings.swipeRight, apps) { action ->
+                onChange { it.copy(swipeRight = action) }
+            }
 
             Section("Search bar")
             Toggle("At the top (otherwise above the dock)", settings.searchBarAtTop) { v ->

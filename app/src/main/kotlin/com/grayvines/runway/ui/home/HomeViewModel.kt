@@ -22,6 +22,7 @@ import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.settings.SwipeAction
 import com.grayvines.runway.data.unfold
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
@@ -334,6 +335,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             widgetResize.show(item.id)
         } else {
             itemMenu.hold(item, container, page, cell)
+        }
+    }
+
+    /** A swipe right on the first page runs what it is set to, if anything. */
+    val swipedPastFirstPage: () -> Unit = {
+        val s = state.value
+        when (val action = s.settings.swipeRight) {
+            null -> Unit
+            is SwipeAction.OpenApp ->
+                s.apps.firstOrNull { it.ref == action.app }?.let(graph.appRepository::launch)
         }
     }
 

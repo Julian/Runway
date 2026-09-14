@@ -1,6 +1,7 @@
 package com.grayvines.runway.data.settings
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
@@ -13,6 +14,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 
 /**
  * What to make of a settings file that cannot be read: nothing, and start over. The settings are a
@@ -45,6 +47,8 @@ class SettingsRepository(context: Context) {
         val drawerKeyboard = booleanPreferencesKey("drawer_keyboard")
         val drawerColumns = intPreferencesKey("drawer_columns")
         val drawerIndex = booleanPreferencesKey("drawer_index")
+        /** The action as JSON: one key holds any kind of action, with whatever it names. */
+        val swipeRight = stringPreferencesKey("swipe_right")
     }
 
     /** What the store holds, within bounds: nothing on disk is trusted to be. */
@@ -66,6 +70,7 @@ class SettingsRepository(context: Context) {
                 drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
                 drawerColumns = this[Keys.drawerColumns],
                 drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
+                swipeRight = this[Keys.swipeRight]?.let(::swipeActionOrNull),
             )
             .clamped()
     }
@@ -83,5 +88,21 @@ class SettingsRepository(context: Context) {
         prefs[Keys.drawerKeyboard] = drawerKeyboard
         drawerColumns?.let { prefs[Keys.drawerColumns] = it } ?: prefs.remove(Keys.drawerColumns)
         prefs[Keys.drawerIndex] = drawerIndex
+        swipeRight?.let { prefs[Keys.swipeRight] = Json.encodeToString<SwipeAction>(it) }
+            ?: prefs.remove(Keys.swipeRight)
     }
 }
+
+/**
+ * The action [json] describes, or null for one this build cannot read (written by a newer Runway,
+ * or edited by hand): a swipe that does nothing, rather than settings that cannot be read.
+ */
+private fun swipeActionOrNull(json: String): SwipeAction? =
+    try {
+        Json.decodeFromString<SwipeAction>(json)
+    } catch (e: IllegalArgumentException) {
+        Log.w(TAG, "a swipe action this build cannot read; it does nothing", e)
+        null
+    }
+
+private const val TAG = "Runway"

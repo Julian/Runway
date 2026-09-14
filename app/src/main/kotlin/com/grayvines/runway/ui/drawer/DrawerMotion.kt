@@ -32,13 +32,13 @@ private const val CATCH_UP_MS = 120
  * A finger that comes back this far (dp) from the farthest it pulled has changed its mind: letting
  * go then cancels, however far the pull had got.
  */
-private const val REVERSAL_DP = 8f
+internal const val REVERSAL_DP = 8f
 
 /**
  * A finger still moving against the pull when it lets go (dp/s), however slowly, has changed its
  * mind; below this is the jitter of a finger holding still.
  */
-private const val AGAINST_DP_PER_SECOND = 30f
+internal const val AGAINST_DP_PER_SECOND = 30f
 
 /**
  * How much of the drawer is showing, 0 closed to 1 open, and what a finger does to it. The finger

@@ -4,6 +4,7 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.settings.SwipeAction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -28,7 +29,13 @@ class BackupTest {
                 ),
         )
     private val settings =
-        Settings(columns = 5, drawerSwipe = DrawerSwipe.HIGH, drawerColumns = 6, searchTarget = "x")
+        Settings(
+            columns = 5,
+            drawerSwipe = DrawerSwipe.HIGH,
+            drawerColumns = 6,
+            searchTarget = "x",
+            swipeRight = SwipeAction.OpenApp(AppRef("d/.Main", 10)),
+        )
 
     @Test
     fun `survives a trip through json`() {

@@ -58,9 +58,11 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
+                val apps by graph.appRepository.apps.collectAsStateWithLifecycle()
                 SettingsScreen(
                     settings = settings,
                     searchTargets = searchTargets,
+                    apps = apps,
                     onOpenHome =
                         if (isHome) {
                             null

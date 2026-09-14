@@ -14,13 +14,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.widgets.WidgetResizeSession
 
 const val WORKSPACE_TAG = "workspace"
 
-/** Home pages, swiped horizontally. */
+/**
+ * Home pages, swiped horizontally; a swipe right on the first page calls [onSwipePastFirstPage].
+ */
 @Composable
 fun Workspace(
     pages: List<HomePage>,
@@ -34,10 +37,17 @@ fun Workspace(
     drag: DragSession?,
     onPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
+    /** How far or fast a swipe past the first page must go to count. */
+    swipeSensitivity: DrawerSwipe,
+    onSwipePastFirstPage: () -> Unit,
     modifier: Modifier = Modifier,
     resize: WidgetResizeSession? = null,
 ) {
-    Box(modifier.fillMaxSize()) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .swipesPastFirstPage(pagerState, swipeSensitivity, onSwipePastFirstPage)
+    ) {
         HorizontalPager(
             state = pagerState,
             // A finger carrying an icon is not swiping pages: were the pager still listening, it

@@ -1,5 +1,7 @@
 package com.grayvines.runway.data.settings
 
+import com.grayvines.runway.data.AppRef
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -12,6 +14,13 @@ enum class DrawerSwipe(val label: String, val openAt: Float, val flickDpPerSecon
     LOW("Low", openAt = 0.08f, flickDpPerSecond = 250f),
     MEDIUM("Medium", openAt = 0.02f, flickDpPerSecond = 125f),
     HIGH("High", openAt = 0.01f, flickDpPerSecond = 80f),
+}
+
+/** What a swipe can be set to do. */
+@Serializable
+sealed interface SwipeAction {
+    /** Opens [app]; while it is not installed, nothing. */
+    @Serializable @SerialName("open_app") data class OpenApp(val app: AppRef) : SwipeAction
 }
 
 /** User configuration. The defaults are the product. */
@@ -33,6 +42,8 @@ data class Settings(
     val drawerColumns: Int? = null,
     /** An alphabet down the drawer's right edge that jumps the list. */
     val drawerIndex: Boolean = false,
+    /** What swiping right from the first home page does; null, nothing. */
+    val swipeRight: SwipeAction? = null,
 ) {
     /** Rows left for items: the dock and the search bar each take one full row. */
     val pageRows: Int

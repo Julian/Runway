@@ -3,12 +3,14 @@ package com.grayvines.runway
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.settingsStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -27,5 +29,22 @@ class SettingsStoreTest : LauncherFixture() {
         icon(firstHomeApp).assertIsDisplayed()
         assertStillOnLauncher()
         assertEquals(Settings.MIN_ROWS, runBlocking { graph.settings.settings.first().rows })
+    }
+
+    @Test
+    fun aStoredSwipeActionThisBuildCannotReadDoesNothingAndTheRestIsKept() {
+        // An action a newer Runway might add, and a column count to show the rest still reads.
+        runBlocking {
+            app.settingsStore.edit {
+                it[stringPreferencesKey("swipe_right")] = """{"type":"open_search"}"""
+                it[intPreferencesKey("columns")] = settings.columns + 1
+            }
+        }
+        waitUntil(TIMEOUT_MS) {
+            runBlocking { graph.settings.settings.first().columns } == settings.columns + 1
+        }
+        assertNull(runBlocking { graph.settings.settings.first().swipeRight })
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+        assertStillOnLauncher()
     }
 }

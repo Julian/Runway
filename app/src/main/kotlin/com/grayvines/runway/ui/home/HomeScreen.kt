@@ -80,6 +80,8 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
+    /** A swipe right on the first home page, where there is no page to go to. */
+    onSwipePastFirstPage: () -> Unit,
     drag: DragSession,
     itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
@@ -130,6 +132,7 @@ fun HomeScreen(
             iconSize = iconSize,
             onLaunch = onLaunch,
             onSearch = onSearch,
+            onSwipePastFirstPage = onSwipePastFirstPage,
             onMenu = homeMenu.onOpen,
             drag = drag,
             drawer = drawer,
@@ -256,6 +259,7 @@ private fun HomeColumn(
     iconSize: Dp,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
+    onSwipePastFirstPage: () -> Unit,
     onMenu: (Bounds) -> Unit,
     drag: DragSession,
     onHomePagePositioned: (page: Int, Bounds) -> Unit,
@@ -295,6 +299,8 @@ private fun HomeColumn(
             drag = drag,
             onPagePositioned = onHomePagePositioned,
             onHoldEmpty = onHoldEmpty,
+            swipeSensitivity = settings.drawerSwipe,
+            onSwipePastFirstPage = onSwipePastFirstPage,
             modifier =
                 Modifier.weight(1f)
                     .onGloballyPositioned { onPagesPositioned(it.boundsInRoot()) }

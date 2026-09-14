@@ -141,6 +141,7 @@ class LauncherActivity : ComponentActivity() {
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
+                    onSwipePastFirstPage = viewModel.swipedPastFirstPage,
                     itemMenu =
                         ItemMenuSession(
                             itemMenu,
