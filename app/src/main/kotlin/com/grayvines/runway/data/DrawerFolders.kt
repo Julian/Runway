@@ -4,8 +4,9 @@ import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 
 /*
- * Drawer folders: folders placed in the drawer. Made and filled from an app's menu, never by a
- * drop; an app is in at most one of them, and the drawer's grid leaves out the apps they hold.
+ * Drawer folders: folders placed in the drawer. Made from an app's menu and filled from the folder's
+ * own sheet, never by a drop; an app is in at most one of them, and the drawer's grid leaves out the
+ * apps they hold.
  */
 
 /**

@@ -7,11 +7,13 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -19,13 +21,20 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.NEW_FOLDER_NAME
+import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.renameFolder
+import com.grayvines.runway.system.apps.LabelOrder
 import com.grayvines.runway.ui.drawer.DRAWER_FOLDER_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.folder.FOLDER_ADD_SEARCH_TAG
+import com.grayvines.runway.ui.folder.FOLDER_ADD_TAG
+import com.grayvines.runway.ui.folder.FOLDER_CANDIDATE_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import kotlinx.coroutines.flow.first
@@ -83,14 +92,12 @@ class DrawerFolderTest : LauncherFixture() {
     }
 
     @Test
-    fun anAppsMenuDoesNotOfferTheFolderItIsAlreadyIn() {
+    fun anAppsMenuOffersANewFolderButNoFolderToJoin() {
         makeDrawerFolder(first)
-        compose.onNodeWithTag(DRAWER_SEARCH_TAG).performTextInput(first)
-        waitUntil { drawerApp(first).isDisplayedOrFalse() }
-        hold(drawerApp(first))
+        hold(drawerApp(second))
         release()
         menuRow("New folder").assertIsDisplayed()
-        compose.onAllNodes(hasText("Add to Folder")).assertCountEquals(0)
+        compose.onAllNodes(hasText("Add to", substring = true)).assertCountEquals(0)
         sendHomeIntent() // closes the menu
     }
 
@@ -134,29 +141,121 @@ class DrawerFolderTest : LauncherFixture() {
     private fun SemanticsNode.isFocused() = config.getOrNull(SemanticsProperties.Focused) == true
 
     @Test
-    fun addToFolderMovesAnAppIntoIt_andAnAppIsInOneDrawerFolderAtMost() {
-        makeDrawerFolder(first)
-        hold(drawerApp(second))
-        release()
-        menuRow("Add to Folder").performClick()
-        awaitFolders(listOf(listOf(first, second)))
-        tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
-        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty() }
+    fun aDrawerFolderEndsInAPlusThatListsEveryAppNotInIt() {
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(second).isDisplayedOrFalse() }
         compose
-            .onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(second))
-            .assertIsDisplayed()
-        // HOME closes the sheet and leaves the drawer; Back would first take the keyboard down.
+            .onAllNodes(hasTestTag(FOLDER_CANDIDATE_TAG) and hasContentDescription(first))
+            .assertCountEquals(0)
+        compose.onAllNodesWithTag(FOLDER_ITEM_TAG).assertCountEquals(0) // the list, not the folder
+        compose.onNodeWithTag(FOLDER_ADD_SEARCH_TAG).assertIsDisplayed()
         sendHomeIntent()
-        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
+    }
 
-        // The app is out of the grid now, so search is the way to its menu; a second folder for
-        // it takes it out of the first.
-        compose.onNodeWithTag(DRAWER_SEARCH_TAG).performTextInput(second)
-        waitUntil { drawerApp(second).isDisplayedOrFalse() }
+    @Test
+    fun tappingAListedAppAddsItAtOnce_andTheListStaysForTheNext() {
+        val third = labels[2]
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(second).isDisplayedOrFalse() }
+
+        tap(candidate(second))
+        awaitFolders(listOf(listOf(first, second)))
+        waitUntil { !candidate(second).isDisplayedOrFalse() }
+        tap(candidate(third))
+        awaitFolders(listOf(listOf(first, second, third)))
+
+        // Done goes back to the folder, with both in it.
+        tap(compose.onNode(hasText("Done") and hasAnyAncestor(hasTestTag(FOLDER_TAG))))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
+        folderApp(second).assertIsDisplayed()
+        folderApp(third).assertIsDisplayed()
+        sendHomeIntent()
+    }
+
+    @Test
+    fun typingNarrowsTheList_andSaysSoWhenNothingMatches() {
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        // One of the first few listed, and so on screen, that the query will not match.
+        val unmatched =
+            labels.subList(2, NEIGHBOURS).first {
+                !LabelOrder.folded(it).contains(LabelOrder.folded(second))
+            }
+        waitUntil { candidate(unmatched).isDisplayedOrFalse() }
+
+        compose.onNodeWithTag(FOLDER_ADD_SEARCH_TAG).performTextInput(second)
+        waitUntil { !candidate(unmatched).isDisplayedOrFalse() }
+        candidate(second).assertIsDisplayed()
+
+        compose.onNodeWithTag(FOLDER_ADD_SEARCH_TAG).performTextInput("qqqzzz")
+        waitUntil {
+            compose.onAllNodes(hasText("No apps match")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithTag(FOLDER_CANDIDATE_TAG).assertCountEquals(0)
+        sendHomeIntent()
+    }
+
+    @Test
+    fun backFromTheListReturnsToTheFolder_andBackAgainClosesIt() {
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(second).isDisplayedOrFalse() }
+
+        device.pressBack()
+        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
+        folderApp(first).assertIsDisplayed()
+        compose.onAllNodesWithTag(FOLDER_CANDIDATE_TAG).assertCountEquals(0)
+
+        device.pressBack()
+        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag(DRAWER_TAG).assertExists()
+    }
+
+    @Test
+    fun addingAnAppFromAnotherDrawerFolderMovesIt_andTheFolderItLeftEmptyGoes() {
+        makeDrawerFolder(first)
+        val firstFolder = runBlocking {
+            graph.workspace.observeDrawerPlacements().first().single().folderId!!
+        }
+        runBlocking { graph.workspace.renameFolder(firstFolder, FIRST_FOLDER) }
         hold(drawerApp(second))
         release()
         menuRow("New folder").performClick()
         awaitFolders(listOf(listOf(first), listOf(second)))
+
+        val tile =
+            compose.onNode(hasTestTag(DRAWER_FOLDER_TAG) and hasContentDescription(FIRST_FOLDER))
+        waitUntil { tile.isDisplayedOrFalse() }
+        tap(tile)
+        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(second).isDisplayedOrFalse() }
+        tap(candidate(second))
+        awaitFolders(listOf(listOf(first, second)))
+        sendHomeIntent()
+    }
+
+    @Test
+    fun aDrawerFolderPlacedOnAPageOffersThePlusThereToo() {
+        val home = placementOf(firstHomeApp)!!
+        runBlocking {
+            val folderId = graph.workspace.createDrawerFolder(apps.first().ref)
+            graph.workspace.removeItem(home.id)
+            graph.workspace.placeFolder(
+                folderId,
+                Container.HOME,
+                home.pageIndex!!,
+                home.x!!,
+                home.y!!,
+            )
+        }
+        waitUntil { folderAt(home.x!!, home.y!!) == listOf(first) }
+        tap(compose.onNodeWithContentDescription(NEW_FOLDER_NAME, useUnmergedTree = true))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(FOLDER_ADD_TAG).assertIsDisplayed()
+        sendHomeIntent()
     }
 
     @Test
@@ -221,6 +320,19 @@ class DrawerFolderTest : LauncherFixture() {
         waitUntil { drawerFolderTiles().size == 1 }
     }
 
+    /** Opens the drawer, makes a drawer folder of [label], and opens that folder's sheet. */
+    private fun openDrawerFolderOf(label: String) {
+        makeDrawerFolder(label)
+        tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun candidate(label: String) =
+        compose.onNode(hasTestTag(FOLDER_CANDIDATE_TAG) and hasContentDescription(label))
+
+    private fun folderApp(label: String) =
+        compose.onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(label))
+
     private fun drawerFolderTiles() =
         compose.onAllNodesWithTag(DRAWER_FOLDER_TAG).fetchSemanticsNodes()
 
@@ -246,5 +358,11 @@ class DrawerFolderTest : LauncherFixture() {
                     }
                 }
         }
+    }
+
+    private companion object {
+        /** Far enough into the apps that one of them will not match a query for another. */
+        const val NEIGHBOURS = 6
+        const val FIRST_FOLDER = "Kept apart"
     }
 }

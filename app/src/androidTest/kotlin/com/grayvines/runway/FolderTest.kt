@@ -26,6 +26,7 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.ui.folder.FOLDER_ADD_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_NAME_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
@@ -105,6 +106,13 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
         folderApp(firstHomeApp).assertIsDisplayed()
         folderApp(neighbour).assertIsDisplayed()
+    }
+
+    @Test
+    fun aFolderMadeOnAPageHasNoPlus() {
+        makeFolder()
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
+        compose.onAllNodesWithTag(FOLDER_ADD_TAG).assertCountEquals(0) // it takes apps by a drop
     }
 
     @Test

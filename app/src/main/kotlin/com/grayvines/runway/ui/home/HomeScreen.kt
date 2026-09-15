@@ -160,7 +160,7 @@ fun HomeScreen(
         // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
         openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
         WidgetResizeOverlay(state, widgetResize, cell, drag)
-        Menus(state, itemMenu, homeMenu, widgetPicker, cell, drag)
+        Menus(itemMenu, homeMenu, widgetPicker, cell, drag)
         // Between the dock and the pages' last row, across the search bar when it sits there, as
         // drawn once the home area has stepped back about the screen's middle.
         val dockTop = maxHeight - insets.calculateBottomPadding() - cell.height
@@ -196,7 +196,6 @@ private fun carriedWidget(drag: DragSession, cellPx: Size): Rect? {
 /** The item menu, the home menu and the widget picker, whichever is up. */
 @Composable
 private fun Menus(
-    state: HomeState,
     itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
@@ -204,7 +203,7 @@ private fun Menus(
     drag: DragSession,
 ) {
     itemMenu.at?.let {
-        ItemMenu(it, itemMenu.actions, state.drawerFolders, onDismiss = itemMenu.onDismiss)
+        ItemMenu(it, itemMenu.actions, onDismiss = itemMenu.onDismiss)
     }
     homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
     if (widgetPicker.open) {
@@ -406,7 +405,7 @@ private fun OpenFolder(
     drag: DragSession,
 ) {
     val folder = state.item(open.itemId) ?: return
-    FolderSheet(folder, open.from, iconSize, actions, drag, leaving = open.leaving)
+    FolderSheet(folder, open.from, iconSize, state.apps, actions, drag, leaving = open.leaving)
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */

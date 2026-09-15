@@ -8,4 +8,6 @@ class FolderActions(
     val close: () -> Unit,
     /** Names the folder of this id, whether or not it is still the open one. */
     val rename: (folderId: Long, name: String) -> Unit,
+    /** Puts the app in the drawer folder of this id, taking it out of any other drawer folder. */
+    val add: (folderId: Long, app: AppEntry) -> Unit,
 )

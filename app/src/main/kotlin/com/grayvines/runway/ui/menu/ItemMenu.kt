@@ -9,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -55,29 +54,22 @@ class ItemMenuActions(
     val remove: () -> Unit,
     /** A drawer app: a new drawer folder holding it. */
     val newFolder: () -> Unit,
-    /** A drawer app: into the drawer folder of this id. */
-    val addToFolder: (folderId: Long) -> Unit,
     /** A drawer folder: gone, its apps loose again. */
     val deleteFolder: () -> Unit,
 )
 
 /**
  * The menu beside a long-pressed item, in root coordinates. What it offers depends on where the
- * item lives; [drawerFolders] are what a drawer app can be added to.
+ * item lives.
  */
 @Composable
-fun ItemMenu(
-    state: ItemMenuState,
-    actions: ItemMenuActions,
-    drawerFolders: List<HomeItem>,
-    onDismiss: () -> Unit,
-) {
-    Menu(state.anchor, ITEM_MENU_TAG, onDismiss) { Rows(state, actions, drawerFolders) }
+fun ItemMenu(state: ItemMenuState, actions: ItemMenuActions, onDismiss: () -> Unit) {
+    Menu(state.anchor, ITEM_MENU_TAG, onDismiss) { Rows(state, actions) }
 }
 
 /** The rows for this item: an app's, a drawer folder's, or a home or dock placement's. */
 @Composable
-private fun Rows(state: ItemMenuState, actions: ItemMenuActions, drawerFolders: List<HomeItem>) {
+private fun Rows(state: ItemMenuState, actions: ItemMenuActions) {
     val app = state.item.app
     val inDrawer = state.container == Container.DRAWER
     if (app != null) {
@@ -86,17 +78,8 @@ private fun Rows(state: ItemMenuState, actions: ItemMenuActions, drawerFolders: 
     }
     when {
         inDrawer && app != null -> {
+            // Joining an existing folder is done from the folder, which lists apps to add.
             MenuRow("New folder", Icons.Outlined.CreateNewFolder, actions.newFolder)
-            // Every drawer folder but the one the app is already in, if any.
-            val targets =
-                drawerFolders
-                    .filter { f -> f.folder.none { it.key == app.key } }
-                    .mapNotNull { f -> f.folderId?.let { f.label to it } }
-            targets.forEach { (label, id) ->
-                MenuRow("Add to $label", Icons.Outlined.Folder) {
-                    actions.addToFolder(id)
-                }
-            }
             MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
             MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
         }

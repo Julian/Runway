@@ -14,6 +14,7 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.data.moveOutOf
@@ -300,6 +301,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             rename = { folderId, name ->
                 viewModelScope.writing("rename the folder") {
                     graph.workspace.renameFolder(folderId, name)
+                }
+            },
+            add = { folderId, app ->
+                viewModelScope.writing("add to the folder") {
+                    graph.workspace.addToDrawerFolder(folderId, app.ref)
                 }
             },
         )

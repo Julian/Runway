@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,7 +72,10 @@ private const val MAX_NAME_LENGTH = 40
 private val SURFACE = Color(0xFF202124)
 private val CORNER = 24.dp
 private val CELL = 84.dp
-private const val MAX_COLUMNS = 4
+internal const val MAX_COLUMNS = 4
+
+/** The add tile's key among the apps' keys, which are a profile and a component. */
+private const val ADD_KEY = "add"
 
 /** How much of the screen the scrim behind the folder darkens. */
 private const val SCRIM_ALPHA = 0.4f
@@ -86,14 +90,17 @@ private val SHADOW = 16.dp
 /**
  * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
  * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; a long press lifts it out; tapping the name edits it; a
- * tap anywhere else, or back, closes the folder.
+ * when closed. Tapping an app launches it; a long press lifts it out; tapping the name edits it. A
+ * drawer folder ends in a plus, which lists the rest of [apps] to add; back from that list returns
+ * to the folder. A tap anywhere else, or back, closes the folder.
  */
 @Composable
 fun FolderSheet(
     folder: HomeItem,
     from: Bounds,
     iconSize: Dp,
+    /** Every app, in the drawer's order: what a drawer folder can add. */
+    apps: List<AppEntry>,
     actions: FolderActions,
     drag: DragSession?,
     /** Asked to go (an app was dragged out): the sheet runs its close motion, then closes. */
@@ -101,13 +108,18 @@ fun FolderSheet(
 ) {
     val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
+    var adding by remember { mutableStateOf(false) }
+    val listing = adding && folder.addTo != null
+    // After the sheet's own, so while the list is up it is the one Back reaches.
+    BackHandler(enabled = listing) { adding = false }
     LaunchedEffect(leaving) { if (leaving) motion.close() }
     // Whatever had the keyboard (the drawer's search field) gives it up as the sheet opens: what
     // is typed now is for the folder, not for a field hidden behind it.
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { focusManager.clearFocus() }
     var room by remember { mutableStateOf(IntSize.Zero) }
-    // Above the keyboard while the name is being typed, centred otherwise.
+    // Above the keyboard while something is typed (the name, or a search for apps to add),
+    // centred otherwise.
     Box(
         Modifier.fillMaxSize().imePadding().onSizeChanged { room = it },
         contentAlignment = Alignment.Center,
@@ -123,7 +135,7 @@ fun FolderSheet(
                     onClick = motion.close,
                 )
         )
-        val columns = folder.folder.size.coerceIn(1, MAX_COLUMNS)
+        val columns = columnsFor(folder, listing)
         var size by remember { mutableStateOf(IntSize.Zero) }
         val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
         Surface(
@@ -138,26 +150,95 @@ fun FolderSheet(
             contentColor = Color.White,
             shadowElevation = SHADOW * solid,
         ) {
-            Column(Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress }) {
-                FolderName(folder.label) { name ->
-                    folder.folderId?.let { actions.rename(it, name) }
-                }
-                LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
-                    items(folder.folder, key = { it.key }) { app ->
-                        FolderApp(
-                            app,
-                            iconSize,
-                            onClick = { actions.launch(app) },
-                            drag =
-                                drag?.handlersForFolder(
-                                    app,
-                                    leaving = folder.folderId.takeUnless { folder.inDrawer },
-                                ),
-                        )
-                    }
+            SheetContent(
+                folder,
+                apps,
+                iconSize,
+                columns,
+                actions,
+                drag,
+                listing = listing,
+                onListing = { adding = it },
+                modifier = Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress },
+            )
+        }
+    }
+}
+
+/**
+ * A drawer folder's id: it takes apps from a list. Null for any other, which takes them by a drop.
+ */
+private val HomeItem.addTo: Long?
+    get() = folderId?.takeIf { inDrawer }
+
+/** As many columns as the folder has tiles, its plus included, up to four; four for the list. */
+private fun columnsFor(folder: HomeItem, listing: Boolean): Int {
+    val tiles = folder.folder.size + if (folder.addTo != null) 1 else 0
+    return if (listing) MAX_COLUMNS else tiles.coerceIn(1, MAX_COLUMNS)
+}
+
+/**
+ * The folder's name over its apps, which for a drawer folder end in a plus; or, while [listing],
+ * the apps a drawer folder can add. [onListing] is told when either asks for the other.
+ */
+@Composable
+private fun SheetContent(
+    folder: HomeItem,
+    apps: List<AppEntry>,
+    iconSize: Dp,
+    columns: Int,
+    actions: FolderActions,
+    drag: DragSession?,
+    listing: Boolean,
+    onListing: (Boolean) -> Unit,
+    modifier: Modifier,
+) {
+    val addTo = folder.addTo
+    Column(modifier) {
+        if (addTo != null && listing) {
+            AddApps(
+                folder.label,
+                folder.folder,
+                apps,
+                iconSize,
+                onAdd = { actions.add(addTo, it) },
+                onDone = { onListing(false) },
+            )
+        } else {
+            FolderName(folder.label) { name -> folder.folderId?.let { actions.rename(it, name) } }
+            FolderGrid(folder, columns, iconSize, actions, drag) {
+                if (addTo != null) {
+                    item(key = ADD_KEY) { AddTile(iconSize) { onListing(true) } }
                 }
             }
         }
+    }
+}
+
+/** The folder's apps, each launched by a tap and lifted out by a hold, then [after]. */
+@Composable
+private fun FolderGrid(
+    folder: HomeItem,
+    columns: Int,
+    iconSize: Dp,
+    actions: FolderActions,
+    drag: DragSession?,
+    after: LazyGridScope.() -> Unit,
+) {
+    LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
+        items(folder.folder, key = { it.key }) { app ->
+            FolderApp(
+                app,
+                iconSize,
+                onClick = { actions.launch(app) },
+                drag =
+                    drag?.handlersForFolder(
+                        app,
+                        leaving = folder.folderId.takeUnless { folder.inDrawer },
+                    ),
+            )
+        }
+        after()
     }
 }
 

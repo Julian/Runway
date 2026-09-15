@@ -23,10 +23,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -43,7 +41,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -61,7 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
-import com.grayvines.runway.ui.SearchRow
+import com.grayvines.runway.ui.SearchRowField
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.DragHandlers
@@ -91,8 +88,7 @@ private val MARGIN = 16.dp
 /** With more columns than home the icons shrink to this share of the drawer's cell. */
 private const val ICON_SHARE = 0.7f
 
-/** The search field matches the home screen's bar: the same height, glass, and quiet white. */
-private const val HINT_ALPHA = 0.5f
+/** The light behind the app Enter would launch. */
 private const val CHOSEN_ALPHA = 0.18f
 private val CHOSEN_CORNER = 16.dp
 
@@ -324,33 +320,15 @@ private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, mo
     LaunchedEffect(open, keyboard) {
         if (open && keyboard) focus.requestFocus() else if (!open) focusManager.clearFocus()
     }
-    SearchRow(glassDescription = null, modifier = modifier) { ink ->
-        BasicTextField(
-            value = query.text,
-            onValueChange = query.onChange,
-            singleLine = true,
-            textStyle = ink.style,
-            cursorBrush = SolidColor(ink.color),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { query.onSubmit() }),
-            decorationBox = { field ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (query.text.isEmpty()) {
-                        Text(
-                            "Search apps",
-                            style = ink.style.copy(color = ink.color.copy(alpha = HINT_ALPHA)),
-                        )
-                    }
-                    field()
-                }
-            },
-            modifier =
-                Modifier.padding(start = 12.dp)
-                    .weight(1f)
-                    .focusRequester(focus)
-                    .testTag(DRAWER_SEARCH_TAG),
-        )
-    }
+    SearchRowField(
+        text = query.text,
+        onChange = query.onChange,
+        hint = "Search apps",
+        modifier = modifier,
+        fieldModifier = Modifier.focusRequester(focus).testTag(DRAWER_SEARCH_TAG),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+        keyboardActions = KeyboardActions(onGo = { query.onSubmit() }),
+    )
 }
 
 /** A drawer folder's tile: its first apps on the folder square, over its name. */

@@ -3,7 +3,6 @@ package com.grayvines.runway.ui.menu
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.WorkspaceRepository
-import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.deleteFolder
 import com.grayvines.runway.ui.drag.Bounds
@@ -48,13 +47,6 @@ class ItemMenuHost(
             newFolder = {
                 withItem { item ->
                     item.app?.let { app -> write("make a folder") { createDrawerFolder(app.ref) } }
-                }
-            },
-            addToFolder = { folderId ->
-                withItem { item ->
-                    item.app?.let { app ->
-                        write("add to the folder") { addToDrawerFolder(folderId, app.ref) }
-                    }
                 }
             },
             deleteFolder = {
