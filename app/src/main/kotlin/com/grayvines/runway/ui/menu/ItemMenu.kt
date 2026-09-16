@@ -32,12 +32,17 @@ const val ITEM_MENU_TAG = "item-menu"
 private val HEADER_ICON = 28.dp
 private const val DIVIDER_ALPHA = 0.12f
 
-/** The item a long press landed on, where its cell is (root px), and where it lives. */
+/**
+ * The item a long press landed on, where its cell is (root px), and where it lives. An app with no
+ * placement of its own lives in the drawer, whether held in the drawer's grid or in an open folder;
+ * held in a folder, [folderId] is that folder.
+ */
 data class ItemMenuState(
     val item: HomeItem,
     val container: Container,
     val page: Int,
     val anchor: Bounds,
+    val folderId: Long? = null,
 )
 
 /** The item menu as the screen sees it: what it is open on, if anything, and how to drive it. */
@@ -67,7 +72,10 @@ fun ItemMenu(state: ItemMenuState, actions: ItemMenuActions, onDismiss: () -> Un
     Menu(state.anchor, ITEM_MENU_TAG, onDismiss) { Rows(state, actions) }
 }
 
-/** The rows for this item: an app's, a drawer folder's, or a home or dock placement's. */
+/**
+ * The rows for this item: an app's in an open folder, a drawer app's, a drawer folder's, or a home
+ * or dock placement's.
+ */
 @Composable
 private fun Rows(state: ItemMenuState, actions: ItemMenuActions) {
     val app = state.item.app
@@ -77,23 +85,30 @@ private fun Rows(state: ItemMenuState, actions: ItemMenuActions) {
         HorizontalDivider(color = Color.White.copy(alpha = DIVIDER_ALPHA))
     }
     when {
+        // Taking it out of the folder is the sheet's x, while the folder is edited.
+        state.folderId != null && app != null -> {
+            AppRows(actions)
+        }
         inDrawer && app != null -> {
             // Joining an existing folder is done from the folder, which lists apps to add.
             MenuRow("New folder", Icons.Outlined.CreateNewFolder, actions.newFolder)
-            MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
-            MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
+            AppRows(actions)
         }
         inDrawer -> {
             MenuRow("Delete folder", Icons.Outlined.Delete, actions.deleteFolder)
         }
         else -> {
-            if (app != null) {
-                MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
-                MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
-            }
+            if (app != null) AppRows(actions)
             MenuRow("Remove", Icons.Outlined.Clear, actions.remove)
         }
     }
+}
+
+/** What an app's menu offers wherever the app is. */
+@Composable
+private fun AppRows(actions: ItemMenuActions) {
+    MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
+    MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
 }
 
 @Composable

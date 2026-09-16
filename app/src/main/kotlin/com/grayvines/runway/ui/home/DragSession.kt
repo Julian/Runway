@@ -38,6 +38,7 @@ class DragSession(
     /** Where the bin is (root px), whenever it is laid out. */
     val onBinPositioned: (Bounds) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
+    private val onHoldInFolder: (AppEntry, folderId: Long, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onStartNew: (DragSource, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
@@ -118,13 +119,14 @@ class DragSession(
         )
 
     /**
-     * An app in an open folder, which it leaves when the drop lands if [leaving] names the folder;
-     * out of a drawer folder it is copied, and stays.
+     * An app in the open [folder]: a hold shows its menu; moving after the hold carries it out, and
+     * the drop takes it out of the folder. Out of a drawer folder it is copied instead, and stays.
      */
-    fun handlersForFolder(app: AppEntry, leaving: Long?) =
+    fun handlersForFolder(app: AppEntry, folder: HomeItem) =
         handlers(
-            onHold = {},
+            onHold = { cell -> folder.folderId?.let { onHoldInFolder(app, it, cell) } },
             onStart = { pointer, grab ->
+                val leaving = folder.folderId.takeUnless { folder.inDrawer }
                 onStartNew(app.fresh(fromFolder = leaving), pointer, grab)
             },
         )

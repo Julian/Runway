@@ -27,8 +27,10 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.ui.folder.FOLDER_ADD_TAG
+import com.grayvines.runway.ui.folder.FOLDER_EDIT_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_NAME_TAG
+import com.grayvines.runway.ui.folder.FOLDER_REMOVE_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.FOLD_HINT_TAG
@@ -109,10 +111,78 @@ class FolderTest : LauncherFixture() {
     }
 
     @Test
-    fun aFolderMadeOnAPageHasNoPlus() {
+    fun anXTakesAnAppOutOfAHomeFolder_placingItNowhere() {
+        val neighbour = makeFolder()
+        val placements = homePlacementCount()
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { removeChip(firstHomeApp).isDisplayedOrFalse() }
+
+        tap(removeChip(firstHomeApp))
+        waitUntil { folderAt(1, 0) == listOf(neighbour) }
+        assertEquals(placements, homePlacementCount()) // placed nowhere else
+        waitUntil { !folderApp(firstHomeApp).isDisplayedOrFalse() }
+        removeChip(neighbour).assertIsDisplayed()
+    }
+
+    @Test
+    fun aHomeFolderEmptiedByItsXsStaysOpenUntilClosed_thenGoes() {
+        val neighbour = makeFolder()
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        for (label in listOf(firstHomeApp, neighbour)) {
+            waitUntil { removeChip(label).isDisplayedOrFalse() }
+            tap(removeChip(label))
+            waitUntil { !folderApp(label).isDisplayedOrFalse() }
+        }
+        waitUntil { folderAt(1, 0) == emptyList<String>() }
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
+        compose.onAllNodesWithTag(FOLDER_ADD_TAG).assertCountEquals(0) // a home folder has none
+
+        sendHomeIntent()
+        awaitFolderClosed()
+        waitUntil { folderAt(1, 0) == null }
+        assertEquals(
+            emptyList<FolderContent>(),
+            runBlocking { graph.workspace.observeFolders().first() },
+        )
+    }
+
+    @Test
+    fun whileEditingATapLaunchesNothing_andTheCheckOrBackEndsEditingBeforeBackCloses() {
+        makeFolder()
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().size == 2 }
+
+        tap(folderApp(firstHomeApp))
+        compose.waitForIdle()
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed() // a launch would have closed it
+
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG)) // the check
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().isEmpty() }
+
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().size == 2 }
+        device.pressBack()
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
+        device.pressBack()
+        awaitFolderClosed()
+    }
+
+    private fun removeChip(label: String) =
+        compose.onNode(hasTestTag(FOLDER_REMOVE_TAG) and hasContentDescription("Remove $label"))
+
+    private fun homePlacementCount() = runBlocking {
+        graph.workspace.observe(Container.HOME).first().pages.sumOf { it.items.size }
+    }
+
+    @Test
+    fun aFolderMadeOnAPageHasNoPlus_evenWhileEdited() {
         makeFolder()
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
         compose.onAllNodesWithTag(FOLDER_ADD_TAG).assertCountEquals(0) // it takes apps by a drop
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().size == 2 }
+        compose.onAllNodesWithTag(FOLDER_ADD_TAG).assertCountEquals(0)
     }
 
     @Test

@@ -276,6 +276,37 @@ class WorkspaceRepositoryTest {
         assertEquals(listOf(folderId), repo.observeDrawerPlacements().first().map { it.folderId })
     }
 
+    @Test
+    fun `removing an app from a folder places it nowhere, and an emptied folder waits for a prune`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
+            val a = AppRef("pkg1/.Main", 0)
+            val b = AppRef("pkg2/.Main", 0)
+            val folderId = repo.createDrawerFolder(a)
+            repo.addToDrawerFolder(folderId, b)
+            repo.removeItem(repo.observe(Container.HOME).first().pages.single().items.first().id)
+            repo.placeFolder(folderId, Container.HOME, 0, 0, 0)
+            val home = repo.observe(Container.HOME).first()
+
+            repo.removeFromFolder(folderId, a)
+            assertEquals(listOf(b), folderApps(folderId))
+            assertEquals(home, repo.observe(Container.HOME).first())
+
+            repo.removeFromFolder(folderId, b)
+            assertEquals(emptyList<AppRef>(), folderApps(folderId))
+            assertEquals(
+                listOf(folderId),
+                repo.observeDrawerPlacements().first().map { it.folderId },
+            )
+            assertEquals(home, repo.observe(Container.HOME).first())
+
+            repo.pruneEmptyFolders()
+            assertTrue(repo.observeFolders().first().isEmpty())
+            assertTrue(repo.observeDrawerPlacements().first().isEmpty())
+            val items = repo.observe(Container.HOME).first().pages.single().items
+            assertTrue(items.none { it.kind == ItemKind.FOLDER })
+        }
+
     private suspend fun folderApps(folderId: Long) =
         repo.observeFolders().first().single { it.id == folderId }.apps
 

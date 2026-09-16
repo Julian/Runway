@@ -58,7 +58,10 @@ private const val PLUS_SHARE = 0.5f
 /** A list with nothing in it says so, quieter than the apps it would show. */
 private const val EMPTY_ALPHA = 0.6f
 
-/** A drawer folder's last tile: a plus on a dim square, which turns the sheet to adding apps. */
+/**
+ * The last tile of a drawer folder being edited: a plus on a dim square, which turns the sheet to
+ * adding apps.
+ */
 @Composable
 internal fun AddTile(iconSize: Dp, onClick: () -> Unit) {
     AppTile(

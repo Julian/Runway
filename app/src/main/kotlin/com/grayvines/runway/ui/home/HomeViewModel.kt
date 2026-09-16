@@ -21,6 +21,8 @@ import com.grayvines.runway.data.moveOutOf
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
+import com.grayvines.runway.data.pruneEmptyFolders
+import com.grayvines.runway.data.removeFromFolder
 import com.grayvines.runway.data.renameFolder
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.SwipeAction
@@ -48,6 +50,7 @@ import com.grayvines.runway.ui.widgets.WidgetPickerHost
 import com.grayvines.runway.ui.widgets.WidgetResizeHost
 import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -291,6 +294,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())
 
+    /** The latest x tapped in a sheet, which the sweep as the sheet closes must come after. */
+    private var lastRemoval: Job? = null
+
     /** What an open folder's sheet can do. Renaming applies to whichever folder is open. */
     val folderActions =
         FolderActions(
@@ -308,10 +314,20 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     graph.workspace.addToDrawerFolder(folderId, app.ref)
                 }
             },
+            remove = { folderId, app ->
+                lastRemoval =
+                    viewModelScope.writing("take the app out of the folder") {
+                        graph.workspace.removeFromFolder(folderId, app.ref)
+                    }
+            },
         )
 
     init {
-        viewModelScope.writing("set up the layout") { graph.workspace.ensureInitialised() }
+        viewModelScope.writing("set up the layout") {
+            graph.workspace.ensureInitialised()
+            // A folder emptied in a sheet that was open when the launcher last stopped.
+            graph.workspace.pruneEmptyFolders()
+        }
         // A folder whose placement goes (uninstalled away, removed) is no longer open; nor is a
         // menu whose item goes, which would otherwise keep offering actions on nothing.
         viewModelScope.launch {
@@ -404,8 +420,15 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
+    /** Closes the open folder's sheet, if any; a folder emptied in it goes as it closes. */
     fun closeFolder() {
+        if (_openFolder.value == null) return
         _openFolder.value = null
+        val removal = lastRemoval
+        viewModelScope.writing("delete the emptied folder") {
+            removal?.join()
+            graph.workspace.pruneEmptyFolders()
+        }
     }
 
     /** The search bar was tapped: hand off to the target app. */
@@ -504,15 +527,20 @@ internal suspend fun WorkspaceRepository.apply(move: PendingMove): Boolean =
     }
 
 /**
- * Whether what [menu] opened on is still there: the app, for one held in the drawer's list, which
- * is no placement; the placement itself for anything else, drawer folder tiles included.
+ * Whether what [menu] opened on is still there: the app in its folder, for one held in an open
+ * folder; the app, for one held in the drawer's list, which is no placement; the placement itself
+ * for anything else, drawer folder tiles included.
  */
-internal fun HomeState.stillHas(menu: ItemMenuState): Boolean =
-    if (menu.container == Container.DRAWER && menu.item.folderId == null) {
-        apps.any { it.key == menu.item.app?.key }
-    } else {
-        allItems().any { it.id == menu.item.id }
+internal fun HomeState.stillHas(menu: ItemMenuState): Boolean {
+    val key = menu.item.app?.key
+    return when {
+        menu.folderId != null ->
+            allItems().any { f -> f.folderId == menu.folderId && f.folder.any { it.key == key } }
+        menu.container == Container.DRAWER && menu.item.folderId == null ->
+            apps.any { it.key == key }
+        else -> allItems().any { it.id == menu.item.id }
     }
+}
 
 /**
  * True once the drawn layout shows [move] applied: the item, or the new app, is in its cell; for a

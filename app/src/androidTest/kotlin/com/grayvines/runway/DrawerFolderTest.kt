@@ -22,6 +22,7 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.NEW_FOLDER_NAME
+import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
@@ -35,7 +36,9 @@ import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ADD_SEARCH_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ADD_TAG
 import com.grayvines.runway.ui.folder.FOLDER_CANDIDATE_TAG
+import com.grayvines.runway.ui.folder.FOLDER_EDIT_TAG
 import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
+import com.grayvines.runway.ui.folder.FOLDER_REMOVE_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -141,8 +144,10 @@ class DrawerFolderTest : LauncherFixture() {
     private fun SemanticsNode.isFocused() = config.getOrNull(SemanticsProperties.Focused) == true
 
     @Test
-    fun aDrawerFolderEndsInAPlusThatListsEveryAppNotInIt() {
+    fun anEditedDrawerFolderEndsInAPlusThatListsEveryAppNotInIt() {
         openDrawerFolderOf(first)
+        compose.onAllNodesWithTag(FOLDER_ADD_TAG).assertCountEquals(0) // until the pencil
+        editFolder()
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         waitUntil { candidate(second).isDisplayedOrFalse() }
         compose
@@ -157,6 +162,7 @@ class DrawerFolderTest : LauncherFixture() {
     fun tappingAListedAppAddsItAtOnce_andTheListStaysForTheNext() {
         val third = labels[2]
         openDrawerFolderOf(first)
+        editFolder()
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         waitUntil { candidate(second).isDisplayedOrFalse() }
 
@@ -177,6 +183,7 @@ class DrawerFolderTest : LauncherFixture() {
     @Test
     fun typingNarrowsTheList_andSaysSoWhenNothingMatches() {
         openDrawerFolderOf(first)
+        editFolder()
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         // One of the first few listed, and so on screen, that the query will not match.
         val unmatched =
@@ -198,8 +205,9 @@ class DrawerFolderTest : LauncherFixture() {
     }
 
     @Test
-    fun backFromTheListReturnsToTheFolder_andBackAgainClosesIt() {
+    fun backLeavesTheList_thenTheEditing_thenClosesTheFolder() {
         openDrawerFolderOf(first)
+        editFolder()
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         waitUntil { candidate(second).isDisplayedOrFalse() }
 
@@ -207,6 +215,10 @@ class DrawerFolderTest : LauncherFixture() {
         waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
         folderApp(first).assertIsDisplayed()
         compose.onAllNodesWithTag(FOLDER_CANDIDATE_TAG).assertCountEquals(0)
+
+        device.pressBack() // out of the editing the plus stood in
+        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
 
         device.pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
@@ -229,7 +241,8 @@ class DrawerFolderTest : LauncherFixture() {
             compose.onNode(hasTestTag(DRAWER_FOLDER_TAG) and hasContentDescription(FIRST_FOLDER))
         waitUntil { tile.isDisplayedOrFalse() }
         tap(tile)
-        waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { compose.onAllNodesWithTag(FOLDER_EDIT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        editFolder()
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         waitUntil { candidate(second).isDisplayedOrFalse() }
         tap(candidate(second))
@@ -253,9 +266,89 @@ class DrawerFolderTest : LauncherFixture() {
         }
         waitUntil { folderAt(home.x!!, home.y!!) == listOf(first) }
         tap(compose.onNodeWithContentDescription(NEW_FOLDER_NAME, useUnmergedTree = true))
-        waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { compose.onAllNodesWithTag(FOLDER_EDIT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        editFolder()
         compose.onNodeWithTag(FOLDER_ADD_TAG).assertIsDisplayed()
         sendHomeIntent()
+    }
+
+    @Test
+    fun thePencilPutsAnXOnEachApp_andAnXPutsThatAppBackInTheGridAtOnce() {
+        makeDrawerFolder(first)
+        runBlocking {
+            val folderId = graph.workspace.observeDrawerPlacements().first().single().folderId!!
+            graph.workspace.addToDrawerFolder(folderId, apps[1].ref)
+        }
+        tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
+        waitUntil { folderApp(second).isDisplayedOrFalse() }
+        compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).assertCountEquals(0)
+
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().size == 2 }
+        tap(removeChip(first))
+        awaitFolders(listOf(listOf(second)))
+        waitUntil { !folderApp(first).isDisplayedOrFalse() }
+        removeChip(second).assertIsDisplayed() // still editing what is left
+
+        sendHomeIntent() // closes the sheet, not the drawer
+        awaitGone(FOLDER_TAG)
+        waitUntil { drawerApp(first).isDisplayedOrFalse() }
+        awaitFolders(listOf(listOf(second)))
+    }
+
+    @Test
+    fun anXOnTheLastAppLeavesTheFolderOpenWithItsPlus_andClosingItEmptyDeletesIt() {
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { removeChip(first).isDisplayedOrFalse() }
+        tap(removeChip(first))
+        awaitFolders(listOf(emptyList()))
+        compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(FOLDER_ADD_TAG).assertIsDisplayed()
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG)) // the check; an empty folder keeps its plus
+        compose.waitForIdle()
+        compose.onNodeWithTag(FOLDER_ADD_TAG).assertIsDisplayed()
+
+        sendHomeIntent()
+        awaitGone(FOLDER_TAG)
+        waitUntil { drawerFolderTiles().isEmpty() }
+        waitUntil { runBlocking { graph.workspace.observeFolders().first() }.isEmpty() }
+        waitUntil { drawerApp(first).isDisplayedOrFalse() }
+    }
+
+    @Test
+    fun aFolderEmptiedByItsXsAndRefilledFromItsPlusStaysWhenClosed() {
+        openDrawerFolderOf(first)
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil { removeChip(first).isDisplayedOrFalse() }
+        tap(removeChip(first))
+        awaitFolders(listOf(emptyList()))
+
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(second).isDisplayedOrFalse() }
+        tap(candidate(second))
+        awaitFolders(listOf(listOf(second)))
+        tap(compose.onNode(hasText("Done") and hasAnyAncestor(hasTestTag(FOLDER_TAG))))
+        waitUntil { folderApp(second).isDisplayedOrFalse() }
+
+        sendHomeIntent()
+        awaitGone(FOLDER_TAG)
+        compose.waitForIdle()
+        awaitFolders(listOf(listOf(second)))
+        waitUntil { drawerFolderTiles().size == 1 }
+    }
+
+    @Test
+    fun holdingAnAppInAFolderOffersAppInfoAndUninstall_butNoFolderRows() {
+        openDrawerFolderOf(first)
+        compose.waitForIdle() // the sheet has finished growing under the finger to come
+        hold(folderApp(first))
+        release()
+        menuRow("App info").assertIsDisplayed()
+        menuRow("Uninstall").assertIsDisplayed()
+        menuRow("New folder").assertDoesNotExist()
+        compose.onAllNodes(hasText("Remove", substring = true)).assertCountEquals(0)
+        sendHomeIntent() // closes the menu
     }
 
     @Test
@@ -324,11 +417,20 @@ class DrawerFolderTest : LauncherFixture() {
     private fun openDrawerFolderOf(label: String) {
         makeDrawerFolder(label)
         tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
+        waitUntil { compose.onAllNodesWithTag(FOLDER_EDIT_TAG).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** Taps the open folder's pencil, which is where its plus and its x's are. */
+    private fun editFolder() {
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
         waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun candidate(label: String) =
         compose.onNode(hasTestTag(FOLDER_CANDIDATE_TAG) and hasContentDescription(label))
+
+    private fun removeChip(label: String) =
+        compose.onNode(hasTestTag(FOLDER_REMOVE_TAG) and hasContentDescription("Remove $label"))
 
     private fun folderApp(label: String) =
         compose.onNode(hasTestTag(FOLDER_ITEM_TAG) and hasContentDescription(label))

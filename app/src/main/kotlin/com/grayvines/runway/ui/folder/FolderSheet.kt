@@ -9,9 +9,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,6 +75,13 @@ private val SURFACE = Color(0xFF202124)
 private val CORNER = 24.dp
 private val CELL = 84.dp
 internal const val MAX_COLUMNS = 4
+private const val MIN_COLUMNS = 2
+
+/** Above and below each app's tile, inside its grid cell. */
+private val TILE_PADDING = 8.dp
+
+/** How far inside the icon's corner the middle of its x sits. */
+private val CHIP_INSET = 6.dp
 
 /** The add tile's key among the apps' keys, which are a profile and a component. */
 private const val ADD_KEY = "add"
@@ -90,9 +99,11 @@ private val SHADOW = 16.dp
 /**
  * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
  * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; a long press lifts it out; tapping the name edits it. A
- * drawer folder ends in a plus, which lists the rest of [apps] to add; back from that list returns
- * to the folder. A tap anywhere else, or back, closes the folder.
+ * when closed. Tapping an app launches it; a long press shows its menu, and moving on lifts it out;
+ * tapping the name edits it. The pencil at the top right puts an x on every app, which takes that
+ * app out, and in a drawer folder a plus after them, which lists the rest of [apps] to add. A
+ * folder emptied by its x's stays open, and goes only once it is closed empty. Back leaves the
+ * list, then the editing; a tap anywhere else, or back, closes the folder.
  */
 @Composable
 fun FolderSheet(
@@ -108,10 +119,12 @@ fun FolderSheet(
 ) {
     val motion = rememberSheetMotion(actions.close)
     BackHandler(onBack = motion.close)
-    var adding by remember { mutableStateOf(false) }
-    val listing = adding && folder.addTo != null
-    // After the sheet's own, so while the list is up it is the one Back reaches.
-    BackHandler(enabled = listing) { adding = false }
+    val mode = remember { SheetMode() }
+    val listing = mode.adding && folder.addTo != null
+    // After the sheet's own, so while the list or the x's are up it is the one Back reaches.
+    BackHandler(enabled = listing || mode.editing) {
+        if (listing) mode.adding = false else mode.editing = false
+    }
     LaunchedEffect(leaving) { if (leaving) motion.close() }
     // Whatever had the keyboard (the drawer's search field) gives it up as the sheet opens: what
     // is typed now is for the folder, not for a field hidden behind it.
@@ -135,7 +148,7 @@ fun FolderSheet(
                     onClick = motion.close,
                 )
         )
-        val columns = columnsFor(folder, listing)
+        val columns = columnsFor(folder, listing, mode.editing)
         var size by remember { mutableStateOf(IntSize.Zero) }
         val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
         Surface(
@@ -157,8 +170,7 @@ fun FolderSheet(
                 columns,
                 actions,
                 drag,
-                listing = listing,
-                onListing = { adding = it },
+                mode,
                 modifier = Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress },
             )
         }
@@ -171,15 +183,30 @@ fun FolderSheet(
 private val HomeItem.addTo: Long?
     get() = folderId?.takeIf { inDrawer }
 
-/** As many columns as the folder has tiles, its plus included, up to four; four for the list. */
-private fun columnsFor(folder: HomeItem, listing: Boolean): Int {
-    val tiles = folder.folder.size + if (folder.addTo != null) 1 else 0
-    return if (listing) MAX_COLUMNS else tiles.coerceIn(1, MAX_COLUMNS)
+/**
+ * Whether the plus is among the tiles: while the folder is edited, which is when apps go in or come
+ * out, and in an empty folder, which would otherwise be a sheet with nothing to tap.
+ */
+private fun HomeItem.showsAdd(editing: Boolean) = addTo != null && (editing || folder.isEmpty())
+
+/**
+ * As many columns as the folder has tiles, its plus included, up to four, and never fewer than two:
+ * the name shares its row with the pencil. Four for the list.
+ */
+private fun columnsFor(folder: HomeItem, listing: Boolean, editing: Boolean): Int {
+    val tiles = folder.folder.size + if (folder.showsAdd(editing)) 1 else 0
+    return if (listing) MAX_COLUMNS else tiles.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
+}
+
+/** What the sheet shows over its apps: the list of apps to add, or an x on each of its own. */
+private class SheetMode {
+    var adding by mutableStateOf(false)
+    var editing by mutableStateOf(false)
 }
 
 /**
- * The folder's name over its apps, which for a drawer folder end in a plus; or, while [listing],
- * the apps a drawer folder can add. [onListing] is told when either asks for the other.
+ * The folder's name and pencil over its apps, which while it is edited end in a plus for a drawer
+ * folder; or, while [mode] is adding, the apps that folder can add.
  */
 @Composable
 private fun SheetContent(
@@ -189,33 +216,40 @@ private fun SheetContent(
     columns: Int,
     actions: FolderActions,
     drag: DragSession?,
-    listing: Boolean,
-    onListing: (Boolean) -> Unit,
+    mode: SheetMode,
     modifier: Modifier,
 ) {
     val addTo = folder.addTo
     Column(modifier) {
-        if (addTo != null && listing) {
+        if (addTo != null && mode.adding) {
             AddApps(
                 folder.label,
                 folder.folder,
                 apps,
                 iconSize,
                 onAdd = { actions.add(addTo, it) },
-                onDone = { onListing(false) },
+                onDone = { mode.adding = false },
             )
         } else {
-            FolderName(folder.label) { name -> folder.folderId?.let { actions.rename(it, name) } }
-            FolderGrid(folder, columns, iconSize, actions, drag) {
-                if (addTo != null) {
-                    item(key = ADD_KEY) { AddTile(iconSize) { onListing(true) } }
+            Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FolderName(folder.label, Modifier.weight(1f)) { name ->
+                    folder.folderId?.let { actions.rename(it, name) }
+                }
+                EditToggle(mode.editing, onToggle = { mode.editing = !mode.editing })
+            }
+            FolderGrid(folder, columns, iconSize, actions, drag, mode.editing) {
+                if (addTo != null && folder.showsAdd(mode.editing)) {
+                    item(key = ADD_KEY) { AddTile(iconSize) { mode.adding = true } }
                 }
             }
         }
     }
 }
 
-/** The folder's apps, each launched by a tap and lifted out by a hold, then [after]. */
+/**
+ * The folder's apps, then [after]. A tap launches an app and a hold shows its menu; while
+ * [editing], an x on each takes it out instead, and a tap on the app itself does nothing.
+ */
 @Composable
 private fun FolderGrid(
     folder: HomeItem,
@@ -223,24 +257,38 @@ private fun FolderGrid(
     iconSize: Dp,
     actions: FolderActions,
     drag: DragSession?,
+    editing: Boolean,
     after: LazyGridScope.() -> Unit,
 ) {
     LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
         items(folder.folder, key = { it.key }) { app ->
-            FolderApp(
-                app,
-                iconSize,
-                onClick = { actions.launch(app) },
-                drag =
-                    drag?.handlersForFolder(
-                        app,
-                        leaving = folder.folderId.takeUnless { folder.inDrawer },
-                    ),
-            )
+            Box {
+                FolderApp(
+                    app,
+                    iconSize,
+                    onClick = { if (!editing) actions.launch(app) },
+                    drag = drag?.handlersForFolder(app, folder),
+                )
+                val folderId = folder.folderId
+                if (editing && folderId != null) {
+                    RemoveChip(
+                        app.label,
+                        onRemove = { actions.remove(folderId, app) },
+                        Modifier.align(Alignment.TopCenter).onIconCorner(iconSize),
+                    )
+                }
+            }
         }
         after()
     }
 }
+
+/**
+ * Centres the chip a little inside the top-right corner of the icon (which sits [TILE_PADDING]
+ * below the tile's top), so the chip's circle stays within the tile and the grid does not clip it.
+ */
+private fun Modifier.onIconCorner(iconSize: Dp) =
+    offset(x = iconSize / 2 - CHIP_INSET, y = TILE_PADDING + CHIP_INSET - REMOVE_TOUCH / 2)
 
 /**
  * At progress 0 the sheet is the size and place of the tapped cell; at 1 it rests where the layout
@@ -291,19 +339,19 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
  * the old name, there being no field left to show the refusal in.
  */
 @Composable
-private fun FolderName(name: String, onRename: (String) -> Unit) {
+private fun FolderName(name: String, modifier: Modifier, onRename: (String) -> Unit) {
     var editing by remember { mutableStateOf(false) }
     // The whole name selected as the field opens: what is typed replaces it, and a keep is a tap
     // away, which is what a tap on a name usually means.
     var field by remember(name) { mutableStateOf(TextFieldValue(name, TextRange(0, name.length))) }
-    val modifier = Modifier.padding(bottom = 12.dp).testTag(FOLDER_NAME_TAG)
+    val tagged = modifier.testTag(FOLDER_NAME_TAG)
     if (!editing) {
         Text(
             name,
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = modifier.clickable { editing = true },
+            modifier = tagged.clickable { editing = true },
         )
         return
     }
@@ -338,7 +386,7 @@ private fun FolderName(name: String, onRename: (String) -> Unit) {
                 }
             ),
         modifier =
-            modifier.focusRequester(focus).onFocusChanged {
+            tagged.focusRequester(focus).onFocusChanged {
                 if (it.isFocused) hadFocus = true else if (hadFocus) commit()
             },
     )
@@ -354,6 +402,6 @@ private fun FolderApp(app: AppEntry, iconSize: Dp, onClick: () -> Unit, drag: Dr
         iconSize,
         labelled = true,
         onClick,
-        Modifier.liftable(app.key, drag).padding(vertical = 8.dp).testTag(FOLDER_ITEM_TAG),
+        Modifier.liftable(app.key, drag).padding(vertical = TILE_PADDING).testTag(FOLDER_ITEM_TAG),
     )
 }

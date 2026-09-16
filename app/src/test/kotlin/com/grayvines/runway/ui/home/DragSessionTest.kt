@@ -22,6 +22,7 @@ class DragSessionTest {
             settlingOf = mutableStateOf<Settling?>(null),
             settleTargetOf = mutableStateOf<Point?>(null),
             onHold = { _, _, _, _ -> },
+            onHoldInFolder = { _, _, _ -> },
             onStart = { _, _, _, _, _ -> },
             onStartNew = { _, _, _ -> },
             onMove = {},

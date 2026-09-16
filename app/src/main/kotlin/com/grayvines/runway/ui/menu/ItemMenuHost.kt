@@ -5,8 +5,10 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.deleteFolder
+import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.HomeItem
+import com.grayvines.runway.ui.home.asItem
 import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +60,13 @@ class ItemMenuHost(
 
     fun hold(item: HomeItem, container: Container, page: Int, cell: Bounds) {
         if (mayOpen()) _state.value = ItemMenuState(item, container, page, cell)
+    }
+
+    /** A long press on [app] in the open folder [folderId], in [cell]. */
+    fun holdInFolder(app: AppEntry, folderId: Long, cell: Bounds) {
+        if (mayOpen()) {
+            _state.value = ItemMenuState(app.asItem(), Container.DRAWER, 0, cell, folderId)
+        }
     }
 
     fun dismiss() {
