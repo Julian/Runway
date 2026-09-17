@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.ui.drag.EdgeDwell
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.DragMotion
 import com.grayvines.runway.ui.home.SEARCH_BAR_TAG
@@ -269,13 +270,15 @@ class PageFlipTest : LauncherFixture() {
         android.util.Log.d("RunwayFlip", trace)
         val visited = samples.map { it.third }.filter { it >= 0 }.distinct()
         assertEquals("pages in order, none skipped: $trace", listOf(0, 1, 2), visited)
-        // Page 1 rests before the next flip: from when it was first seen settled until the sample
-        // that blocked on the scroll to page 2 began. A queued flip would scroll on almost at once.
-        val settledOnOne = samples.first { it.third == 1 }.second
-        val leftOne = samples.first { it.third == 2 }.first
+        // A dwell between one flip and the next, so page 2 cannot have settled within a dwell of
+        // page 0 still being the settled one. Not the gap between one page settling and the next
+        // flip: that gap is what is left of the dwell once the scroll it started has run, which on
+        // a slow device is nothing at all.
+        val stillOnZero = samples.last { it.third == 0 }.first
+        val settledOnTwo = samples.first { it.third == 2 }.second
         assertTrue(
-            "page 1 rested only ${leftOne - settledOnOne} ms: $trace",
-            leftOne - settledOnOne >= MIN_REST_MS,
+            "page 2 settled ${settledOnTwo - stillOnZero} ms after page 0 was still settled: $trace",
+            settledOnTwo - stillOnZero >= EdgeDwell.FLIP_MS,
         )
     }
 

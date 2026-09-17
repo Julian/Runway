@@ -237,7 +237,7 @@ class WidgetResizeTest : LauncherFixture() {
         awaitWidgetCell()
         holdWidget()
         release()
-        device.pressBack()
+        pressBack()
         awaitGone(WIDGET_RESIZE_TAG)
         assertStillOnLauncher()
     }

@@ -46,3 +46,7 @@ complexity:
     # Count a class's surface, not the internal helpers behind it: the workspace repository is
     # the placement store, and what can stand apart (folding, drawer folders, backup) already does.
     ignoreInternal: true
+  # One launcher to drive is one thing to set up, so the instrumented tests share one fixture;
+  # splitting it would scatter helpers that only make sense against the running launcher.
+  LargeClass:
+    excludes: ['**/androidTest/**']

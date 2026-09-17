@@ -69,7 +69,7 @@ class LauncherShellTest : LauncherFixture() {
     @Test
     fun backOnTheBareHomeScreenLeavesTheLauncherUp() {
         val activity = compose.activity
-        device.pressBack()
+        pressBack()
         // A finished home activity is started again by the system at once, so a fresh screen would
         // look fine: what must not have happened is the finish itself.
         SystemClock.sleep(BACK_GRACE_MS)
@@ -82,7 +82,7 @@ class LauncherShellTest : LauncherFixture() {
         val grid = useGrid(columns = 5, rows = 7)
         holdDrag(from = firstHomeApp, to = grid.homeCell(4, 4))
         compose.onNodeWithTag(DRAG_OVERLAY_TAG).assertExists()
-        device.pressBack()
+        pressBack()
         awaitGone(DRAG_OVERLAY_TAG)
         release() // the finger lifting afterwards drops nothing
         assertUnmoved(firstHomeApp)

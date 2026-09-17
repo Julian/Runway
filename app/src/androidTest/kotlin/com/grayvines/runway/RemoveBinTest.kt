@@ -119,7 +119,7 @@ class RemoveBinTest : LauncherFixture() {
         lift(icon(firstHomeApp))
         dragOn(to = bin())
         awaitLit()
-        device.pressBack()
+        pressBack()
         awaitGone(DRAG_OVERLAY_TAG)
         release() // the finger lifting afterwards removes nothing
         assertUnmoved(firstHomeApp)

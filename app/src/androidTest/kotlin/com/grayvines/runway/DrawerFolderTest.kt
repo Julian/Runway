@@ -135,7 +135,7 @@ class DrawerFolderTest : LauncherFixture() {
                 ?.text
         assertEquals("", typed)
         // And with no keyboard up, back closes the sheet itself, and the field has focus again.
-        device.pressBack()
+        pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag(DRAWER_TAG).assertExists()
         waitUntil { compose.onNodeWithTag(DRAWER_SEARCH_TAG).fetchSemanticsNode().isFocused() }
@@ -211,16 +211,16 @@ class DrawerFolderTest : LauncherFixture() {
         tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
         waitUntil { candidate(second).isDisplayedOrFalse() }
 
-        device.pressBack()
+        pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isNotEmpty() }
         folderApp(first).assertIsDisplayed()
         compose.onAllNodesWithTag(FOLDER_CANDIDATE_TAG).assertCountEquals(0)
 
-        device.pressBack() // out of the editing the plus stood in
+        pressBack() // out of the editing the plus stood in
         waitUntil { compose.onAllNodesWithTag(FOLDER_ADD_TAG).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
 
-        device.pressBack()
+        pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag(DRAWER_TAG).assertExists()
     }

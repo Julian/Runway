@@ -35,7 +35,7 @@ class HomeMenuTest : LauncherFixture() {
     @Test
     fun backClosesTheHomeMenuAndNothingElse() {
         holdEmptySpace()
-        device.pressBack()
+        pressBack()
         waitUntil { compose.onAllNodesWithTag(HOME_MENU_TAG).fetchSemanticsNodes().isEmpty() }
         assertStillOnLauncher()
     }

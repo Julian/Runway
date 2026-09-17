@@ -206,14 +206,32 @@ open class LauncherFixture {
             window.currentFocus?.clearFocus()
             WindowCompat.getInsetsController(window, window.decorView).hide(Type.ime())
         }
-        // The insets say "hidden" as soon as the hide is asked for; the keyboard's own window is
-        // still on its way out, and a window torn down under it leaves the system bringing the
-        // keyboard back for the next one. Wait for the keyboard itself to have gone.
+        awaitNoKeyboard(TIMEOUT_MS)
+    }
+
+    /**
+     * Waits for the keyboard to be gone. The insets say "hidden" as soon as the hide is asked for;
+     * the keyboard's own window is still on its way out, and a window torn down under it leaves the
+     * system bringing the keyboard back for the next one, so wait for the window itself as well.
+     */
+    protected fun awaitNoKeyboard(timeoutMillis: Long = LONG_TIMEOUT_MS) {
+        val window = compose.activity.window
         val keyboard = keyboardPackage()
-        waitUntil(TIMEOUT_MS) {
+        waitUntil(timeoutMillis) {
             ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(Type.ime()) != true &&
                 (keyboard == null || !device.hasObject(By.pkg(keyboard)))
         }
+    }
+
+    /**
+     * Back, meant for the launcher. While the keyboard is up the system hands back to it first, to
+     * put it away, and the press never reaches the app at all, so this waits for the keyboard to
+     * have gone. A press meant for the keyboard itself, or for another app in front, goes through
+     * [device] instead.
+     */
+    protected fun pressBack() {
+        awaitNoKeyboard()
+        device.pressBack()
     }
 
     /**
@@ -942,8 +960,6 @@ const val EDGE_ADD_MS = EdgeDwell.ADD_PAGE_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 const val EDGE_FLIP_MS = EdgeDwell.FLIP_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 const val FLIP_SAMPLE_MS = 30L
 const val FLIP_WATCH_MS = 2_500L
-/** Well under the flip dwell, so a page seen this long at rest was not flipped straight through. */
-const val MIN_REST_MS = 100L
 
 /** The launcher's own hold, under the name the tests in this package have always used. */
 const val LIFT_HOLD_MS = com.grayvines.runway.ui.home.LIFT_HOLD_MS

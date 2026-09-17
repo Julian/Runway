@@ -107,7 +107,7 @@ class ItemMenuTest : LauncherFixture() {
     fun backClosesTheMenuAndNothingElse() {
         longPress(firstHomeApp)
         release()
-        device.pressBack()
+        pressBack()
         awaitMenuGone()
         assertUnmoved(firstHomeApp)
         assertStillOnLauncher()

@@ -49,7 +49,7 @@ class WidgetPickerTest : LauncherFixture() {
         // and its app's name just above: that is scrolled to on its own.
         compose.onNodeWithTag(WIDGET_LIST_TAG).performScrollToNode(hasText(FIXTURE_APP_LABEL))
         compose.onNode(hasText(FIXTURE_APP_LABEL) and inPicker()).assertIsDisplayed()
-        device.pressBack()
+        pressBack()
         awaitGone(WIDGET_PICKER_TAG)
         assertStillOnLauncher()
     }

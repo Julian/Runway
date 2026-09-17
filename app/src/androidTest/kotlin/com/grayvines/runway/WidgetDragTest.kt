@@ -152,7 +152,7 @@ class WidgetDragTest : LauncherFixture() {
         placeFixtureWidget(0, 0)
         awaitWidgetCell()
         holdDragAt(widgetCentre(), grid.homeCell(2, 2))
-        device.pressBack()
+        pressBack()
         awaitGone(DRAG_OVERLAY_TAG)
         assertEquals(0 to 0, widget().let { it.x to it.y })
         awaitFrame()

@@ -161,10 +161,10 @@ class FolderTest : LauncherFixture() {
 
         tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
         waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().size == 2 }
-        device.pressBack()
+        pressBack()
         waitUntil { compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
-        device.pressBack()
+        pressBack()
         awaitFolderClosed()
     }
 
@@ -365,7 +365,7 @@ class FolderTest : LauncherFixture() {
     @Test
     fun backAndTheHomeIntentCloseAnOpenFolder() {
         makeFolder()
-        device.pressBack()
+        pressBack()
         awaitFolderClosed()
         compose.onNodeWithContentDescription("Folder", useUnmergedTree = true).performClick()
         compose.onNodeWithTag(FOLDER_TAG).assertIsDisplayed()
