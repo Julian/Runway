@@ -145,10 +145,10 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     }
 
     /**
-     * Drops app placements whose app is not among [installed], within the profiles [installed]
-     * covers. A profile with no app in the list is left alone: it is off (quiet mode), not empty,
-     * and its icons come back with it. Catches uninstalls that happened while the launcher was not
-     * running.
+     * Forgets apps not among [installed], within the profiles [installed] covers: their placements,
+     * their places in folders, and that they were hidden. A profile with no app in the list is left
+     * alone: it is off (quiet mode), not empty, and its icons come back with it. Catches uninstalls
+     * that happened while the launcher was not running.
      */
     suspend fun retainApps(installed: Set<AppRef>) = write {
         // Read and deleted in the one transaction: a fold landing between the two could turn a
@@ -170,6 +170,9 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
             dao.deleteEmptyFolders()
             dao.dropTrailingEmptyPages()
         }
+        dao.hiddenApps()
+            .filter { it.profile in profiles && it.ref !in installed }
+            .forEach { dao.deleteHiddenApp(it.component, it.profile) }
     }
 
     internal suspend fun <T> write(block: suspend () -> T): T =

@@ -96,7 +96,10 @@ data class ItemEntity(
 )
 
 @Entity(tableName = "hidden_apps", primaryKeys = ["component", "profile"])
-data class HiddenAppEntity(val component: String, val profile: Long)
+data class HiddenAppEntity(val component: String, val profile: Long) {
+    val ref: AppRef
+        get() = AppRef(component, profile)
+}
 
 @Entity(tableName = "badge_mutes", primaryKeys = ["component", "profile"])
 data class BadgeMuteEntity(val component: String, val profile: Long)

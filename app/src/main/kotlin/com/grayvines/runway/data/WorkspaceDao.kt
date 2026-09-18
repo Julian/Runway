@@ -132,6 +132,17 @@ interface WorkspaceDao {
     suspend fun deleteItemsExceptKind(kind: ItemKind)
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()
+
+    @Query("SELECT * FROM hidden_apps") fun observeHiddenApps(): Flow<List<HiddenAppEntity>>
+
+    @Query("SELECT * FROM hidden_apps") suspend fun hiddenApps(): List<HiddenAppEntity>
+
+    /** An app already hidden stays hidden. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertHiddenApp(app: HiddenAppEntity)
+
+    @Query("DELETE FROM hidden_apps WHERE component = :component AND profile = :profile")
+    suspend fun deleteHiddenApp(component: String, profile: Long)
 }
 
 /**
