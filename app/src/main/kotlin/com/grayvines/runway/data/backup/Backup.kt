@@ -103,7 +103,17 @@ data class Placement(
     @SerialName("drawer_folder") val drawerFolder: Int? = null,
 )
 
-@Serializable data class Folder(val name: String, val apps: List<AppRef>)
+/**
+ * A folder as a backup carries it. [handSorted] says [apps] are in an order a hand put them in, one
+ * a restore keeps; without it the list is only what the folder holds, shown as the drawer orders
+ * it.
+ */
+@Serializable
+data class Folder(
+    val name: String,
+    val apps: List<AppRef>,
+    @SerialName("hand_sorted") val handSorted: Boolean = false,
+)
 
 /** How a restore went: the placements made, and the apps left out for not being installed. */
 /**

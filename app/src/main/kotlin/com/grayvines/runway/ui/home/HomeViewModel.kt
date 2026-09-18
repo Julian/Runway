@@ -24,6 +24,7 @@ import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.pruneEmptyFolders
 import com.grayvines.runway.data.removeFromFolder
 import com.grayvines.runway.data.renameFolder
+import com.grayvines.runway.data.reorderFolder
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.SwipeAction
 import com.grayvines.runway.data.unfold
@@ -319,6 +320,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     viewModelScope.writing("take the app out of the folder") {
                         graph.workspace.removeFromFolder(folderId, app.ref)
                     }
+            },
+            reorder = { folderId, apps ->
+                viewModelScope.writing("put the folder's apps in order") {
+                    graph.workspace.reorderFolder(folderId, apps.map { it.ref })
+                }
             },
         )
 

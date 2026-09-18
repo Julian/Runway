@@ -40,6 +40,32 @@ object Migrations {
             }
         }
 
+    /**
+     * A folder's apps keep an order only once a hand has given them one: [FolderAppEntity.position]
+     * becomes nullable and every row loses the position it had, which was the order the apps
+     * happened to be added in rather than one anybody chose. Folders list their apps as the drawer
+     * does until one is dragged into place.
+     */
+    val from2To3 =
+        object : Migration(2, 3) {
+            override suspend fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `_new_folder_apps` (" +
+                        "`folder_id` INTEGER NOT NULL, `component` TEXT NOT NULL, " +
+                        "`profile` INTEGER NOT NULL, `position` INTEGER, " +
+                        "PRIMARY KEY(`folder_id`, `component`, `profile`), " +
+                        "FOREIGN KEY(`folder_id`) REFERENCES `folders`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                connection.execSQL(
+                    "INSERT INTO `_new_folder_apps` (folder_id, component, profile, position) " +
+                        "SELECT folder_id, component, profile, NULL FROM folder_apps"
+                )
+                connection.execSQL("DROP TABLE `folder_apps`")
+                connection.execSQL("ALTER TABLE `_new_folder_apps` RENAME TO `folder_apps`")
+            }
+        }
+
     val all: List<Migration>
-        get() = listOf(from1To2)
+        get() = listOf(from1To2, from2To3)
 }

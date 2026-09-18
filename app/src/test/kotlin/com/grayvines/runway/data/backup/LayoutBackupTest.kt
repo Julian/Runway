@@ -9,6 +9,7 @@ import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.RunwayDatabase
 import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.createDrawerFolder
@@ -16,11 +17,13 @@ import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
+import com.grayvines.runway.data.reorderFolder
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class LayoutBackupTest {
@@ -52,7 +55,10 @@ class LayoutBackupTest {
             layout.placements.filter { it.container == Container.DOCK }.map { it.app },
         )
         val folder = layout.placements.single { it.folder != null }.folder!!
-        assertEquals(listOf(app(3), app(2)), folder.apps)
+        assertEquals(
+            listOf(app(2), app(3)),
+            folder.apps,
+        ) // no hand order: by app, so a file is stable
         assertEquals(4, layout.placements.size)
     }
 
@@ -178,6 +184,29 @@ class LayoutBackupTest {
         val drawer = folders.single { it.inDrawer }
         val placements = repo.observe(Container.HOME).first().pages.flatMap { it.items }
         assertEquals(1, placements.count { it.folderId == drawer.id })
+    }
+
+    @Test
+    fun `a hand order travels, and a folder without one takes none back`() = runTest {
+        seed()
+        val drawerId = repo.createDrawerFolder(app(5))
+        repo.addToDrawerFolder(drawerId, app(4))
+        repo.reorderFolder(drawerId, listOf(app(4), app(5)))
+
+        val layout = repo.layoutBackup()
+        assertEquals(
+            listOf(Folder("Folder", listOf(app(4), app(5)), handSorted = true)),
+            layout.drawerFolders,
+        )
+        // The folder from the seed was made by a drop, which is no hand order.
+        assertEquals(false, layout.placements.single { it.folder != null }.folder?.handSorted)
+
+        repo.restoreLayout(layout, apps.toSet())
+
+        assertEquals(layout, repo.layoutBackup())
+        val restored = repo.observeFolders().first().single { it.inDrawer }
+        assertTrue(restored.handSorted)
+        assertEquals(listOf(app(4), app(5)), restored.apps)
     }
 
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()

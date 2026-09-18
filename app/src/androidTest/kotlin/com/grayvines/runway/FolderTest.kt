@@ -51,7 +51,8 @@ class FolderTest : LauncherFixture() {
         val neighbour = labelAtHomeCell(1, 0)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
         waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
-        assertEquals(listOf(neighbour, firstHomeApp), folderAt(1, 0))
+        // A folder no hand has ordered lists its apps as the drawer does.
+        assertEquals(inDrawerOrder(firstHomeApp, neighbour), folderAt(1, 0))
         assertNull("the dropped icon's own placement is gone", placementOf(firstHomeApp))
         compose.onNodeWithContentDescription("Folder", useUnmergedTree = true).assertIsDisplayed()
         assertStillOnLauncher()
@@ -89,7 +90,7 @@ class FolderTest : LauncherFixture() {
         val third = labelAtHomeCell(2, 0)
         drag(from = third, to = grid.homeCell(1, 0))
         waitUntil(TIMEOUT_MS) { folderAt(1, 0)?.size == 3 }
-        assertEquals(third, folderAt(1, 0)?.last())
+        assertTrue(third in folderAt(1, 0).orEmpty())
         assertNull(placementOf(third))
     }
 
@@ -98,7 +99,7 @@ class FolderTest : LauncherFixture() {
         val grid = useGrid(columns = 5, rows = 7)
         drag(from = firstHomeApp, to = grid.dockSlot(0))
         waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
-        assertEquals(listOf(firstDockApp, firstHomeApp), dockFolderAt(0))
+        assertEquals(inDrawerOrder(firstDockApp, firstHomeApp), dockFolderAt(0))
         assertNull(placementOf(firstHomeApp))
     }
 
@@ -326,7 +327,7 @@ class FolderTest : LauncherFixture() {
         dragOn(to = grid.homeCell(1, 0))
         release()
         awaitGone(DRAG_OVERLAY_TAG)
-        assertEquals(listOf(neighbour, firstHomeApp), folderAt(1, 0))
+        assertEquals(inDrawerOrder(firstHomeApp, neighbour), folderAt(1, 0))
         assertNull(placementOf(firstHomeApp))
     }
 
@@ -428,11 +429,16 @@ class FolderTest : LauncherFixture() {
         val neighbour = labelAtHomeCell(1, 0)
         drag(from = firstHomeApp, to = grid.homeCell(1, 0))
         waitUntil(TIMEOUT_MS) { folderAt(1, 0) != null }
+        openFolder()
+        return neighbour
+    }
+
+    /** Taps the folder on the home screen and waits for its sheet. */
+    private fun openFolder() {
         tap(compose.onNodeWithContentDescription("Folder", useUnmergedTree = true))
         waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(FOLDER_TAG).fetchSemanticsNodes().isNotEmpty()
         }
-        return neighbour
     }
 
     @Test
@@ -453,6 +459,66 @@ class FolderTest : LauncherFixture() {
             compose.mainClock.autoAdvance = true
         }
         awaitFolderClosed()
+        release()
+    }
+
+    @Test
+    fun whileEditingAHoldCarriesAnAppToANewPlaceAndTheFolderKeepsThatOrder() {
+        makeFolder()
+        val before = folderAt(1, 0)!! // the two apps, in the drawer's order
+        edit()
+
+        carry(before[0], onto = before[1])
+
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) == before.reversed() }
+        assertEquals(before.reversed(), shownFolderApps())
+        // The folder's own order now: it is there again when the sheet is opened again.
+        closeSheet()
+        openFolder()
+        assertEquals(before.reversed(), shownFolderApps())
+    }
+
+    @Test
+    fun anAppDroppedIntoAFolderAHandHasOrderedGoesLast() {
+        val grid = useGrid(columns = 5, rows = 7)
+        makeFolder()
+        val before = folderAt(1, 0)!!
+        edit()
+        carry(before[0], onto = before[1])
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) == before.reversed() }
+        closeSheet()
+
+        val third = labelAtHomeCell(2, 0)
+        drag(from = third, to = grid.homeCell(1, 0))
+
+        waitUntil(TIMEOUT_MS) { folderAt(1, 0) == before.reversed() + third }
+    }
+
+    /** Taps the pencil and waits for the x's, which is when a hold rearranges the folder. */
+    private fun edit() {
+        tap(compose.onNodeWithTag(FOLDER_EDIT_TAG))
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /** Back to leave the editing, which the x's going says has happened, then back to close. */
+    private fun closeSheet() {
+        pressBack()
+        waitUntil(TIMEOUT_MS) {
+            compose.onAllNodesWithTag(FOLDER_REMOVE_TAG).fetchSemanticsNodes().isEmpty()
+        }
+        pressBack()
+        awaitFolderClosed()
+    }
+
+    /** A hold on the folder's [label], carried onto the tile of [onto] and let go there. */
+    private fun carry(label: String, onto: String) {
+        val from = folderApp(label).fetchSemanticsNode().boundsInRoot.center
+        val to = folderApp(onto).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { down(from) }
+        compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
+        dragOn(to = to)
         release()
     }
 

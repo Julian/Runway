@@ -43,7 +43,11 @@ data class FolderAppEntity(
     @ColumnInfo(name = "folder_id") val folderId: Long,
     val component: String,
     val profile: Long,
-    val position: Int,
+    /**
+     * Where a hand put this app among the folder's own; null while no hand has, which is when the
+     * folder lists its apps as the drawer does.
+     */
+    val position: Int? = null,
 ) {
     val ref: AppRef
         get() = AppRef(component, profile)

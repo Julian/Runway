@@ -61,6 +61,7 @@ import com.grayvines.runway.ui.drag.edgeAt
 import com.grayvines.runway.ui.drag.homeCellAt
 import com.grayvines.runway.ui.drawer.DRAWER_ITEM_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
+import com.grayvines.runway.ui.folder.FOLDER_ITEM_TAG
 import com.grayvines.runway.ui.folder.FOLDER_TAG
 import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
@@ -863,8 +864,23 @@ open class LauncherFixture {
         compose.waitForIdle()
     }
 
+    /** The open folder's app labels, read off the sheet in the order its tiles are laid out. */
+    protected fun shownFolderApps(): List<String> =
+        compose
+            .onAllNodesWithTag(FOLDER_ITEM_TAG)
+            .fetchSemanticsNodes()
+            .sortedWith(compareBy({ it.boundsInRoot.top }, { it.boundsInRoot.left }))
+            .mapNotNull {
+                it.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
+            }
+
+    /** [labels] in the order the drawer lists them, which is a folder's until a hand orders it. */
+    protected fun inDrawerOrder(vararg labels: String): List<String> =
+        labels.sortedWith(LabelOrder.comparator())
+
     /**
-     * The labels of the apps in the folder at home cell ([x], [y]) on page 1; null if no folder.
+     * The labels of the apps in the folder at home cell ([x], [y]) on page 1, as the folder lists
+     * them; null if no folder.
      */
     protected fun folderAt(x: Int, y: Int): List<String>? =
         folderLabels(Container.HOME) { it.x == x && it.y == y }
@@ -880,12 +896,10 @@ open class LauncherFixture {
             }
         folder?.let { item ->
             val apps = graph.appRepository.apps.first { it.isNotEmpty() }
-            graph.workspace
-                .observeFolders()
-                .first()
-                .first { it.id == item.folderId }
-                .apps
-                .map { ref -> apps.first { it.ref == ref }.label }
+            val content = graph.workspace.observeFolders().first().first { it.id == item.folderId }
+            val labels = content.apps.map { ref -> apps.first { it.ref == ref }.label }
+            // As the sheet shows them: its hand order, or the drawer's.
+            if (content.handSorted) labels else labels.sortedWith(LabelOrder.comparator())
         }
     }
 

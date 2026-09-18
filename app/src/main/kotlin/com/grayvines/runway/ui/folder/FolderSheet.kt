@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -63,6 +66,7 @@ import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
 import com.grayvines.runway.ui.home.liftable
+import com.grayvines.runway.ui.home.rememberLiftConfiguration
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -247,8 +251,9 @@ private fun SheetContent(
 }
 
 /**
- * The folder's apps, then [after]. A tap launches an app and a hold shows its menu; while
- * [editing], an x on each takes it out instead, and a tap on the app itself does nothing.
+ * The folder's apps, then [after]. A tap launches an app and a hold shows its menu, or lifts the
+ * app out of the folder; while [editing], an x on each takes it out instead, a tap on the app
+ * itself does nothing, and a hold rearranges the folder rather than lifting anything out of it.
  */
 @Composable
 private fun FolderGrid(
@@ -260,26 +265,62 @@ private fun FolderGrid(
     editing: Boolean,
     after: LazyGridScope.() -> Unit,
 ) {
-    LazyVerticalGrid(columns = GridCells.Fixed(columns)) {
-        items(folder.folder, key = { it.key }) { app ->
-            Box {
-                FolderApp(
-                    app,
-                    iconSize,
-                    onClick = { if (!editing) actions.launch(app) },
-                    drag = drag?.handlersForFolder(app, folder),
-                )
-                val folderId = folder.folderId
-                if (editing && folderId != null) {
-                    RemoveChip(
-                        app.label,
-                        onRemove = { actions.remove(folderId, app) },
-                        Modifier.align(Alignment.TopCenter).onIconCorner(iconSize),
-                    )
-                }
-            }
+    val order = rememberFolderOrder(folder.folder)
+    val grid = rememberLazyGridState()
+    val folderId = folder.folderId
+    val rearranging =
+        if (editing && folderId != null) {
+            Modifier.rearranges(order, grid) { actions.reorder(folderId, it) }
+        } else {
+            Modifier
         }
-        after()
+    // The same deliberate hold as anywhere else an icon is picked up.
+    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
+        LazyVerticalGrid(columns = GridCells.Fixed(columns), state = grid, modifier = rearranging) {
+            items(order.shown, key = { it.key }) { app ->
+                // The held tile goes where the finger does; the rest spring to their new slots.
+                val placed = if (order.held == app.key) Modifier else Modifier.animateItem()
+                FolderTile(
+                    app,
+                    folder,
+                    iconSize,
+                    actions,
+                    drag,
+                    editing,
+                    placed.slotted(app, order),
+                )
+            }
+            after()
+        }
+    }
+}
+
+/** One app in the open folder: its tile, and while [editing] the x that takes it out. */
+@Composable
+private fun FolderTile(
+    app: AppEntry,
+    folder: HomeItem,
+    iconSize: Dp,
+    actions: FolderActions,
+    drag: DragSession?,
+    editing: Boolean,
+    modifier: Modifier,
+) {
+    Box(modifier) {
+        FolderApp(
+            app,
+            iconSize,
+            onClick = { if (!editing) actions.launch(app) },
+            drag = if (editing) null else drag?.handlersForFolder(app, folder),
+        )
+        val folderId = folder.folderId
+        if (editing && folderId != null) {
+            RemoveChip(
+                app.label,
+                onRemove = { actions.remove(folderId, app) },
+                Modifier.align(Alignment.TopCenter).onIconCorner(iconSize),
+            )
+        }
     }
 }
 

@@ -104,7 +104,11 @@ class WorkspaceRepositoryTest {
         val content = repo.observeFolders().first().single()
         assertEquals(folder.folderId, content.id)
         assertEquals("Folder", content.name)
-        assertEquals(listOf(b, a).map { AppRef(it.component!!, it.profile!!) }, content.apps)
+        // Both are in it; a folder no hand has ordered keeps no order of its own.
+        assertEquals(
+            listOf(a, b).map { AppRef(it.component!!, it.profile!!) }.toSet(),
+            content.apps.toSet(),
+        )
     }
 
     @Test
@@ -120,7 +124,7 @@ class WorkspaceRepositoryTest {
 
         val content = repo.observeFolders().first().single()
         assertEquals(3, content.apps.size)
-        assertEquals(extra, content.apps.last())
+        assertTrue(extra in content.apps)
         assertEquals(1, repo.observe(Container.HOME).first().pages.single().items.size)
     }
 
@@ -217,16 +221,16 @@ class WorkspaceRepositoryTest {
             assertTrue(repo.foldInto(targetId = d.id, dropped = Dropped.App(app), outOf = first.id))
             assertEquals(listOf(AppRef("pkg3/.Main", 0)), folderApps(first.id))
             assertEquals(
-                listOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) },
-                folderApps(second.id),
+                setOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) }.toSet(),
+                folderApps(second.id).toSet(),
             )
 
             assertTrue(
                 repo.foldInto(targetId = d.id, dropped = Dropped.App(app), outOf = second.id)
             )
             assertEquals(
-                listOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) },
-                folderApps(second.id),
+                setOf("pkg5/.Main", "pkg4/.Main", "pkg2/.Main").map { AppRef(it, 0) }.toSet(),
+                folderApps(second.id).toSet(),
             )
         }
 
@@ -255,7 +259,7 @@ class WorkspaceRepositoryTest {
             repo.addToDrawerFolder(second, a) // and so does the third, the same way
             assertEquals(listOf(second), repo.observeDrawerPlacements().first().map { it.folderId })
 
-            assertEquals(listOf(b, a), folderApps(second))
+            assertEquals(setOf(b, a), folderApps(second).toSet())
 
             repo.deleteFolder(second)
             assertTrue(repo.observeFolders().first().isEmpty())
@@ -371,7 +375,7 @@ class WorkspaceRepositoryTest {
 
             val items = repo.observe(Container.HOME).first().pages.single().items
             assertEquals(3 to 0, items.single { it.id == loose.id }.let { it.x to it.y })
-            assertEquals(listOf(b.appRef(), a.appRef()), folderApps(folder.id))
+            assertEquals(setOf(b.appRef(), a.appRef()), folderApps(folder.id).toSet())
         }
 
     @Test
@@ -389,7 +393,7 @@ class WorkspaceRepositoryTest {
 
             assertTrue(repo.foldInto(targetId = tile.id, dropped = Dropped.Item(a.id)))
 
-            assertEquals(listOf(b.appRef(), a.appRef()), folderApps(second))
+            assertEquals(setOf(b.appRef(), a.appRef()), folderApps(second).toSet())
             assertEquals(
                 listOf(second),
                 repo.observeFolders().first().map { it.id },

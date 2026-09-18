@@ -54,8 +54,18 @@ interface WorkspaceDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertFolderApp(app: FolderAppEntity)
 
-    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM folder_apps WHERE folder_id = :folderId")
-    suspend fun nextFolderPosition(folderId: Long): Int
+    /**
+     * Where an app joining the folder goes: after the last hand-placed one, or nowhere in
+     * particular (null) while no hand has ordered this folder.
+     */
+    @Query("SELECT MAX(position) + 1 FROM folder_apps WHERE folder_id = :folderId")
+    suspend fun nextFolderPosition(folderId: Long): Int?
+
+    @Query(
+        "UPDATE folder_apps SET position = :position " +
+            "WHERE folder_id = :folderId AND component = :component AND profile = :profile"
+    )
+    suspend fun setFolderPosition(folderId: Long, component: String, profile: Long, position: Int)
 
     @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
 
@@ -99,10 +109,15 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM folders") suspend fun deleteAllFolders()
 
-    @Query("SELECT * FROM folder_apps ORDER BY position")
+    /** Hand-placed apps in their order, then the rest; see [FolderAppEntity.position]. */
+    @Query("SELECT * FROM folder_apps $FOLDER_APP_ORDER")
     fun observeFolderApps(): Flow<List<FolderAppEntity>>
 
-    @Query("SELECT * FROM folder_apps") suspend fun folderApps(): List<FolderAppEntity>
+    @Query("SELECT * FROM folder_apps WHERE folder_id = :folderId $FOLDER_APP_ORDER")
+    suspend fun folderApps(folderId: Long): List<FolderAppEntity>
+
+    @Query("SELECT * FROM folder_apps $FOLDER_APP_ORDER")
+    suspend fun folderApps(): List<FolderAppEntity>
 
     @Query("SELECT * FROM items") suspend fun items(): List<ItemEntity>
 
@@ -118,3 +133,8 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM pages") suspend fun deleteAllPages()
 }
+
+/**
+ * The order a folder holds its apps in; the rest, which no hand placed, sort so a file is stable.
+ */
+private const val FOLDER_APP_ORDER = "ORDER BY position IS NULL, position, component, profile"

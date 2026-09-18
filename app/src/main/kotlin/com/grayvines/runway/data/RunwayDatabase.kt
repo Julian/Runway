@@ -25,7 +25,7 @@ abstract class RunwayDatabase : RoomDatabase() {
 
     companion object {
         /** Bump together with a migration and its test in `RunwayDatabaseMigrationTest`. */
-        const val VERSION = 2
+        const val VERSION = 3
 
         /**
          * Opens the layout database at [name] (a file name in the app's database directory, or an

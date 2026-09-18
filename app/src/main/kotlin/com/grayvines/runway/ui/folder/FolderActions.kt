@@ -12,4 +12,6 @@ class FolderActions(
     val add: (folderId: Long, app: AppEntry) -> Unit,
     /** Takes the app out of the folder of this id; a folder that empties stays until it closes. */
     val remove: (folderId: Long, app: AppEntry) -> Unit,
+    /** The order a finger left the folder's apps in, which the folder keeps from then on. */
+    val reorder: (folderId: Long, apps: List<AppEntry>) -> Unit,
 )

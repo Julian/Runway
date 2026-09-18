@@ -24,7 +24,11 @@ class BackupTest {
                         2,
                         3,
                         folder =
-                            Folder("Tools", listOf(AppRef("b/.Main", 0), AppRef("c/.Main", 10))),
+                            Folder(
+                                "Tools",
+                                listOf(AppRef("b/.Main", 0), AppRef("c/.Main", 10)),
+                                handSorted = true,
+                            ),
                     ),
                 ),
         )

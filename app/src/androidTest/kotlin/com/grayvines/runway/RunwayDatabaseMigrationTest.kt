@@ -87,6 +87,31 @@ class RunwayDatabaseMigrationTest {
     }
 
     @Test
+    fun from2To3KeepsEveryFolderAppAndDropsTheOrderNoHandGave() = runBlocking {
+        val db = helper.createDatabase(2)
+        try {
+            db.execSQL("INSERT INTO folders (id, name) VALUES (10, 'kept')")
+            db.execSQL(
+                "INSERT INTO folder_apps (folder_id, component, profile, position) " +
+                    "VALUES (10, 'b/.Main', 0, 0), (10, 'a/.Main', 0, 1)"
+            )
+        } finally {
+            db.close()
+        }
+        val migrated = helper.runMigrationsAndValidate(3, Migrations.all)
+        try {
+            assertEquals(listOf(10L, 10L), migrated.ids("SELECT folder_id FROM folder_apps"))
+            // The positions were the order the apps happened to go in, which nobody chose.
+            assertEquals(
+                emptyList<Long>(),
+                migrated.ids("SELECT position FROM folder_apps WHERE position IS NOT NULL"),
+            )
+        } finally {
+            migrated.close()
+        }
+    }
+
+    @Test
     fun anOlderBuildOverANewerDatabaseOpensEmptyRatherThanNotAtAll() = runBlocking {
         val db = helper.createDatabase(RunwayDatabase.VERSION)
         try {

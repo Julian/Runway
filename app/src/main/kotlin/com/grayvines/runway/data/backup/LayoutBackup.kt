@@ -58,8 +58,10 @@ private fun ItemEntity.placement(
     }
 }
 
-private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>) =
-    Folder(name, folderApps[id].orEmpty().sortedBy { it.position }.map { it.ref })
+private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>): Folder {
+    val held = folderApps[id].orEmpty() // already in the order the folder holds them
+    return Folder(name, held.map { it.ref }, handSorted = held.any { it.position != null })
+}
 
 /**
  * Replaces the layout with [layout], in one transaction, except for the widgets already placed: a
@@ -111,9 +113,7 @@ suspend fun WorkspaceRepository.restoreLayout(
                 skipped += folder.apps.size - apps.size
                 if (apps.isEmpty()) continue
                 val folderId = dao.insertFolder(FolderEntity(name = folder.name))
-                apps.forEachIndexed { i, ref ->
-                    dao.insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
-                }
+                dao.fill(folderId, apps, folder.handSorted)
                 dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
                 placed++
             }
@@ -159,6 +159,17 @@ private class AppMatcher(private val installed: Set<AppRef>, private val quiet: 
         }
 }
 
+/**
+ * Puts [apps] in the folder, in the file's order. That order is kept as the folder's own only if it
+ * was a hand's; otherwise the folder takes none, and lists them as the drawer does.
+ */
+private suspend fun WorkspaceDao.fill(folderId: Long, apps: List<AppRef>, handSorted: Boolean) {
+    apps.forEachIndexed { i, ref ->
+        val position = i.takeIf { handSorted }
+        insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, position))
+    }
+}
+
 /** Running totals of a restore. */
 private class Counts(var placed: Int = 0, var skipped: Int = 0)
 
@@ -174,9 +185,7 @@ private suspend fun WorkspaceDao.restoreDrawerFolders(
         counts.skipped += folder.apps.size - apps.size
         if (apps.isNotEmpty()) {
             val folderId = insertFolder(FolderEntity(name = folder.name))
-            apps.forEachIndexed { i, ref ->
-                insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, i))
-            }
+            fill(folderId, apps, folder.handSorted)
             insertItem(
                 ItemEntity(
                     kind = ItemKind.FOLDER,

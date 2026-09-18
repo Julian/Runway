@@ -339,7 +339,7 @@ class DrawerTest : LauncherFixture() {
         release()
         awaitDrawerClosed()
         waitUntil(TIMEOUT_MS) { dockFolderAt(0) != null }
-        assertEquals(listOf(firstDockApp, label), dockFolderAt(0))
+        assertEquals(inDrawerOrder(firstDockApp, label), dockFolderAt(0))
         // The page picked its own placement up as the drag crossed it, so that one went into the
         // folder: the app is in the folder now, not on a cell of its own.
         assertEquals(before - 1, placementsOf(label).size)

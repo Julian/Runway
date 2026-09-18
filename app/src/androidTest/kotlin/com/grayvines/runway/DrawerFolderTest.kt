@@ -181,6 +181,23 @@ class DrawerFolderTest : LauncherFixture() {
     }
 
     @Test
+    fun aFolderListsItsAppsAsTheDrawerDoes() {
+        // Added last, but first by label: the sheet shows it first all the same.
+        openDrawerFolderOf(second)
+        editFolder()
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        waitUntil { candidate(first).isDisplayedOrFalse() }
+
+        tap(candidate(first))
+        awaitFolders(listOf(listOf(first, second)))
+        tap(compose.onNode(hasText("Done") and hasAnyAncestor(hasTestTag(FOLDER_TAG))))
+        waitUntil { folderApp(first).isDisplayedOrFalse() }
+
+        assertEquals(listOf(first, second), shownFolderApps())
+        sendHomeIntent()
+    }
+
+    @Test
     fun typingNarrowsTheList_andSaysSoWhenNothingMatches() {
         openDrawerFolderOf(first)
         editFolder()
@@ -439,9 +456,9 @@ class DrawerFolderTest : LauncherFixture() {
         compose.onAllNodesWithTag(DRAWER_FOLDER_TAG).fetchSemanticsNodes()
 
     /**
-     * Each drawer folder's app labels, in the order the folders were made. One read: a write
-     * landing between a folders query and a placements query showed placements of a folder the
-     * other query had not seen, and so nothing at all.
+     * Each drawer folder's app labels, as the folder lists them: in its hand order, or as the
+     * drawer sorts them. One read: a write landing between a folders query and a placements query
+     * showed placements of a folder the other query had not seen, and so nothing at all.
      */
     private fun drawerFolders(): List<List<String>> = runBlocking {
         val installed = graph.appRepository.apps.first()
@@ -454,9 +471,12 @@ class DrawerFolderTest : LauncherFixture() {
                 .filter { it.container == Container.DRAWER }
                 .mapNotNull { placement ->
                     folders[placement.folderId]?.let { folder ->
-                        apps[folder.id].orEmpty().map { row ->
+                        val held = apps[folder.id].orEmpty()
+                        val labels = held.map { row ->
                             installed.first { it.ref == AppRef(row.component, row.profile) }.label
                         }
+                        val handSorted = held.any { it.position != null }
+                        if (handSorted) labels else labels.sortedWith(LabelOrder.comparator())
                     }
                 }
         }

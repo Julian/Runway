@@ -4,12 +4,17 @@ import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
-/** A folder and the apps in it, in order; [inDrawer] when one of its placements is the drawer. */
+/**
+ * A folder and the apps in it, in order; [inDrawer] when one of its placements is the drawer.
+ * [handSorted] when that order is one a hand dragged the apps into, which is the order to show;
+ * otherwise the apps are shown as the drawer lists them, by label.
+ */
 data class FolderContent(
     val id: Long,
     val name: String,
     val apps: List<AppRef>,
     val inDrawer: Boolean = false,
+    val handSorted: Boolean = false,
 )
 
 /** What is dropped onto an icon to fold with it: a placement, or an app fresh from the drawer. */
@@ -29,11 +34,13 @@ fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
         val byFolder = apps.groupBy { it.folderId }
         val inDrawer = drawer.mapNotNullTo(HashSet()) { it.folderId }
         folders.map { folder ->
+            val held = byFolder[folder.id].orEmpty()
             FolderContent(
                 folder.id,
                 folder.name,
-                byFolder[folder.id].orEmpty().map { AppRef(it.component, it.profile) },
+                held.map { it.ref },
                 inDrawer = folder.id in inDrawer,
+                handSorted = held.any { it.position != null },
             )
         }
     }
@@ -178,6 +185,7 @@ private suspend fun WorkspaceDao.take(dropped: Dropped, notOnto: ItemEntity): Ta
     return Taken(app, placement?.id)
 }
 
+/** [app] joins the folder: last of the hand-placed apps, or unplaced while none are. */
 internal suspend fun WorkspaceDao.addToFolder(folderId: Long, app: AppRef) {
     val position = nextFolderPosition(folderId)
     insertFolderApp(FolderAppEntity(folderId, app.component, app.profile, position))

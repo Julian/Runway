@@ -23,14 +23,18 @@ import com.grayvines.runway.ui.drag.homeCellAt
 internal fun ContainerContent.toHomePages(
     apps: Map<String, AppEntry>,
     folders: Map<Long, FolderContent> = emptyMap(),
-): List<HomePage> = pages.map { page ->
-    val items = page.items.mapNotNull { it.toHomeItem(apps, folders) }
-    val drawn = items.mapTo(mutableSetOf()) { it.id }
-    HomePage(
-        index = page.index,
-        items = items,
-        occupied = page.items.mapNotNull { it.placed(drawn = it.id in drawn) },
-    )
+): List<HomePage> {
+    // One collator for the whole layout: making one costs more than the sorts do.
+    val byLabel = LabelOrder.comparator()
+    return pages.map { page ->
+        val items = page.items.mapNotNull { it.toHomeItem(apps, folders, byLabel) }
+        val drawn = items.mapTo(mutableSetOf()) { it.id }
+        HomePage(
+            index = page.index,
+            items = items,
+            occupied = page.items.mapNotNull { it.placed(drawn = it.id in drawn) },
+        )
+    }
 }
 
 /** Whether the root point [p] lies on a widget of the home page shown in [areas]. */
@@ -59,12 +63,17 @@ private fun ItemEntity.placed(drawn: Boolean): Placed? {
 internal fun List<ItemEntity>.toDrawerFolders(
     apps: Map<String, AppEntry>,
     folders: Map<Long, FolderContent>,
-): List<HomeItem> = mapNotNull { item ->
-    item.folderId?.let { folders[it] }?.tile(item.id, apps)
+): List<HomeItem> {
+    val byLabel = LabelOrder.comparator()
+    return mapNotNull { item -> item.folderId?.let { folders[it] }?.tile(item.id, apps, byLabel) }
+        .sortedWith(compareBy(byLabel) { it.label })
 }
-    .sortedWith(compareBy(LabelOrder.comparator()) { it.label })
 
-private fun FolderContent.tile(placementId: Long, apps: Map<String, AppEntry>) =
+private fun FolderContent.tile(
+    placementId: Long,
+    apps: Map<String, AppEntry>,
+    byLabel: Comparator<String>,
+) =
     HomeItem(
         id = placementId,
         kind = ItemKind.FOLDER,
@@ -74,15 +83,29 @@ private fun FolderContent.tile(placementId: Long, apps: Map<String, AppEntry>) =
         spanY = 1,
         label = name,
         app = null,
-        folder = this.apps.mapNotNull { apps["${it.profile}/${it.component}"] },
+        folder = held(apps, byLabel),
         folderId = id,
         inDrawer = true,
     )
+
+/**
+ * The folder's apps as it shows them: in its hand order once one has been dragged into place,
+ * otherwise as the drawer lists them. One whose app is absent (a profile that is off, the list not
+ * loaded yet) is not among them.
+ */
+private fun FolderContent.held(
+    apps: Map<String, AppEntry>,
+    byLabel: Comparator<String>,
+): List<AppEntry> {
+    val entries = this.apps.mapNotNull { apps["${it.profile}/${it.component}"] }
+    return if (handSorted) entries else entries.sortedWith(compareBy(byLabel) { it.label })
+}
 
 /** Null when the item has no cell or its app is absent; those are not drawn. */
 private fun ItemEntity.toHomeItem(
     apps: Map<String, AppEntry>,
     folders: Map<Long, FolderContent>,
+    byLabel: Comparator<String>,
 ): HomeItem? {
     val cellX = x ?: return null
     val cellY = y ?: return null
@@ -98,7 +121,7 @@ private fun ItemEntity.toHomeItem(
         spanY = spanY,
         label = labelOverride ?: app?.label ?: folder?.name ?: provider ?: "",
         app = app,
-        folder = folder?.apps?.mapNotNull { apps["${it.profile}/${it.component}"] }.orEmpty(),
+        folder = folder?.held(apps, byLabel).orEmpty(),
         folderId = folder?.id,
         inDrawer = folder?.inDrawer == true,
         appWidgetId = appWidgetId,
