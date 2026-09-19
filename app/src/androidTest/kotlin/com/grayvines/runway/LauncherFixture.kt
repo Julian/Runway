@@ -826,18 +826,20 @@ open class LauncherFixture {
     }
 
     /**
-     * Backs out of settings from the page that is open, back to the list and then out, so the next
-     * test to open settings finds it on its list.
+     * Backs out of settings from the page that is open, page by page to the list and then out, so
+     * the next test to open settings finds it on its list.
      */
     protected fun leaveSettings() {
-        if (device.hasObject(SETTINGS_PAGE_BACK)) {
+        var depth = 0
+        while (depth < MAX_SETTINGS_DEPTH && device.hasObject(SETTINGS_PAGE_BACK)) {
             device.pressBack()
             compose.waitForIdle()
-            assertTrue(
-                "back did not reach the list",
-                device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
-            )
+            depth++
         }
+        assertTrue(
+            "back did not reach the list",
+            device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
+        )
         device.pressBack()
     }
 
@@ -1024,6 +1026,9 @@ val SETTINGS: BySelector = By.text("Home screen")
 
 /** The way back to the list, on every settings page but the list itself. */
 val SETTINGS_PAGE_BACK: BySelector = By.desc("Back")
+
+/** The most pages deep settings goes: the list, a page, and one opened from that. */
+const val MAX_SETTINGS_DEPTH = 2
 
 /** Icon sizes are rounded to pixels on the way; this much slack covers it. */
 const val GRID_TOLERANCE_PX = 2f

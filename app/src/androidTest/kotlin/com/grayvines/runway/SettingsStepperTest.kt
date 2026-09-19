@@ -29,6 +29,8 @@ class SettingsStepperTest {
                 settings = Settings(),
                 searchTargets = emptyList(),
                 apps = emptyList(),
+                hiddenApps = emptySet(),
+                onHide = { _, _ -> },
                 onChange = { transform -> stored = transform(stored) },
                 onOpenHome = null,
                 backupActions = BackupActions(save = {}, restore = {}),

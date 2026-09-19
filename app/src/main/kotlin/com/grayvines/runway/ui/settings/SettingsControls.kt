@@ -1,6 +1,9 @@
 package com.grayvines.runway.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +36,24 @@ internal fun Section(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
     )
+}
+
+/** A row that opens another page: its [title] over a line of what is there. */
+@Composable
+internal fun PageRow(
+    title: String,
+    summary: String,
+    padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    onClick: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(padding)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 /** [value] with a step of ±1; [onStep] says which, and the caller applies it to what is stored. */
