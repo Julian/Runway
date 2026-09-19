@@ -3,6 +3,7 @@ package com.grayvines.runway
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.settings.Settings
@@ -34,6 +35,7 @@ class SettingsStepperTest {
                 debugActions = null,
             )
         }
+        compose.onNodeWithText("Home screen").performClick()
         val plus = compose.onAllNodesWithText("+")[0] // the first stepper: the grid's columns
         plus.performClick()
         plus.performClick()

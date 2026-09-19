@@ -128,9 +128,9 @@ class LauncherShellTest : LauncherFixture() {
         other!!
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
+        openSettingsPage("Search bar")
         // Nothing picked yet, so the dropdown button reads Automatic.
         val automatic = By.text("Automatic")
-        scrollSettingsTo(automatic)
         assertTrue(
             "no Automatic search target in settings",
             device.wait(Until.hasObject(automatic), TIMEOUT_MS),
@@ -148,7 +148,7 @@ class LauncherShellTest : LauncherFixture() {
         waitUntil(TIMEOUT_MS) {
             runBlocking { graph.settings.settings.first().searchTarget } == other.packageName
         }
-        device.pressBack()
+        leaveSettings()
     }
 
     @Test

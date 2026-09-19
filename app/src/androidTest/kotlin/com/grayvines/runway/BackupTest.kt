@@ -52,11 +52,13 @@ class BackupTest : LauncherFixture() {
     fun settingsOfferToSaveAndRestoreABackup() {
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
-        val save = By.text("Save a backup") // near the bottom
-        scrollSettingsTo(save)
-        assertTrue("no backup buttons", device.wait(Until.hasObject(save), TIMEOUT_MS))
+        openSettingsPage("Backup")
+        assertTrue(
+            "no backup buttons",
+            device.wait(Until.hasObject(By.text("Save a backup")), TIMEOUT_MS),
+        )
         assertTrue(device.hasObject(By.text("Restore a backup")))
-        device.pressBack()
+        leaveSettings()
     }
 
     private fun currentColumns() = runBlocking { graph.settings.settings.first().columns }

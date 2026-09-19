@@ -121,16 +121,16 @@ class SwipeRightTest : LauncherFixture() {
         }
         icon(firstHomeApp).performClick()
         awaitSettingsOpen()
+        openSettingsPage("Gestures")
 
         val nothing = By.text("Nothing")
-        scrollSettingsTo(nothing)
         chooseInSettings(opener = nothing, choice = By.text(picked.label))
         waitUntil(TIMEOUT_MS) { swipeRightSetting() == SwipeAction.OpenApp(picked.ref) }
 
         // The button now names the app; the list it opens starts with Nothing.
         chooseInSettings(opener = By.text(picked.label), choice = nothing)
         waitUntil(TIMEOUT_MS) { swipeRightSetting() == null }
-        device.pressBack()
+        leaveSettings()
     }
 
     /**

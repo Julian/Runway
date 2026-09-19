@@ -804,16 +804,47 @@ open class LauncherFixture {
      * activity launch on a loaded runner can take many seconds, so the long wait.
      */
     protected fun awaitSettingsOpen() {
+        assertTrue("settings did not open", device.wait(Until.hasObject(SETTINGS), LONG_TIMEOUT_MS))
+    }
+
+    /**
+     * Opens the settings page listed as [title]. The Compose rule owns the frame clock of every
+     * composition in the process, the settings screen's too: nothing there moves after a
+     * UiAutomator tap until the rule idles.
+     */
+    protected fun openSettingsPage(title: String) {
         assertTrue(
-            "settings did not open",
-            device.wait(Until.hasObject(By.text("Grid")), LONG_TIMEOUT_MS),
+            "no $title in settings",
+            device.wait(Until.hasObject(By.text(title)), TIMEOUT_MS),
+        )
+        device.findObject(By.text(title)).click()
+        compose.waitForIdle()
+        assertTrue(
+            "the $title page did not open",
+            device.wait(Until.hasObject(SETTINGS_PAGE_BACK), TIMEOUT_MS),
         )
     }
 
-    /** The lifted icon is our settings app; a stray click would open its "Grid" section. */
+    /**
+     * Backs out of settings from the page that is open, back to the list and then out, so the next
+     * test to open settings finds it on its list.
+     */
+    protected fun leaveSettings() {
+        if (device.hasObject(SETTINGS_PAGE_BACK)) {
+            device.pressBack()
+            compose.waitForIdle()
+            assertTrue(
+                "back did not reach the list",
+                device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
+            )
+        }
+        device.pressBack()
+    }
+
+    /** The lifted icon is our settings app; a stray click would open its list of pages. */
     protected fun assertStillOnLauncher() {
         compose.waitForIdle()
-        assertTrue("a drag must not also launch the app", !device.hasObject(By.text("Grid")))
+        assertTrue("a drag must not also launch the app", !device.hasObject(SETTINGS))
     }
 
     /** The placement of [label], by component and profile, so a work-profile twin is its own. */
@@ -854,25 +885,6 @@ open class LauncherFixture {
     /** The label of the app placed as [item]. */
     protected fun labelOf(item: ItemEntity): String =
         apps.first { it.ref.component == item.component }.label
-
-    /**
-     * Settings rows near the bottom start below the fold on a short screen: swipes the page up once
-     * if [row] is not showing, then lets it draw (the Compose rule owns the frame clock, so the
-     * page only moves once the test idles).
-     */
-    protected fun scrollSettingsTo(row: BySelector) {
-        if (device.hasObject(row)) return
-        device.findObject(By.scrollable(true))?.visibleBounds?.let { page ->
-            device.swipe(
-                page.centerX(),
-                page.bottom - SWIPE_INSET_PX,
-                page.centerX(),
-                page.top + SWIPE_INSET_PX,
-                SWIPE_STEPS,
-            )
-        }
-        compose.waitForIdle()
-    }
 
     /** The open folder's app labels, read off the sheet in the order its tiles are laid out. */
     protected fun shownFolderApps(): List<String> =
@@ -1007,9 +1019,11 @@ const val SHADE_GRACE_MS = 1_000L
 /** The system's notification shade, once down. */
 val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scroller")
 
-/** A settings page swipe: in from the scrollable's ends, slow enough not to fling. */
-const val SWIPE_INSET_PX = 100
-const val SWIPE_STEPS = 20
+/** The first row of settings' list of pages, which is where settings opens. */
+val SETTINGS: BySelector = By.text("Home screen")
+
+/** The way back to the list, on every settings page but the list itself. */
+val SETTINGS_PAGE_BACK: BySelector = By.desc("Back")
 
 /** Icon sizes are rounded to pixels on the way; this much slack covers it. */
 const val GRID_TOLERANCE_PX = 2f
