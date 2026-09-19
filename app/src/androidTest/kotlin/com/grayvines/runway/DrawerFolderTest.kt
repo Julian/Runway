@@ -24,6 +24,7 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.NEW_FOLDER_NAME
 import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.createDrawerFolder
+import com.grayvines.runway.data.hideApp
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.placeFolder
@@ -155,6 +156,24 @@ class DrawerFolderTest : LauncherFixture() {
             .assertCountEquals(0)
         compose.onAllNodesWithTag(FOLDER_ITEM_TAG).assertCountEquals(0) // the list, not the folder
         compose.onNodeWithTag(FOLDER_ADD_SEARCH_TAG).assertIsDisplayed()
+        sendHomeIntent()
+    }
+
+    @Test
+    fun thePlusLeavesOutHiddenApps() {
+        val third = labels[2]
+        runBlocking { graph.workspace.hideApp(apps.first { it.label == second }.ref) }
+        openDrawerFolderOf(first)
+        editFolder()
+        tap(compose.onNodeWithTag(FOLDER_ADD_TAG))
+        // Not hidden, the second app would head the list, just above the third.
+        waitUntil {
+            candidate(third).isDisplayedOrFalse() &&
+                compose
+                    .onAllNodes(hasTestTag(FOLDER_CANDIDATE_TAG) and hasContentDescription(second))
+                    .fetchSemanticsNodes()
+                    .isEmpty()
+        }
         sendHomeIntent()
     }
 

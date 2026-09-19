@@ -114,7 +114,7 @@ fun FolderSheet(
     folder: HomeItem,
     from: Bounds,
     iconSize: Dp,
-    /** Every app, in the drawer's order: what a drawer folder can add. */
+    /** The drawer's apps, in its order: what a drawer folder can add. */
     apps: List<AppEntry>,
     actions: FolderActions,
     drag: DragSession?,

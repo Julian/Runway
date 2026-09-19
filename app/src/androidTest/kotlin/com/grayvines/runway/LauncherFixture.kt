@@ -40,8 +40,10 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeFolders
+import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.unhideApp
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
@@ -120,6 +122,8 @@ open class LauncherFixture {
     fun seed() {
         runBlocking {
             graph.settings.update { settings }
+            // Hidden apps are not part of the layout, so the fill below leaves them hidden.
+            graph.workspace.observeHiddenApps().first().forEach { graph.workspace.unhideApp(it) }
             // Tests find icons by label, so two apps with the same one (a stock image ships two
             // "Chrome"s) would be indistinguishable: such apps stay out of the layout.
             val all =
@@ -397,6 +401,12 @@ open class LauncherFixture {
 
     protected fun drawerApp(label: String) =
         compose.onNode(hasTestTag(DRAWER_ITEM_TAG) and hasContentDescription(label))
+
+    /** The drawer's app tiles that are composed, which is its rows in view and a few beyond. */
+    protected fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
+
+    protected fun shownDrawerLabels() =
+        drawerItems().map { it.config[SemanticsProperties.ContentDescription].single() }
 
     /** A long press on [node] without moving: the menu for it comes up. */
     protected fun hold(node: SemanticsNodeInteraction) {

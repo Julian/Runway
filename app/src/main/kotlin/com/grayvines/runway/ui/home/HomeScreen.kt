@@ -377,7 +377,7 @@ private fun DrawerOverlay(
         shown = drawer.motion.shown,
         open = open,
         covered = covered,
-        apps = state.apps,
+        apps = state.drawerApps,
         folders = state.drawerFolders,
         query = query,
         keyboard = settings.drawerKeyboard,
@@ -405,7 +405,15 @@ private fun OpenFolder(
     drag: DragSession,
 ) {
     val folder = state.item(open.itemId) ?: return
-    FolderSheet(folder, open.from, iconSize, state.apps, actions, drag, leaving = open.leaving)
+    FolderSheet(
+        folder,
+        open.from,
+        iconSize,
+        state.drawerApps,
+        actions,
+        drag,
+        leaving = open.leaving,
+    )
 }
 
 /** One grid cell: the window minus system bars, divided by the grid. */

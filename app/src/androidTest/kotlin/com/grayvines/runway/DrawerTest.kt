@@ -73,9 +73,6 @@ class DrawerTest : LauncherFixture() {
         assertEquals(all.takeLast(bottom.size), bottom)
     }
 
-    private fun shownDrawerLabels() =
-        drawerItems().map { it.config[SemanticsProperties.ContentDescription].single() }
-
     @Test
     fun tappingAnAppInTheDrawerLaunchesItAndClosesTheDrawer() {
         openDrawer()
@@ -560,8 +557,6 @@ class DrawerTest : LauncherFixture() {
 
     private fun searchText() =
         searchField().fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text
-
-    private fun drawerItems() = compose.onAllNodesWithTag(DRAWER_ITEM_TAG).fetchSemanticsNodes()
 
     @Test
     fun aSwipeDownShowsTheShadeComingAndLetsGoIfItDoesNot() {
