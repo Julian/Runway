@@ -4,6 +4,7 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.FolderAppEntity
 import com.grayvines.runway.data.FolderEntity
+import com.grayvines.runway.data.HiddenAppEntity
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.PageEntity
@@ -36,6 +37,8 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout = read {
         placements =
             placements.sortedWith(compareBy({ it.container }, { it.page }, { it.y }, { it.x })),
         drawerFolders = drawerIds.map { folders.getValue(it).backup(folderApps) },
+        hiddenApps =
+            dao.hiddenApps().map { it.ref }.sortedWith(compareBy({ it.component }, { it.profile })),
     )
 }
 
@@ -71,7 +74,9 @@ private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>): F
  * profiles differently); anything else is skipped, and a folder none of whose apps are installed
  * goes with them. Apps of a [quiet] profile, one that exists but reports nothing (a work profile
  * that is paused), are taken as they are: there is nothing to check them against, and they come
- * back with the profile.
+ * back with the profile. The hidden apps are matched the same way and replaced too, unless the file
+ * is from before Runway could hide apps; one not installed is dropped and not counted as skipped:
+ * nothing on screen is missing for it.
  */
 suspend fun WorkspaceRepository.restoreLayout(
     layout: Layout,
@@ -88,6 +93,12 @@ suspend fun WorkspaceRepository.restoreLayout(
         dao.insertPage(PageEntity(Container.HOME, it))
     }
     repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
+    layout.hiddenApps?.let { hidden ->
+        dao.deleteAllHiddenApps()
+        hidden.mapNotNull(match::find).forEach {
+            dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
+        }
+    }
     val counts = Counts()
     // Drawer folders first: a placement may refer to one by index.
     val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)

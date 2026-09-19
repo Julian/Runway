@@ -143,6 +143,8 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM hidden_apps WHERE component = :component AND profile = :profile")
     suspend fun deleteHiddenApp(component: String, profile: Long)
+
+    @Query("DELETE FROM hidden_apps") suspend fun deleteAllHiddenApps()
 }
 
 /**

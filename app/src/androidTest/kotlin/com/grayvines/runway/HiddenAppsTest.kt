@@ -8,6 +8,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.RunwayDatabase
+import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.hideApp
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.unhideApp
@@ -16,6 +18,7 @@ import com.grayvines.runway.ui.drawer.DRAWER_SEARCH_TAG
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +83,20 @@ class HiddenAppsTest : LauncherFixture() {
         compose.waitForIdle()
         waitUntil(TIMEOUT_MS) { app.ref !in hiddenApps() }
         leaveSettings()
+    }
+
+    @Test
+    fun aFreshDatabaseStartsWithRunwaysOwnEntryHidden() {
+        val ours = apps.first { it.component.packageName == app.packageName }.ref
+        val name = "fresh-${System.nanoTime()}.db"
+        val db = RunwayDatabase.open(app, name)
+        try {
+            val hidden = runBlocking { WorkspaceRepository(db).observeHiddenApps().first() }
+            assertEquals(setOf(ours), hidden)
+        } finally {
+            db.close()
+            app.deleteDatabase(name)
+        }
     }
 
     private fun hiddenApps() = runBlocking { graph.workspace.observeHiddenApps().first() }
