@@ -9,7 +9,7 @@ detekt = "2.0.0-alpha.6"
 
 # AndroidX
 activity = "1.13.0"
-compose-bom = "2026.08.00"
+compose-bom = "2026.09.00"
 material3 = "1.5.0-alpha28"
 core = "1.19.0"
 lifecycle = "2.11.0"
