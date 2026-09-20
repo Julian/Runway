@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +29,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -42,6 +44,7 @@ import com.grayvines.runway.appGraph
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.system.widgets.isReconfigurable
 import com.grayvines.runway.ui.home.HomeItem
 import kotlinx.coroutines.delay
 
@@ -52,8 +55,9 @@ private val CORNER = 12.dp
 internal val HANDLE_TOUCH = 44.dp
 private val HANDLE_LENGTH = 26.dp
 private val HANDLE_THICKNESS = 6.dp
-private val REMOVE_SIZE = 28.dp
-private val REMOVE_ICON = 18.dp
+private val CHIP_SIZE = 28.dp
+private val CHIP_ICON = 18.dp
+private val CHIP_GAP = 8.dp
 private const val FILL_ALPHA = 0.06f
 private const val OUTLINE_ALPHA = 0.9f
 private val CHIP = Color(0xFF202124)
@@ -65,10 +69,10 @@ internal const val REFLECT_TIMEOUT_MS = 3_000L
 
 /**
  * The frame around [item] (root coordinates, over everything): an outline on its cells, a handle on
- * each edge its provider lets move, and Remove at its corner. A handle pulled snaps the widget a
- * cell at a time, as far as its limits, the grid and its neighbours ([others]) allow, while the
- * outline follows the finger; let go, the size is saved. A touch anywhere else puts the frame away,
- * and so does back.
+ * each edge its provider lets move, Remove at its corner, and Edit beside it for a widget whose
+ * provider takes its setup screen again. A handle pulled snaps the widget a cell at a time, as far
+ * as its limits, the grid and its neighbours ([others]) allow, while the outline follows the
+ * finger; let go, the size is saved. A touch anywhere else puts the frame away, and so does back.
  */
 @Composable
 fun WidgetResizeFrame(
@@ -80,10 +84,8 @@ fun WidgetResizeFrame(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val limits =
-        remember(item.appWidgetId, cell, grid) {
-            item.appWidgetId?.let(context.appGraph.widgets::info).limits(cell, grid, density)
-        }
+    val info = remember(item.appWidgetId) { item.appWidgetId?.let(context.appGraph.widgets::info) }
+    val limits = remember(info, cell, grid) { info.limits(cell, grid, density) }
     val cellPx = with(density) { Size(cell.width.toPx(), cell.height.toPx()) }
     val pull =
         remember(session, item.id, limits, grid, cellPx) {
@@ -99,18 +101,28 @@ fun WidgetResizeFrame(
         val anchor = session.anchorFor(item.id)
         if (anchor != null) {
             pull.anchor = anchor
-            Frame(pull, limits) { session.onRemove(item) }
+            Frame(
+                pull,
+                limits,
+                onEdit = { session.onEdit(item) }.takeIf { info?.isReconfigurable == true },
+                onRemove = { session.onRemove(item) },
+            )
         }
     }
 }
 
 /**
- * The outline, handles and Remove; the outline is read as it is drawn, not composed. No surface
- * over the widget: the cell beneath keeps its gestures (a hold lifts the framed widget again) and
- * mutes the widget's own view itself while framed ([WidgetCell]).
+ * The outline, handles and chips; the outline is read as it is drawn, not composed. No surface over
+ * the widget: the cell beneath keeps its gestures (a hold lifts the framed widget again) and mutes
+ * the widget's own view itself while framed ([WidgetCell]).
  */
 @Composable
-private fun Frame(pull: Pull, limits: ResizeLimits, onRemove: () -> Unit) {
+private fun Frame(
+    pull: Pull,
+    limits: ResizeLimits,
+    onEdit: (() -> Unit)?,
+    onRemove: () -> Unit,
+) {
     Box(Modifier.fillMaxSize().testTag(WIDGET_RESIZE_TAG)) {
         Canvas(Modifier.fillMaxSize()) {
             val outline = pull.outline()
@@ -130,7 +142,8 @@ private fun Frame(pull: Pull, limits: ResizeLimits, onRemove: () -> Unit) {
             )
         }
         limits.edges.forEach { edge -> Handle(edge, pull) }
-        RemoveChip(pull::outline, onRemove)
+        Chip(pull::outline, place = 0, Icons.Outlined.Clear, "Remove", onRemove)
+        onEdit?.let { Chip(pull::outline, place = 1, Icons.Outlined.Edit, "Edit", it) }
     }
 }
 
@@ -176,27 +189,37 @@ private fun Handle(edge: Edge, pull: Pull) {
     }
 }
 
-/** Remove, at the outline's top-right corner. */
+/** A round button on the outline's top edge, [place] chips left of its top-right corner. */
 @Composable
-private fun RemoveChip(outline: () -> Rect, onRemove: () -> Unit) {
+private fun Chip(
+    outline: () -> Rect,
+    place: Int,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
     val density = LocalDensity.current
-    val size = with(density) { REMOVE_SIZE.roundToPx() }
+    val size = with(density) { CHIP_SIZE.roundToPx() }
+    val step = with(density) { (CHIP_SIZE + CHIP_GAP).roundToPx() }
     Box(
         Modifier.offset {
                 val r = outline()
-                IntOffset((r.right - size / 2).toInt(), (r.top - size / 2).toInt())
+                IntOffset(
+                    (r.right - size / 2).toInt() - place * step,
+                    (r.top - size / 2).toInt(),
+                )
             }
-            .size(REMOVE_SIZE)
+            .size(CHIP_SIZE)
             .background(CHIP, CircleShape)
-            .clickable(onClick = onRemove)
-            .semantics { contentDescription = "Remove" },
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Outlined.Clear,
+            icon,
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(REMOVE_ICON),
+            modifier = Modifier.size(CHIP_ICON),
         )
     }
 }

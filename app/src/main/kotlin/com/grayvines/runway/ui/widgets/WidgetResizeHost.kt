@@ -3,15 +3,17 @@ package com.grayvines.runway.ui.widgets
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.resizeWidget
 import com.grayvines.runway.model.Footprint
+import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.home.HomeItem
 import com.grayvines.runway.ui.writing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
- * The frame around one widget, with its handles and its Remove: up after a hold on the widget,
- * after it is placed and after every move of it, until a touch anywhere else puts it away.
+ * The frame around one widget, with its handles, its Remove and its Edit: up after a hold on the
+ * widget, after it is placed and after every move of it, until a touch anywhere else puts it away.
  */
 class WidgetResizeHost(
     private val graph: AppGraph,
@@ -19,6 +21,9 @@ class WidgetResizeHost(
     /** Whether the frame may show now: not over a live drag. */
     private val mayShow: () -> Boolean = { true },
 ) {
+    /** Set while an activity is up to run a widget's setup screen; see [WidgetPrompts]. */
+    var prompts: WidgetPrompts? = null
+
     private val _shown = MutableStateFlow<Long?>(null)
 
     /** The placement the frame is around, if any. */
@@ -42,6 +47,16 @@ class WidgetResizeHost(
                 "the widget or its page changed under the frame; nothing saved"
             }
         }
+    }
+
+    /**
+     * The frame's Edit: the widget's own setup screen, for the id it already has, so it keeps its
+     * cells and whatever it was showing. The frame goes, since the screen takes the display.
+     */
+    fun reconfigure(item: HomeItem) {
+        val id = item.appWidgetId ?: return
+        dismiss()
+        scope.launch { attempt("open the widget's own settings") { prompts?.configure(id) } }
     }
 
     /** The frame's Remove: the placement goes, and the host id with it. */

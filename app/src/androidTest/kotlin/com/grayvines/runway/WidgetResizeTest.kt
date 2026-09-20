@@ -14,6 +14,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
@@ -34,9 +36,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * A long press on a widget frames it: handles on the edges its provider lets move, and Remove. A
- * handle pulled grows or shrinks the widget a cell at a time, as far as the grid, its neighbours
- * and its provider's sizes allow. A touch anywhere else puts the frame away.
+ * A long press on a widget frames it: handles on the edges its provider lets move, Remove, and Edit
+ * for a widget whose provider takes its setup screen again. A handle pulled grows or shrinks the
+ * widget a cell at a time, as far as the grid, its neighbours and its provider's sizes allow. A
+ * touch anywhere else puts the frame away.
  */
 @RunWith(AndroidJUnit4::class)
 class WidgetResizeTest : LauncherFixture() {
@@ -253,6 +256,41 @@ class WidgetResizeTest : LauncherFixture() {
         awaitGone(WIDGET_TAG)
         waitUntil(TIMEOUT_MS) { graph.widgets.info(id) == null }
         assertNull(widgets().firstOrNull { it.id == itemId })
+    }
+
+    @Test
+    fun aWidgetWhoseProviderTakesNoSetupAgainHasNoEditOnItsFrame() {
+        placeFixtureWidget(0, 0)
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        compose.onAllNodes(hasContentDescription("Edit") and inFrame()).assertCountEquals(0)
+    }
+
+    @Test
+    fun editOnTheFrameOpensTheWidgetsOwnSetup_keepingItsIdAndCells() {
+        val itemId = placeFixtureWidget(0, 0, provider = FIXTURE_SETUP_WIDGET)
+        awaitWidgetCell()
+        val before = widget()
+        holdWidget()
+        release()
+        compose.onNode(hasContentDescription("Edit") and inFrame()).performClick()
+
+        assertTrue(
+            "the widget's setup screen did not open",
+            device.wait(Until.hasObject(By.text(FIXTURE_SETUP_DONE)), LONG_TIMEOUT_MS),
+        )
+        device.findObject(By.text(FIXTURE_SETUP_DONE)).click()
+        waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
+
+        val after = widget()
+        assertEquals(itemId, after.id)
+        assertEquals(before.appWidgetId, after.appWidgetId)
+        assertEquals(
+            listOf(before.x, before.y, before.spanX, before.spanY),
+            listOf(after.x, after.y, after.spanX, after.spanY),
+        )
+        awaitGone(WIDGET_RESIZE_TAG) // the frame went with the screen it opened
     }
 
     /** A long press on the widget, finger left down; the frame is up when this returns. */

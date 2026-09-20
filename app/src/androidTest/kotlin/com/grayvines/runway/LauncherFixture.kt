@@ -328,9 +328,10 @@ open class LauncherFixture {
     }
 
     /**
-     * Binds the fixture's widget the way the picker does and puts it over [spanX] × [spanY] cells
-     * of the first page from ([x], [y]), whose icons make way; the placement's id. Not [bound], the
-     * id has no provider behind it, as when the widget's app has been uninstalled.
+     * Binds one of the fixture's widgets ([provider]) the way the picker does and puts it over
+     * [spanX] × [spanY] cells of the first page from ([x], [y]), whose icons make way; the
+     * placement's id. Not [bound], the id has no provider behind it, as when the widget's app has
+     * been uninstalled.
      */
     protected fun placeFixtureWidget(
         x: Int,
@@ -338,13 +339,14 @@ open class LauncherFixture {
         spanX: Int = 2,
         spanY: Int = 1,
         bound: Boolean = true,
+        provider: ComponentName = FIXTURE_WIDGET,
     ): Long {
         allowWidgetBinding(true)
         val id = graph.widgets.allocateId().also { boundIds += it }
         if (bound) {
             assertTrue(
-                "could not bind the fixture widget",
-                graph.widgets.bind(id, FIXTURE_WIDGET, Process.myUserHandle()),
+                "could not bind $provider",
+                graph.widgets.bind(id, provider, Process.myUserHandle()),
             )
         }
         return runBlocking {
@@ -352,8 +354,8 @@ open class LauncherFixture {
             page.items
                 .filter { it.x in x until x + spanX && it.y in y until y + spanY }
                 .forEach { graph.workspace.removeItem(it.id) }
-            graph.workspace.addWidget(id, FIXTURE_WIDGET.flattenToString(), 0, x, y, spanX, spanY)
-                ?: error("the fixture widget could not be placed at ($x, $y)")
+            graph.workspace.addWidget(id, provider.flattenToString(), 0, x, y, spanX, spanY)
+                ?: error("$provider could not be placed at ($x, $y)")
         }
     }
 
@@ -976,6 +978,16 @@ const val TIMEOUT_MS = 5_000L
 /** The fixture app's widget: two by one by design, resizable, labelled "Fixture widget". */
 val FIXTURE_WIDGET: ComponentName =
     ComponentName("com.grayvines.runway.fixture", "com.grayvines.runway.fixture.FixtureWidget")
+
+/** The fixture app's widget with a setup screen, which it takes again once placed. */
+val FIXTURE_SETUP_WIDGET: ComponentName =
+    ComponentName(
+        "com.grayvines.runway.fixture",
+        "com.grayvines.runway.fixture.FixtureSetupWidget",
+    )
+
+/** The Done button on the fixture's widget setup screen. */
+const val FIXTURE_SETUP_DONE = "Done"
 
 /** Focus waits per test: one, and one more after closing a dialog that came up meanwhile. */
 const val FOCUS_ATTEMPTS = 2

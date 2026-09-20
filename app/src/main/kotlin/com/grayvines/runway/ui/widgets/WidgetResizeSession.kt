@@ -30,6 +30,7 @@ import com.grayvines.runway.ui.home.HomeState
 class WidgetResizeSession(
     private val shownOf: State<Long?>,
     val onResize: (itemId: Long, to: Footprint) -> Unit,
+    val onEdit: (HomeItem) -> Unit,
     val onRemove: (HomeItem) -> Unit,
     val onDismiss: () -> Unit,
 ) {
@@ -74,7 +75,7 @@ class WidgetResizeSession(
 fun rememberWidgetResizeSession(host: WidgetResizeHost): WidgetResizeSession {
     val shown = host.shown.collectAsStateWithLifecycle()
     return remember(host) {
-        WidgetResizeSession(shown, host::resize, host::remove, host::dismiss)
+        WidgetResizeSession(shown, host::resize, host::reconfigure, host::remove, host::dismiss)
     }
 }
 
