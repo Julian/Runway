@@ -155,6 +155,7 @@ open class LauncherFixture {
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
         awaitWindowFocus()
+        awaitQuietDevice()
         dismissKeyboard()
     }
 
@@ -279,6 +280,50 @@ open class LauncherFixture {
             }
         }
     }
+
+    /**
+     * Waits, once per process, for a freshly booted device to go quiet. The first test of a run
+     * otherwise shares the emulator with the tail of its boot: the system kills and restarts the
+     * stock launcher, which rebuilds the navigation bar under the test, so the launcher's areas
+     * move after a test has measured them, and frames come seconds late. Quiet is the processor
+     * mostly idle and the system bars holding still, several samples running. A device that never
+     * goes quiet is left for the tests to judge.
+     */
+    private fun awaitQuietDevice() {
+        if (deviceWentQuiet) return
+        val deadline = SystemClock.uptimeMillis() + QUIET_TIMEOUT_MS
+        var cpu = cpuTimes()
+        var bars = systemBars()
+        var quiet = 0
+        while (quiet < QUIET_SAMPLES && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(QUIET_SAMPLE_MS)
+            val nextCpu = cpuTimes()
+            val nextBars = systemBars()
+            val idle = (nextCpu.idle - cpu.idle).toFloat() / maxOf(1L, nextCpu.total - cpu.total)
+            quiet = if (idle >= QUIET_IDLE_FRACTION && nextBars == bars) quiet + 1 else 0
+            cpu = nextCpu
+            bars = nextBars
+        }
+        deviceWentQuiet = true
+    }
+
+    private class CpuTimes(val idle: Long, val total: Long)
+
+    /** The device's processor time so far, from the summary line of `/proc/stat`. */
+    private fun cpuTimes(): CpuTimes {
+        val times =
+            device
+                .executeShellCommand("cat /proc/stat")
+                .lineSequence()
+                .first()
+                .split(' ')
+                .mapNotNull { it.toLongOrNull() }
+        return CpuTimes(idle = times[IDLE_COLUMN], total = times.sum())
+    }
+
+    private fun systemBars() =
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+            ?.getInsets(Type.systemBars())
 
     /**
      * Grants or revokes the launcher's right to bind widgets without asking, through the shell, as
@@ -991,6 +1036,18 @@ const val FIXTURE_SETUP_DONE = "Done"
 
 /** Focus waits per test: one, and one more after closing a dialog that came up meanwhile. */
 const val FOCUS_ATTEMPTS = 2
+
+/** Whether [LauncherFixture] has already waited out the device's boot in this process. */
+private var deviceWentQuiet = false
+
+/** A boot's tail was seen to run a minute into the first test on a CI runner. */
+const val QUIET_TIMEOUT_MS = 90_000L
+const val QUIET_SAMPLE_MS = 1_000L
+const val QUIET_SAMPLES = 3
+const val QUIET_IDLE_FRACTION = 0.5f
+
+/** Where idle time sits among the numbers on the summary line of `/proc/stat`. */
+const val IDLE_COLUMN = 3
 
 /** How Compose's test rule words a moment with no composition anywhere in the process. */
 const val NO_COMPOSITION = "No compose hierarchies found"
