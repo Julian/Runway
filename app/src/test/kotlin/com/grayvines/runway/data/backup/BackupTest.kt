@@ -6,6 +6,7 @@ import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.SwipeAction
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -31,6 +32,7 @@ class BackupTest {
                             ),
                     ),
                 ),
+            hiddenApps = listOf(AppRef("e/.Main", 0)),
         )
     private val settings =
         Settings(
@@ -55,6 +57,7 @@ class BackupTest {
         val backup = Backup.fromJson(text)
         assertEquals(Settings(columns = 4), backup.settings)
         assertTrue(backup.layout.placements.isEmpty())
+        assertNull(backup.layout.hiddenApps) // from before hidden apps, not "none hidden"
     }
 
     @Test
@@ -69,12 +72,17 @@ class BackupTest {
 
     @Test
     fun `refuses a layout no restore should try, naming the fault`() {
-        fun refusal(vararg placements: Placement, drawerFolders: List<Folder> = emptyList()) =
+        fun refusal(
+            vararg placements: Placement,
+            drawerFolders: List<Folder> = emptyList(),
+            hiddenApps: List<AppRef>? = null,
+        ) =
             assertThrows(IllegalArgumentException::class.java) {
                     Backup.fromJson(
                         Backup(
                                 settings = Settings(columns = 4, rows = 5, dockSlots = 3),
-                                layout = Layout(2, 1, placements.toList(), drawerFolders),
+                                layout =
+                                    Layout(2, 1, placements.toList(), drawerFolders, hiddenApps),
                             )
                             .toJson()
                     )
@@ -91,6 +99,13 @@ class BackupTest {
         assertTrue("exactly one" in refusal(Placement(Container.HOME, 0, 0, 0)))
         assertTrue(
             "no such drawer folder" in refusal(Placement(Container.HOME, 0, 0, 0, drawerFolder = 0))
+        )
+        assertTrue(
+            "hidden from the drawer" in
+                refusal(
+                    drawerFolders = listOf(Folder("Tools", listOf(app))),
+                    hiddenApps = listOf(app),
+                )
         )
     }
 

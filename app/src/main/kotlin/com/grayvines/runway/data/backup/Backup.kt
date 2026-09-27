@@ -47,9 +47,9 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
 /**
  * Throws [IllegalArgumentException], naming the first fault, for a layout no restore should try: a
  * cell off the grid [settings] describes, a page the file does not have, two things in one cell, a
- * placement that is not exactly one of an app, a folder or a drawer folder, or a drawer folder
- * index there is no folder for. Checked whole before anything is written, so a bad file changes
- * nothing.
+ * placement that is not exactly one of an app, a folder or a drawer folder, a drawer folder index
+ * there is no folder for, or a hidden app in a drawer folder. Checked whole before anything is
+ * written, so a bad file changes nothing.
  */
 internal fun Layout.validate(settings: Settings) {
     require(homePages >= 0 && dockPages >= 0) { "negative page counts" }
@@ -76,6 +76,16 @@ internal fun Layout.validate(settings: Settings) {
             "$where: two things in one cell"
         }
     }
+    val hidden = hiddenApps.orEmpty().toSet()
+    drawerFolders.forEach { folder ->
+        folder.apps
+            .firstOrNull { it in hidden }
+            ?.let {
+                throw IllegalArgumentException(
+                    "drawer folder ${folder.name}: ${it.component} is hidden from the drawer"
+                )
+            }
+    }
 }
 
 /** The pages of each container and what sits on them. */
@@ -86,6 +96,11 @@ data class Layout(
     val placements: List<Placement>,
     /** The folders atop the drawer, which have no cell. */
     @SerialName("drawer_folders") val drawerFolders: List<Folder> = emptyList(),
+    /**
+     * The apps the drawer leaves out. Null in a file from before Runway could hide apps: a restore
+     * of one leaves the device's hidden apps as they are.
+     */
+    @SerialName("hidden_apps") val hiddenApps: List<AppRef>? = null,
 )
 
 /**

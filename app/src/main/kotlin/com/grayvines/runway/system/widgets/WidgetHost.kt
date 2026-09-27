@@ -43,6 +43,15 @@ class WidgetProvider(
 }
 
 /**
+ * The provider offers a setup screen that may be run again for a widget already placed, rather than
+ * only once as it is added.
+ */
+val AppWidgetProviderInfo.isReconfigurable: Boolean
+    get() =
+        configure != null &&
+            widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE != 0
+
+/**
  * The system's request to let this launcher bind widgets, with [id] and [provider] as the first; it
  * comes back through the activity that starts it, and on OK [id] is bound.
  */

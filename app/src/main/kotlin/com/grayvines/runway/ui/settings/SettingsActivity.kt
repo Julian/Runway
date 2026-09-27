@@ -15,9 +15,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.grayvines.runway.LauncherActivity
 import com.grayvines.runway.appGraph
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.clear
+import com.grayvines.runway.data.hideApp
+import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.data.unhideApp
 import com.grayvines.runway.ui.theme.SettingsTheme
 import java.io.IOException
 import java.time.LocalDate
@@ -45,8 +49,9 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = appGraph
-        val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val debugActions = debugActions()
         val searchTargets = graph.searchTargets.handlers()
+        val hiddenApps = graph.workspace.observeHiddenApps()
         val isHome =
             packageManager
                 .resolveActivity(
@@ -59,10 +64,13 @@ class SettingsActivity : ComponentActivity() {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
                 val apps by graph.appRepository.apps.collectAsStateWithLifecycle()
+                val hidden by hiddenApps.collectAsStateWithLifecycle(emptySet())
                 SettingsScreen(
                     settings = settings,
                     searchTargets = searchTargets,
                     apps = apps,
+                    hiddenApps = hidden,
+                    onHide = ::setHidden,
                     onOpenHome =
                         if (isHome) {
                             null
@@ -77,29 +85,34 @@ class SettingsActivity : ComponentActivity() {
                             save = { saveBackup.launch("runway-${LocalDate.now()}.json") },
                             restore = { restoreBackup.launch(arrayOf(BACKUP_MIME, "*/*")) },
                         ),
-                    debugActions =
-                        if (debuggable) {
-                            DebugActions(
-                                fillWithAllApps = {
-                                    graph.appScope.launch {
-                                        val apps = graph.appRepository.apps.first().map { it.ref }
-                                        val s = graph.settings.settings.first()
-                                        graph.workspace.autoFill(
-                                            apps,
-                                            s.columns,
-                                            s.pageRows,
-                                            s.dockSlots,
-                                        )
-                                    }
-                                },
-                                clearLayout = { graph.appScope.launch { graph.workspace.clear() } },
-                            )
-                        } else {
-                            null
-                        },
+                    debugActions = debugActions,
                 )
             }
         }
+    }
+
+    /** Leaves [app] out of the drawer, or shows it there again. */
+    private fun setHidden(app: AppRef, hidden: Boolean) {
+        val workspace = appGraph.workspace
+        appGraph.appScope.launch {
+            if (hidden) workspace.hideApp(app) else workspace.unhideApp(app)
+        }
+    }
+
+    /** The debug page's actions, in a debug build only. */
+    private fun debugActions(): DebugActions? {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+        val graph = appGraph
+        return DebugActions(
+            fillWithAllApps = {
+                graph.appScope.launch {
+                    val apps = graph.appRepository.apps.first().map { it.ref }
+                    val s = graph.settings.settings.first()
+                    graph.workspace.autoFill(apps, s.columns, s.pageRows, s.dockSlots)
+                }
+            },
+            clearLayout = { graph.appScope.launch { graph.workspace.clear() } },
+        )
     }
 
     /**

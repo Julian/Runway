@@ -155,6 +155,7 @@ open class LauncherFixture {
         // Touches injected before the window has focus are refused ("Failed to inject touch
         // input"): the previous test's activity may still be on its way out on a slow device.
         awaitWindowFocus()
+        awaitQuietDevice()
         dismissKeyboard()
     }
 
@@ -281,6 +282,50 @@ open class LauncherFixture {
     }
 
     /**
+     * Waits, once per process, for a freshly booted device to go quiet. The first test of a run
+     * otherwise shares the emulator with the tail of its boot: the system kills and restarts the
+     * stock launcher, which rebuilds the navigation bar under the test, so the launcher's areas
+     * move after a test has measured them, and frames come seconds late. Quiet is the processor
+     * mostly idle and the system bars holding still, several samples running. A device that never
+     * goes quiet is left for the tests to judge.
+     */
+    private fun awaitQuietDevice() {
+        if (deviceWentQuiet) return
+        val deadline = SystemClock.uptimeMillis() + QUIET_TIMEOUT_MS
+        var cpu = cpuTimes()
+        var bars = systemBars()
+        var quiet = 0
+        while (quiet < QUIET_SAMPLES && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(QUIET_SAMPLE_MS)
+            val nextCpu = cpuTimes()
+            val nextBars = systemBars()
+            val idle = (nextCpu.idle - cpu.idle).toFloat() / maxOf(1L, nextCpu.total - cpu.total)
+            quiet = if (idle >= QUIET_IDLE_FRACTION && nextBars == bars) quiet + 1 else 0
+            cpu = nextCpu
+            bars = nextBars
+        }
+        deviceWentQuiet = true
+    }
+
+    private class CpuTimes(val idle: Long, val total: Long)
+
+    /** The device's processor time so far, from the summary line of `/proc/stat`. */
+    private fun cpuTimes(): CpuTimes {
+        val times =
+            device
+                .executeShellCommand("cat /proc/stat")
+                .lineSequence()
+                .first()
+                .split(' ')
+                .mapNotNull { it.toLongOrNull() }
+        return CpuTimes(idle = times[IDLE_COLUMN], total = times.sum())
+    }
+
+    private fun systemBars() =
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+            ?.getInsets(Type.systemBars())
+
+    /**
      * Grants or revokes the launcher's right to bind widgets without asking, through the shell, as
      * the system's bind dialog would grant it. By user number: the command refuses "current".
      */
@@ -328,9 +373,10 @@ open class LauncherFixture {
     }
 
     /**
-     * Binds the fixture's widget the way the picker does and puts it over [spanX] × [spanY] cells
-     * of the first page from ([x], [y]), whose icons make way; the placement's id. Not [bound], the
-     * id has no provider behind it, as when the widget's app has been uninstalled.
+     * Binds one of the fixture's widgets ([provider]) the way the picker does and puts it over
+     * [spanX] × [spanY] cells of the first page from ([x], [y]), whose icons make way; the
+     * placement's id. Not [bound], the id has no provider behind it, as when the widget's app has
+     * been uninstalled.
      */
     protected fun placeFixtureWidget(
         x: Int,
@@ -338,13 +384,14 @@ open class LauncherFixture {
         spanX: Int = 2,
         spanY: Int = 1,
         bound: Boolean = true,
+        provider: ComponentName = FIXTURE_WIDGET,
     ): Long {
         allowWidgetBinding(true)
         val id = graph.widgets.allocateId().also { boundIds += it }
         if (bound) {
             assertTrue(
-                "could not bind the fixture widget",
-                graph.widgets.bind(id, FIXTURE_WIDGET, Process.myUserHandle()),
+                "could not bind $provider",
+                graph.widgets.bind(id, provider, Process.myUserHandle()),
             )
         }
         return runBlocking {
@@ -352,8 +399,8 @@ open class LauncherFixture {
             page.items
                 .filter { it.x in x until x + spanX && it.y in y until y + spanY }
                 .forEach { graph.workspace.removeItem(it.id) }
-            graph.workspace.addWidget(id, FIXTURE_WIDGET.flattenToString(), 0, x, y, spanX, spanY)
-                ?: error("the fixture widget could not be placed at ($x, $y)")
+            graph.workspace.addWidget(id, provider.flattenToString(), 0, x, y, spanX, spanY)
+                ?: error("$provider could not be placed at ($x, $y)")
         }
     }
 
@@ -826,18 +873,20 @@ open class LauncherFixture {
     }
 
     /**
-     * Backs out of settings from the page that is open, back to the list and then out, so the next
-     * test to open settings finds it on its list.
+     * Backs out of settings from the page that is open, page by page to the list and then out, so
+     * the next test to open settings finds it on its list.
      */
     protected fun leaveSettings() {
-        if (device.hasObject(SETTINGS_PAGE_BACK)) {
+        var depth = 0
+        while (depth < MAX_SETTINGS_DEPTH && device.hasObject(SETTINGS_PAGE_BACK)) {
             device.pressBack()
             compose.waitForIdle()
-            assertTrue(
-                "back did not reach the list",
-                device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
-            )
+            depth++
         }
+        assertTrue(
+            "back did not reach the list",
+            device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
+        )
         device.pressBack()
     }
 
@@ -975,8 +1024,30 @@ const val TIMEOUT_MS = 5_000L
 val FIXTURE_WIDGET: ComponentName =
     ComponentName("com.grayvines.runway.fixture", "com.grayvines.runway.fixture.FixtureWidget")
 
+/** The fixture app's widget with a setup screen, which it takes again once placed. */
+val FIXTURE_SETUP_WIDGET: ComponentName =
+    ComponentName(
+        "com.grayvines.runway.fixture",
+        "com.grayvines.runway.fixture.FixtureSetupWidget",
+    )
+
+/** The Done button on the fixture's widget setup screen. */
+const val FIXTURE_SETUP_DONE = "Done"
+
 /** Focus waits per test: one, and one more after closing a dialog that came up meanwhile. */
 const val FOCUS_ATTEMPTS = 2
+
+/** Whether [LauncherFixture] has already waited out the device's boot in this process. */
+private var deviceWentQuiet = false
+
+/** A boot's tail was seen to run a minute into the first test on a CI runner. */
+const val QUIET_TIMEOUT_MS = 90_000L
+const val QUIET_SAMPLE_MS = 1_000L
+const val QUIET_SAMPLES = 3
+const val QUIET_IDLE_FRACTION = 0.5f
+
+/** Where idle time sits among the numbers on the summary line of `/proc/stat`. */
+const val IDLE_COLUMN = 3
 
 /** How Compose's test rule words a moment with no composition anywhere in the process. */
 const val NO_COMPOSITION = "No compose hierarchies found"
@@ -1024,6 +1095,9 @@ val SETTINGS: BySelector = By.text("Home screen")
 
 /** The way back to the list, on every settings page but the list itself. */
 val SETTINGS_PAGE_BACK: BySelector = By.desc("Back")
+
+/** The most pages deep settings goes: the list, a page, and one opened from that. */
+const val MAX_SETTINGS_DEPTH = 2
 
 /** Icon sizes are rounded to pixels on the way; this much slack covers it. */
 const val GRID_TOLERANCE_PX = 2f

@@ -117,6 +117,7 @@ class LauncherActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         viewModel.widgetPicker.prompts = widgetPrompts
+        viewModel.widgetResize.prompts = widgetPrompts
         // Registered before the content, so every handler the content adds (the drawer's, a
         // folder's, a menu's) is asked first; this one is what is left when none of those is up.
         onBackPressedDispatcher.addCallback(this) { viewModel.onBack() }
@@ -181,6 +182,7 @@ class LauncherActivity : ComponentActivity() {
         // The view model outlives this activity, and must not keep it through the prompts. A
         // prompt still up answers a later instance, which has no one waiting: the add is dropped.
         if (viewModel.widgetPicker.prompts === widgetPrompts) viewModel.widgetPicker.prompts = null
+        if (viewModel.widgetResize.prompts === widgetPrompts) viewModel.widgetResize.prompts = null
         pendingBind?.complete(false)
         pendingSetup?.complete(false)
         super.onDestroy()

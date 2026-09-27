@@ -3,6 +3,7 @@ package com.grayvines.runway.ui.settings
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,8 +75,14 @@ internal fun HomeScreenPage(settings: Settings, onChange: ((Settings) -> Setting
     Toggle("Dock", settings.dockLabels) { v -> onChange { it.copy(dockLabels = v) } }
 }
 
+/** The drawer's settings, and the way to the apps it leaves out, [hiddenCount] of them. */
 @Composable
-internal fun DrawerPage(settings: Settings, onChange: ((Settings) -> Settings) -> Unit) {
+internal fun DrawerPage(
+    settings: Settings,
+    onChange: ((Settings) -> Settings) -> Unit,
+    hiddenCount: Int,
+    onOpenHidden: () -> Unit,
+) {
     OptionRow(
         label = "Swipe sensitivity",
         current = settings.drawerSwipe.label,
@@ -107,6 +114,16 @@ internal fun DrawerPage(settings: Settings, onChange: ((Settings) -> Settings) -
         onChange { it.copy(drawerIndex = v) }
     }
     Toggle("Labels", settings.drawerLabels) { v -> onChange { it.copy(drawerLabels = v) } }
+    PageRow(
+        "Hidden apps",
+        when (hiddenCount) {
+            0 -> "None"
+            1 -> "1 app"
+            else -> "$hiddenCount apps"
+        },
+        padding = PaddingValues(vertical = 12.dp),
+        onClick = onOpenHidden,
+    )
 }
 
 @Composable
