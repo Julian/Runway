@@ -1,7 +1,7 @@
 [versions]
 # Toolchain (versions verified against Maven metadata 2026-09-05)
 agp = "9.4.1"
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 ksp = "2.3.11"
 spotless = "8.10.2"
 ktfmt = "0.64"
