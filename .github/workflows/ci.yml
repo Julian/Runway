@@ -112,7 +112,7 @@ jobs:
           -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
           "-Pandroid.testInstrumentationRunnerArguments.numShards=$SHARDS"
           "-Pandroid.testInstrumentationRunnerArguments.shardIndex=$SHARD"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         # A job that hits its timeout is cancelled, not failed, and those are the runs whose
         # report matters most.
         if: failure() || cancelled()
@@ -154,7 +154,7 @@ jobs:
       # straight into a build of its own, which is what lets the release job pick it up.
       - name: Record the profile on the managed AOSP emulator
         run: ./gradlew :app:generateReleaseBaselineProfile -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: baseline-profile
           path: app/src/release/generated/baselineProfiles/
