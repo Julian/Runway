@@ -116,10 +116,11 @@ android {
         checkAllWarnings = true
         abortOnError = true
         checkDependencies = true
-        // A library's release day must not break CI. Updates are a chore done on purpose. Two
-        // checks say the same thing, one from the network and one from the Gradle cache.
+        // A library's release day must not break CI. Updates are a chore done on purpose. Three
+        // checks say the same thing, for Maven, the Gradle cache, and AGP/Gradle themselves.
         disable += "NewerVersionAvailable"
         disable += "GradleDependency"
+        disable += "AndroidGradlePluginVersion"
     }
 
     testOptions {
