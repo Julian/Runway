@@ -10,6 +10,8 @@ import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,6 +45,7 @@ data class ItemMenuState(
     val page: Int,
     val anchor: Bounds,
     val folderId: Long? = null,
+    val badgesMuted: Boolean = false,
 )
 
 /** The item menu as the screen sees it: what it is open on, if anything, and how to drive it. */
@@ -61,6 +64,8 @@ class ItemMenuActions(
     val newFolder: () -> Unit,
     /** A drawer folder: gone, its apps loose again. */
     val deleteFolder: () -> Unit,
+    /** Toggles whether notification badges are shown for this app. */
+    val toggleBadges: () -> Unit = {},
 )
 
 /**
@@ -87,18 +92,18 @@ private fun Rows(state: ItemMenuState, actions: ItemMenuActions) {
     when {
         // Taking it out of the folder is the sheet's x, while the folder is edited.
         state.folderId != null && app != null -> {
-            AppRows(actions)
+            AppRows(state.badgesMuted, actions)
         }
         inDrawer && app != null -> {
             // Joining an existing folder is done from the folder, which lists apps to add.
             MenuRow("New folder", Icons.Outlined.CreateNewFolder, actions.newFolder)
-            AppRows(actions)
+            AppRows(state.badgesMuted, actions)
         }
         inDrawer -> {
             MenuRow("Delete folder", Icons.Outlined.Delete, actions.deleteFolder)
         }
         else -> {
-            if (app != null) AppRows(actions)
+            if (app != null) AppRows(state.badgesMuted, actions)
             MenuRow("Remove", Icons.Outlined.Clear, actions.remove)
         }
     }
@@ -106,8 +111,13 @@ private fun Rows(state: ItemMenuState, actions: ItemMenuActions) {
 
 /** What an app's menu offers wherever the app is. */
 @Composable
-private fun AppRows(actions: ItemMenuActions) {
+private fun AppRows(badgesMuted: Boolean, actions: ItemMenuActions) {
     MenuRow("App info", Icons.Outlined.Info, actions.appInfo)
+    MenuRow(
+        if (badgesMuted) "Unmute badges" else "Mute badges",
+        if (badgesMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+        actions.toggleBadges,
+    )
     MenuRow("Uninstall", Icons.Outlined.Delete, actions.uninstall)
 }
 
@@ -117,7 +127,7 @@ private fun Header(app: AppEntry, label: String) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        AppIcon(app, Modifier.size(HEADER_ICON))
+        AppIcon(app, Modifier.size(HEADER_ICON), described = false)
         Spacer(Modifier.width(12.dp))
         Text(
             text = label,

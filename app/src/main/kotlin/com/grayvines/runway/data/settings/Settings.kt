@@ -16,6 +16,13 @@ enum class DrawerSwipe(val label: String, val openAt: Float, val flickDpPerSecon
     HIGH("High", openAt = 0.01f, flickDpPerSecond = 80f),
 }
 
+/** How notification badges are drawn on app and folder icons. */
+enum class BadgeStyle(val label: String) {
+    COUNT("Count"),
+    DOT("Dot"),
+    OFF("Off"),
+}
+
 /** What a swipe can be set to do. */
 @Serializable
 sealed interface SwipeAction {
@@ -32,6 +39,7 @@ data class Settings(
     val homeLabels: Boolean = false,
     val dockLabels: Boolean = false,
     val drawerLabels: Boolean = true,
+    val badgeStyle: BadgeStyle = BadgeStyle.COUNT,
     val searchBarAtTop: Boolean = true,
     /** Package that receives the web-search intent; null picks Firefox, else the first handler. */
     val searchTarget: String? = null,

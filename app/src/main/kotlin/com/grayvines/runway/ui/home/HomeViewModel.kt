@@ -19,6 +19,7 @@ import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.data.moveOutOf
+import com.grayvines.runway.data.observeBadgeMutes
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.observeHiddenApps
@@ -32,6 +33,7 @@ import com.grayvines.runway.data.settings.SwipeAction
 import com.grayvines.runway.data.unfold
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
+import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
@@ -130,6 +132,10 @@ data class HomeState(
     val drawerApps: List<AppEntry> = emptyList(),
     /** The folders atop the drawer, by name. */
     val drawerFolders: List<HomeItem> = emptyList(),
+    /** Active notification counts per package and profile. */
+    val badgeCounts: Map<PackageKey, Int> = emptyMap(),
+    /** Apps whose notification badges are muted everywhere. */
+    val badgeMutes: Set<AppRef> = emptySet(),
     val loaded: Boolean = false,
 ) {
     /**
@@ -166,7 +172,13 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** The long-press item menu. */
     // Neither menu opens over a live drag: a second finger's long press changes nothing.
-    val itemMenu = ItemMenuHost(graph, viewModelScope, mayOpen = { dragging.drag.value == null })
+    val itemMenu =
+        ItemMenuHost(
+            graph,
+            viewModelScope,
+            mayOpen = { dragging.drag.value == null },
+            isBadgesMuted = { ref -> ref in state.value.badgeMutes },
+        )
 
     val homeMenu =
         HomeMenuHost(
@@ -281,6 +293,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 searchTarget,
                 graph.workspace.observeDrawerPlacements(),
                 graph.workspace.observeHiddenApps(),
+                graph.badges.counts,
+                graph.workspace.observeBadgeMutes(),
             ) { flows ->
                 @Suppress("UNCHECKED_CAST") val settings = flows[0] as Settings
                 @Suppress("UNCHECKED_CAST") val home = flows[1] as ContainerContent
@@ -290,6 +304,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 val target = flows[5] as SearchTarget?
                 @Suppress("UNCHECKED_CAST") val drawer = flows[6] as List<ItemEntity>
                 @Suppress("UNCHECKED_CAST") val hidden = flows[7] as Set<AppRef>
+                @Suppress("UNCHECKED_CAST") val badgeCounts = flows[8] as Map<PackageKey, Int>
+                @Suppress("UNCHECKED_CAST") val badgeMutes = flows[9] as Set<AppRef>
                 val sorted = apps.sortedWith(compareBy(LabelOrder.comparator()) { it.label })
                 val byKey = apps.associateBy { it.key }
                 val byFolder = folders.associateBy { it.id }
@@ -301,6 +317,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     searchTarget = target,
                     apps = sorted,
                     drawerApps = sorted.filter { it.ref !in hidden },
+                    badgeCounts = badgeCounts,
+                    badgeMutes = badgeMutes,
                     // Not before the app list: with it empty every icon would be hidden and
                     // every cell would look free.
                     loaded = apps.isNotEmpty(),

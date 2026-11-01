@@ -41,7 +41,7 @@ private enum class SettingsPage(
     val summary: String? = null,
     val parent: SettingsPage? = null,
 ) {
-    HOME("Home screen", "Grid, dock and labels"),
+    HOME("Home screen", "Grid, dock, labels and badges"),
     DRAWER("Drawer", "Swipe, keyboard, columns, labels and hidden apps"),
     HIDDEN_APPS("Hidden apps", parent = DRAWER),
     SEARCH_BAR("Search bar", "Where it sits and what it searches with"),
@@ -64,6 +64,8 @@ fun SettingsScreen(
     onOpenHome: (() -> Unit)?,
     backupActions: BackupActions,
     debugActions: DebugActions?,
+    hasNotificationAccess: Boolean = true,
+    onGrantNotificationAccess: () -> Unit = {},
 ) {
     // Saved, so the page stays open across a rotation or the process being let go.
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
@@ -75,7 +77,15 @@ fun SettingsScreen(
                 Scrolling(padding) {
                     PageList(onOpenHome, debug = debugActions != null) { page = it }
                 }
-            SettingsPage.HOME -> Scrolling(padding, body) { HomeScreenPage(settings, onChange) }
+            SettingsPage.HOME ->
+                Scrolling(padding, body) {
+                    HomeScreenPage(
+                        settings = settings,
+                        hasNotificationAccess = hasNotificationAccess,
+                        onGrantNotificationAccess = onGrantNotificationAccess,
+                        onChange = onChange,
+                    )
+                }
             SettingsPage.DRAWER ->
                 Scrolling(padding, body) {
                     DrawerPage(

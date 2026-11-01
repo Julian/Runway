@@ -1,6 +1,7 @@
 package com.grayvines.runway.data.backup
 
 import com.grayvines.runway.data.AppRef
+import com.grayvines.runway.data.BadgeMuteEntity
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.FolderAppEntity
 import com.grayvines.runway.data.FolderEntity
@@ -39,6 +40,8 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout = read {
         drawerFolders = drawerIds.map { folders.getValue(it).backup(folderApps) },
         hiddenApps =
             dao.hiddenApps().map { it.ref }.sortedWith(compareBy({ it.component }, { it.profile })),
+        badgeMutes =
+            dao.badgeMutes().map { it.ref }.sortedWith(compareBy({ it.component }, { it.profile })),
     )
 }
 
@@ -79,9 +82,9 @@ private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>): F
  * reports nothing (a work profile that is paused), are taken as they are: there is nothing to check
  * them against, and they come back with the profile. Widgets are bound through [bindWidget] where
  * the host can bind them as they are, and placed unbound (shown as a placeholder) where it cannot;
- * the host ids of the widgets [layout] replaces go to [deleteWidget]. The hidden apps are matched
- * the same way and replaced too, unless the file is from before Runway could hide apps; one not
- * installed is dropped and not counted as skipped: nothing on screen is missing for it.
+ * the host ids of the widgets [layout] replaces go to [deleteWidget]. The hidden apps and badge
+ * mutes are matched the same way and replaced too, unless the file is from before Runway had them;
+ * one not installed is dropped and not counted as skipped: nothing on screen is missing for it.
  */
 suspend fun WorkspaceRepository.restoreLayout(
     layout: Layout,
@@ -103,6 +106,12 @@ suspend fun WorkspaceRepository.restoreLayout(
             dao.deleteAllHiddenApps()
             hidden.mapNotNull(match::find).forEach {
                 dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
+            }
+        }
+        layout.badgeMutes?.let { mutes ->
+            dao.deleteAllBadgeMutes()
+            mutes.mapNotNull(match::find).forEach {
+                dao.insertBadgeMute(BadgeMuteEntity(it.component, it.profile))
             }
         }
         val counts = Counts()

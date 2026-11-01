@@ -11,6 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.grayvines.runway.LauncherActivity
@@ -45,10 +47,13 @@ class SettingsActivity : ComponentActivity() {
             }
         }
 
+    private var hasNotificationAccess by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = appGraph
+        hasNotificationAccess = graph.badges.hasAccess()
         val debugActions = debugActions()
         val searchTargets = graph.searchTargets.handlers()
         val hiddenApps = graph.workspace.observeHiddenApps()
@@ -71,6 +76,8 @@ class SettingsActivity : ComponentActivity() {
                     apps = apps,
                     hiddenApps = hidden,
                     onHide = ::setHidden,
+                    hasNotificationAccess = hasNotificationAccess,
+                    onGrantNotificationAccess = graph.badges::openAccessSettings,
                     onOpenHome =
                         if (isHome) {
                             null
@@ -89,6 +96,11 @@ class SettingsActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hasNotificationAccess = appGraph.badges.hasAccess()
     }
 
     /** Leaves [app] out of the drawer, or shows it there again. */

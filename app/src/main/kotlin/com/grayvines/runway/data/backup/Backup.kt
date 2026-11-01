@@ -120,6 +120,11 @@ data class Layout(
      * of one leaves the device's hidden apps as they are.
      */
     @SerialName("hidden_apps") val hiddenApps: List<AppRef>? = null,
+    /**
+     * The apps whose notification badges are muted. Null in a file from before Runway could mute
+     * badges: a restore of one leaves the device's muted apps as they are.
+     */
+    @SerialName("badge_mutes") val badgeMutes: List<AppRef>? = null,
 )
 
 /**

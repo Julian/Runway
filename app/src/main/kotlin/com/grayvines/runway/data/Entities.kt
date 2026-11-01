@@ -102,4 +102,7 @@ data class HiddenAppEntity(val component: String, val profile: Long) {
 }
 
 @Entity(tableName = "badge_mutes", primaryKeys = ["component", "profile"])
-data class BadgeMuteEntity(val component: String, val profile: Long)
+data class BadgeMuteEntity(val component: String, val profile: Long) {
+    val ref: AppRef
+        get() = AppRef(component, profile)
+}

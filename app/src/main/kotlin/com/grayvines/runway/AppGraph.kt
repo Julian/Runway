@@ -8,6 +8,7 @@ import com.grayvines.runway.data.backup.BackupService
 import com.grayvines.runway.data.settings.SettingsRepository
 import com.grayvines.runway.system.NotificationShade
 import com.grayvines.runway.system.apps.AppRepository
+import com.grayvines.runway.system.badges.BadgeHost
 import com.grayvines.runway.system.search.SearchTargetResolver
 import com.grayvines.runway.system.wallpaper.WallpaperPicker
 import com.grayvines.runway.system.widgets.WidgetHost
@@ -38,6 +39,7 @@ class AppGraph(private val context: Context) {
     val wallpapers: WallpaperPicker by lazy { WallpaperPicker(context) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
     val widgets: WidgetHost by lazy { WidgetHost(context) }
+    val badges: BadgeHost by lazy { BadgeHost(context) }
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
     fun start() {

@@ -202,6 +202,7 @@ class LauncherActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         appGraph.widgets.startListening()
+        appGraph.badges.refresh()
     }
 
     override fun onStop() {

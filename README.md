@@ -41,9 +41,9 @@ Debug builds use the application id `com.grayvines.runway.debug` so they can be 
 ## Backups
 
 The Backup page in Settings has "Save a backup" and "Restore a backup".
-A backup is a JSON file of the settings and the layout: which apps, folders and widgets sit in which cells, the folders in the drawer, and the apps hidden from it.
+A backup is a JSON file of the settings and the layout: which apps, folders and widgets sit in which cells, the folders in the drawer, the apps hidden from it, and the apps whose notification badges are muted.
 Restoring replaces both; apps that are not installed are left out.
-A backup made before Runway could hide apps leaves the hidden ones on the device as they are.
+A backup made before Runway could hide apps or mute badges leaves those on the device as they are.
 Widgets are bound again where the system allows it without a setup screen, and shown as placeholders otherwise.
 
 ## Baseline profile

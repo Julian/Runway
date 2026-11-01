@@ -2,6 +2,7 @@ package com.grayvines.runway.data.backup
 
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.settings.BadgeStyle
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.SwipeAction
@@ -40,10 +41,12 @@ class BackupTest {
                     ),
                 ),
             hiddenApps = listOf(AppRef("e/.Main", 0)),
+            badgeMutes = listOf(AppRef("f/.Main", 0)),
         )
     private val settings =
         Settings(
             columns = 5,
+            badgeStyle = BadgeStyle.DOT,
             drawerSwipe = DrawerSwipe.HIGH,
             drawerColumns = 6,
             searchHiddenApps = true,
@@ -66,6 +69,7 @@ class BackupTest {
         assertEquals(Settings(columns = 4), backup.settings)
         assertTrue(backup.layout.placements.isEmpty())
         assertNull(backup.layout.hiddenApps) // from before hidden apps, not "none hidden"
+        assertNull(backup.layout.badgeMutes) // from before badge mutes, not "none muted"
     }
 
     @Test

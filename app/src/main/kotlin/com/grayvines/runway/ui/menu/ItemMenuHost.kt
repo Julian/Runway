@@ -1,10 +1,13 @@
 package com.grayvines.runway.ui.menu
 
 import com.grayvines.runway.AppGraph
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.deleteFolder
+import com.grayvines.runway.data.muteBadges
+import com.grayvines.runway.data.unmuteBadges
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.HomeItem
@@ -22,6 +25,8 @@ class ItemMenuHost(
     private val scope: CoroutineScope,
     /** Whether a menu may open now: not over a live drag, where a second finger would put it. */
     private val mayOpen: () -> Boolean = { true },
+    /** Whether notification badges are currently muted for this app. */
+    private val isBadgesMuted: (AppRef) -> Boolean = { false },
 ) {
     private val _state = MutableStateFlow<ItemMenuState?>(null)
 
@@ -56,16 +61,36 @@ class ItemMenuHost(
                     item.folderId?.let { id -> write("delete the folder") { deleteFolder(id) } }
                 }
             },
+            toggleBadges = {
+                val menu = _state.value
+                _state.value = null
+                menu?.item?.app?.ref?.let { ref ->
+                    write("toggle badges") {
+                        if (menu.badgesMuted) unmuteBadges(ref) else muteBadges(ref)
+                    }
+                }
+            },
         )
 
     fun hold(item: HomeItem, container: Container, page: Int, cell: Bounds) {
-        if (mayOpen()) _state.value = ItemMenuState(item, container, page, cell)
+        if (mayOpen()) {
+            val muted = item.app?.ref?.let(isBadgesMuted) ?: false
+            _state.value = ItemMenuState(item, container, page, cell, badgesMuted = muted)
+        }
     }
 
     /** A long press on [app] in the open folder [folderId], in [cell]. */
     fun holdInFolder(app: AppEntry, folderId: Long, cell: Bounds) {
         if (mayOpen()) {
-            _state.value = ItemMenuState(app.asItem(), Container.DRAWER, 0, cell, folderId)
+            _state.value =
+                ItemMenuState(
+                    app.asItem(),
+                    Container.DRAWER,
+                    0,
+                    cell,
+                    folderId,
+                    badgesMuted = isBadgesMuted(app.ref),
+                )
         }
     }
 

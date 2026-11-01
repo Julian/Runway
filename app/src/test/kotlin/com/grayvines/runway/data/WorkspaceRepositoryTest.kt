@@ -682,4 +682,26 @@ class WorkspaceRepositoryTest {
         assertTrue(home.pages.single().items.isEmpty())
         assertTrue(repo.observe(Container.DOCK).first().pages.single().items.isEmpty())
     }
+
+    @Test
+    fun `muting and unmuting badges is idempotent, and retainApps forgets uninstalled mutes`() =
+        runTest {
+            val a = AppRef("pkg1/.Main", 0)
+            val b = AppRef("pkg2/.Main", 0)
+            val work = AppRef("work/.Main", 10)
+
+            repo.muteBadges(a)
+            repo.muteBadges(a)
+            repo.muteBadges(b)
+            repo.muteBadges(work)
+            assertEquals(setOf(a, b, work), repo.observeBadgeMutes().first())
+
+            repo.unmuteBadges(a)
+            repo.unmuteBadges(a)
+            assertEquals(setOf(b, work), repo.observeBadgeMutes().first())
+
+            // b was uninstalled from profile 0; profile 10 is quiet (reports nothing) and stays.
+            repo.retainApps(setOf(a))
+            assertEquals(setOf(work), repo.observeBadgeMutes().first())
+        }
 }

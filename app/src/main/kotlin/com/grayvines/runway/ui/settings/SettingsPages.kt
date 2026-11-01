@@ -29,18 +29,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import com.grayvines.runway.data.settings.BadgeStyle
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
 
 /**
- * The grid's steppers, and whether its icons are labelled. Each step is applied to the stored
- * value, not the one on screen: the screen can be a write behind (the first frames show defaults;
- * two quick taps show one).
+ * The grid's steppers, whether its icons are labelled, and how notification badges are shown. Each
+ * step is applied to the stored value, not the one on screen: the screen can be a write behind (the
+ * first frames show defaults; two quick taps show one).
  */
 @Composable
-internal fun HomeScreenPage(settings: Settings, onChange: ((Settings) -> Settings) -> Unit) {
+internal fun HomeScreenPage(
+    settings: Settings,
+    hasNotificationAccess: Boolean,
+    onGrantNotificationAccess: () -> Unit,
+    onChange: ((Settings) -> Settings) -> Unit,
+) {
     Section("Grid")
     Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { by ->
         onChange {
@@ -73,6 +79,29 @@ internal fun HomeScreenPage(settings: Settings, onChange: ((Settings) -> Setting
     Section("Labels")
     Toggle("Home", settings.homeLabels) { v -> onChange { it.copy(homeLabels = v) } }
     Toggle("Dock", settings.dockLabels) { v -> onChange { it.copy(dockLabels = v) } }
+
+    Section("Badges")
+    OptionRow(
+        label = "Style",
+        current = settings.badgeStyle.label,
+        options = BadgeStyle.entries.map { it.label },
+    ) { picked ->
+        onChange { it.copy(badgeStyle = BadgeStyle.entries.first { e -> e.label == picked }) }
+    }
+    if (settings.badgeStyle != BadgeStyle.OFF && !hasNotificationAccess) {
+        OutlinedButton(
+            onClick = onGrantNotificationAccess,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text("Allow notification access")
+        }
+        Text(
+            "Badges need notification access in system settings.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
 }
 
 /** The drawer's settings, and the way to the apps it leaves out, [hiddenCount] of them. */

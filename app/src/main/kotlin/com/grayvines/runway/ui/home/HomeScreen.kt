@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -104,6 +105,10 @@ fun HomeScreen(
 ) {
     if (!state.loaded) return
     val settings = state.settings
+    val badges =
+        remember(settings.badgeStyle, state.badgeCounts, state.badgeMutes) {
+            BadgeState(settings.badgeStyle, state.badgeCounts, state.badgeMutes)
+        }
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
     PagerCommands(homePager, goHome, flipHomePage, homeMenu.showPage)
@@ -112,70 +117,73 @@ fun HomeScreen(
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)
-    BoxWithConstraints(Modifier.fillMaxSize().rootGestures(drag, widgetResize, drawer)) {
-        val insets = WindowInsets.systemBars.asPaddingValues()
-        val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
-        val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
-        PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
-        // The home area steps back for a lifted icon and for the drawer alike.
-        val lifting = liftProgress(drag)
-        // Read inside layers and draws, never here: every frame of a lift or a pull would
-        // otherwise recompose every cell on screen.
-        val lift = { maxOf(lifting.value, drawer.motion.shown.value) }
-        // Where the pages are (root px): a carried widget is held inside them.
-        var pagesArea by remember { mutableStateOf<Rect?>(null) }
-        HomeColumn(
-            state = state,
-            homePager = homePager,
-            dockPager = dockPager,
-            cell = cell,
-            iconSize = iconSize,
-            onLaunch = onLaunch,
-            onSearch = onSearch,
-            onSwipePastFirstPage = onSwipePastFirstPage,
-            onMenu = homeMenu.onOpen,
-            drag = drag,
-            drawer = drawer,
-            onHomePagePositioned = onHomePagePositioned,
-            onDockPagePositioned = onDockPagePositioned,
-            onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
-            resize = widgetResize,
-            onPagesPositioned = { pagesArea = it },
-            modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
-        )
-        ShadeHint({ drawer.motion.given.value }, insets)
-        DrawerOverlay(
-            state = state,
-            drawer = drawer,
-            open = drawerOpen,
-            covered = openFolder != null,
-            query = drawerQuery,
-            iconSize = iconSize,
-            insets = insets,
-            actions = drawerActions,
-            drag = drag,
-            onLaunchApp = onLaunchApp,
-            onOpenFolder = onLaunch,
-        )
-        // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
-        openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
-        WidgetResizeOverlay(state, widgetResize, cell, drag)
-        Menus(itemMenu, homeMenu, widgetPicker, cell, drag)
-        // Between the dock and the pages' last row, across the search bar when it sits there, as
-        // drawn once the home area has stepped back about the screen's middle.
-        val dockTop = maxHeight - insets.calculateBottomPadding() - cell.height
-        val between = if (settings.searchBarAtTop) dockTop else dockTop - cell.height / 2
-        RemoveBin(drag, at = maxHeight / 2 + (between - maxHeight / 2) * DragMotion.ZOOM)
-        // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
-        DragOverlay(
-            drag = drag,
-            item = draggedItem(state, drag),
-            picture = drag.picture,
-            cell = cell,
-            iconSize = iconSize,
-            lift = lift,
-            within = { pagesArea },
-        )
+    CompositionLocalProvider(LocalBadges provides badges) {
+        BoxWithConstraints(Modifier.fillMaxSize().rootGestures(drag, widgetResize, drawer)) {
+            val insets = WindowInsets.systemBars.asPaddingValues()
+            val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
+            val iconSize = min(cell.width, cell.height) * (1f - ICON_INSET)
+            PlaceDrawer(drawer, maxHeight, settings.drawerSwipe)
+            // The home area steps back for a lifted icon and for the drawer alike.
+            val lifting = liftProgress(drag)
+            // Read inside layers and draws, never here: every frame of a lift or a pull would
+            // otherwise recompose every cell on screen.
+            val lift = { maxOf(lifting.value, drawer.motion.shown.value) }
+            // Where the pages are (root px): a carried widget is held inside them.
+            var pagesArea by remember { mutableStateOf<Rect?>(null) }
+            HomeColumn(
+                state = state,
+                homePager = homePager,
+                dockPager = dockPager,
+                cell = cell,
+                iconSize = iconSize,
+                onLaunch = onLaunch,
+                onSearch = onSearch,
+                onSwipePastFirstPage = onSwipePastFirstPage,
+                onMenu = homeMenu.onOpen,
+                drag = drag,
+                drawer = drawer,
+                onHomePagePositioned = onHomePagePositioned,
+                onDockPagePositioned = onDockPagePositioned,
+                onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
+                resize = widgetResize,
+                onPagesPositioned = { pagesArea = it },
+                modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
+            )
+            ShadeHint({ drawer.motion.given.value }, insets)
+            DrawerOverlay(
+                state = state,
+                drawer = drawer,
+                open = drawerOpen,
+                covered = openFolder != null,
+                query = drawerQuery,
+                iconSize = iconSize,
+                insets = insets,
+                actions = drawerActions,
+                drag = drag,
+                onLaunchApp = onLaunchApp,
+                onOpenFolder = onLaunch,
+            )
+            // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
+            openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
+            WidgetResizeOverlay(state, widgetResize, cell, drag)
+            Menus(itemMenu, homeMenu, widgetPicker, cell, drag)
+            // Between the dock and the pages' last row, across the search bar when it sits there,
+            // as
+            // drawn once the home area has stepped back about the screen's middle.
+            val dockTop = maxHeight - insets.calculateBottomPadding() - cell.height
+            val between = if (settings.searchBarAtTop) dockTop else dockTop - cell.height / 2
+            RemoveBin(drag, at = maxHeight / 2 + (between - maxHeight / 2) * DragMotion.ZOOM)
+            // Above the drawer too: an app pulled out of it is lifted while the drawer closes.
+            DragOverlay(
+                drag = drag,
+                item = draggedItem(state, drag),
+                picture = drag.picture,
+                cell = cell,
+                iconSize = iconSize,
+                lift = lift,
+                within = { pagesArea },
+            )
+        }
     }
 }
 

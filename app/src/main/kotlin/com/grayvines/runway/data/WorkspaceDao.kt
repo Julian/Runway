@@ -142,6 +142,19 @@ interface WorkspaceDao {
     suspend fun deleteHiddenApp(component: String, profile: Long)
 
     @Query("DELETE FROM hidden_apps") suspend fun deleteAllHiddenApps()
+
+    @Query("SELECT * FROM badge_mutes") fun observeBadgeMutes(): Flow<List<BadgeMuteEntity>>
+
+    @Query("SELECT * FROM badge_mutes") suspend fun badgeMutes(): List<BadgeMuteEntity>
+
+    /** An app whose badges are already muted stays muted. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertBadgeMute(mute: BadgeMuteEntity)
+
+    @Query("DELETE FROM badge_mutes WHERE component = :component AND profile = :profile")
+    suspend fun deleteBadgeMute(component: String, profile: Long)
+
+    @Query("DELETE FROM badge_mutes") suspend fun deleteAllBadgeMutes()
 }
 
 /**

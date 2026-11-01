@@ -110,6 +110,34 @@ class SettingsPagesTest {
     }
 
     @Test
+    fun theHomeScreenPageAsksForNotificationAccessOnlyWhenBadgesNeedIt() {
+        var granted by mutableStateOf(false)
+        var settings by mutableStateOf(Settings())
+        var asked = 0
+        compose.setContent {
+            SettingsScreen(
+                settings = settings,
+                searchTargets = emptyList(),
+                apps = emptyList(),
+                hiddenApps = emptySet(),
+                onHide = { _, _ -> },
+                onChange = { settings = it(settings) },
+                onOpenHome = null,
+                backupActions = BackupActions(save = {}, restore = {}),
+                debugActions = null,
+                hasNotificationAccess = granted,
+                onGrantNotificationAccess = { asked++ },
+            )
+        }
+        compose.onNodeWithText("Home screen").performClick()
+        compose.onNodeWithText("Allow notification access").assertIsDisplayed().performClick()
+        assertEquals(1, asked)
+
+        granted = true
+        compose.onNodeWithText("Allow notification access").assertDoesNotExist()
+    }
+
+    @Test
     fun theDebugPageIsListedOnlyInADebugBuild() {
         compose.setContent { Screen(debug = false) }
         compose.onNodeWithText("Backup").assertIsDisplayed()

@@ -14,12 +14,15 @@ import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.createDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.hideApp
+import com.grayvines.runway.data.muteBadges
+import com.grayvines.runway.data.observeBadgeMutes
 import com.grayvines.runway.data.observeDrawerPlacements
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.reorderFolder
 import com.grayvines.runway.data.unhideApp
+import com.grayvines.runway.data.unmuteBadges
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -257,6 +260,33 @@ class LayoutBackupTest {
         repo.restoreLayout(layout, apps.toSet())
 
         assertEquals(setOf(app(3)), repo.observeHiddenApps().first())
+    }
+
+    @Test
+    fun `badge mutes travel, matched as placements are, and replace the device's`() = runTest {
+        seed()
+        repo.muteBadges(app(5))
+        repo.muteBadges(app(4, profile = 10))
+        repo.muteBadges(app(9)) // not installed where the backup goes
+        val layout = repo.layoutBackup()
+        assertEquals(listOf(app(4, 10), app(5), app(9)), layout.badgeMutes)
+        repo.unmuteBadges(app(5))
+        repo.muteBadges(app(3))
+
+        val restored = repo.restoreLayout(layout, apps.toSet())
+
+        assertEquals(Restored(placed = 4, skipped = 0), restored)
+        assertEquals(setOf(app(4), app(5)), repo.observeBadgeMutes().first())
+    }
+
+    @Test
+    fun `a file from before badge mutes leaves the device's muted`() = runTest {
+        val layout = seed().copy(badgeMutes = null)
+        repo.muteBadges(app(3))
+
+        repo.restoreLayout(layout, apps.toSet())
+
+        assertEquals(setOf(app(3)), repo.observeBadgeMutes().first())
     }
 
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()

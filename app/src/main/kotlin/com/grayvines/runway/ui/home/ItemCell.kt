@@ -153,19 +153,28 @@ internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
 /** The first few apps of a folder on a dim rounded tile, described by the folder's [name]. */
 @Composable
 internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier = Modifier) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(FOLDER_PREVIEW_COLUMNS),
-        userScrollEnabled = false,
-        modifier =
-            modifier
-                .semantics { contentDescription = name }
-                .folderTile()
-                .padding(fraction = FOLDER_TILE_INSET),
-    ) {
-        items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->
-            // Part of the tile, which the folder's name describes: not an icon in its own right.
-            AppIcon(app, Modifier.fillMaxWidth().padding(2.dp), described = false)
+    val badges = LocalBadges.current
+    Box(modifier) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(FOLDER_PREVIEW_COLUMNS),
+            userScrollEnabled = false,
+            modifier =
+                Modifier.fillMaxSize()
+                    .semantics { contentDescription = name }
+                    .folderTile()
+                    .padding(fraction = FOLDER_TILE_INSET),
+        ) {
+            items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->
+                // Part of the tile, which the folder's name describes: not an icon in its own
+                // right.
+                AppIcon(app, Modifier.fillMaxWidth().padding(2.dp), described = false)
+            }
         }
+        Badge(
+            count = badges.countFor(apps.map { it.ref }),
+            style = badges.style,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
     }
 }
 
@@ -186,11 +195,27 @@ private fun Modifier.padding(fraction: Float): Modifier = layout { measurable, c
 
 @Composable
 internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Boolean = true) {
-    Image(
-        bitmap = app.bitmap,
-        contentDescription = app.label.takeIf { described },
-        modifier = modifier,
-    )
+    if (!described) {
+        Image(
+            bitmap = app.bitmap,
+            contentDescription = null,
+            modifier = modifier,
+        )
+        return
+    }
+    val badges = LocalBadges.current
+    Box(modifier) {
+        Image(
+            bitmap = app.bitmap,
+            contentDescription = app.label,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Badge(
+            count = badges.countFor(app.ref),
+            style = badges.style,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
 }
 
 @Composable

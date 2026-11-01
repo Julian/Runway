@@ -39,11 +39,13 @@ import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
+import com.grayvines.runway.data.observeBadgeMutes
 import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.unhideApp
+import com.grayvines.runway.data.unmuteBadges
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
@@ -122,8 +124,11 @@ open class LauncherFixture {
     fun seed() {
         runBlocking {
             graph.settings.update { settings }
-            // Hidden apps are not part of the layout, so the fill below leaves them hidden.
+            graph.badges.setNotificationsForTest(emptyList())
+            // Hidden apps and badge mutes are not part of the layout, so the fill below leaves
+            // them.
             graph.workspace.observeHiddenApps().first().forEach { graph.workspace.unhideApp(it) }
+            graph.workspace.observeBadgeMutes().first().forEach { graph.workspace.unmuteBadges(it) }
             // Tests find icons by label, so two apps with the same one (a stock image ships two
             // "Chrome"s) would be indistinguishable: such apps stay out of the layout.
             val all =
