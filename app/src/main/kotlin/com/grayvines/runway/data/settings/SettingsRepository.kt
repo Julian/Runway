@@ -47,6 +47,7 @@ class SettingsRepository(context: Context) {
         val drawerKeyboard = booleanPreferencesKey("drawer_keyboard")
         val drawerColumns = intPreferencesKey("drawer_columns")
         val drawerIndex = booleanPreferencesKey("drawer_index")
+        val searchHiddenApps = booleanPreferencesKey("search_hidden_apps")
         /** The action as JSON: one key holds any kind of action, with whatever it names. */
         val swipeRight = stringPreferencesKey("swipe_right")
     }
@@ -63,13 +64,11 @@ class SettingsRepository(context: Context) {
                 drawerLabels = this[Keys.drawerLabels] ?: defaults.drawerLabels,
                 searchBarAtTop = this[Keys.searchBarAtTop] ?: defaults.searchBarAtTop,
                 searchTarget = this[Keys.searchTarget],
-                drawerSwipe =
-                    this[Keys.drawerSwipe]?.let { name ->
-                        DrawerSwipe.entries.firstOrNull { it.name == name }
-                    } ?: defaults.drawerSwipe,
+                drawerSwipe = enumOrDefault(Keys.drawerSwipe, defaults.drawerSwipe),
                 drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
                 drawerColumns = this[Keys.drawerColumns],
                 drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
+                searchHiddenApps = this[Keys.searchHiddenApps] ?: defaults.searchHiddenApps,
                 swipeRight = this[Keys.swipeRight]?.let(::swipeActionOrNull),
             )
             .clamped()
@@ -88,6 +87,7 @@ class SettingsRepository(context: Context) {
         prefs[Keys.drawerKeyboard] = drawerKeyboard
         drawerColumns?.let { prefs[Keys.drawerColumns] = it } ?: prefs.remove(Keys.drawerColumns)
         prefs[Keys.drawerIndex] = drawerIndex
+        prefs[Keys.searchHiddenApps] = searchHiddenApps
         swipeRight?.let { prefs[Keys.swipeRight] = Json.encodeToString<SwipeAction>(it) }
             ?: prefs.remove(Keys.swipeRight)
     }
@@ -104,5 +104,10 @@ private fun swipeActionOrNull(json: String): SwipeAction? =
         Log.w(TAG, "a swipe action this build cannot read; it does nothing", e)
         null
     }
+
+private inline fun <reified E : Enum<E>> Preferences.enumOrDefault(
+    key: Preferences.Key<String>,
+    default: E,
+): E = this[key]?.let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
 
 private const val TAG = "Runway"

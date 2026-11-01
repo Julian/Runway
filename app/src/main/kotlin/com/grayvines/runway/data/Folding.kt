@@ -77,10 +77,11 @@ private suspend fun WorkspaceDao.foldOnto(targetId: Long, dropped: Dropped, outO
 private suspend fun WorkspaceDao.fold(folderId: Long, taken: Taken, outOf: Long?) {
     taken.placementId?.let { deleteItem(it) }
     if (isPlacedIn(folderId, Container.DRAWER)) {
-        leaveDrawerFolders(taken.app.component, taken.app.profile)
+        moveIntoDrawerFolder(folderId, taken.app)
         deleteEmptyFolders()
+    } else {
+        addToFolder(folderId, taken.app)
     }
-    addToFolder(folderId, taken.app)
     if (outOf != null) leave(outOf, taken.app)
 }
 

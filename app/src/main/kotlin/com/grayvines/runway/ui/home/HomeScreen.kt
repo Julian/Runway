@@ -378,6 +378,7 @@ private fun DrawerOverlay(
         open = open,
         covered = covered,
         apps = state.drawerApps,
+        searchableApps = state.searchableApps,
         folders = state.drawerFolders,
         query = query,
         keyboard = settings.drawerKeyboard,

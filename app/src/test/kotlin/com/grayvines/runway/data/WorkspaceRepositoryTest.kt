@@ -401,6 +401,36 @@ class WorkspaceRepositoryTest {
         }
 
     @Test
+    fun `joining a drawer folder by fold, creation or addition unhides a hidden app`() = runTest {
+        repo.autoFill(apps(4), columns = 4, pageRows = 1, dockSlots = 1)
+        val (a, b, c) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+        val appA = a.appRef()!!
+        val appB = b.appRef()!!
+        val appC = c.appRef()!!
+        repo.hideApp(appA)
+        repo.hideApp(appB)
+        repo.hideApp(appC)
+        assertEquals(setOf(appA, appB, appC), repo.observeHiddenApps().first())
+
+        val folder = repo.createDrawerFolder(appA)
+        assertEquals(setOf(appB, appC), repo.observeHiddenApps().first())
+        assertEquals(listOf(appA), folderApps(folder))
+
+        repo.addToDrawerFolder(folder, appB)
+        assertEquals(setOf(appC), repo.observeHiddenApps().first())
+        assertEquals(listOf(appA, appB), folderApps(folder))
+
+        assertTrue(repo.placeFolder(folder, Container.HOME, 0, 3, 0))
+        val tile =
+            repo.observe(Container.HOME).first().pages.single().items.single {
+                it.folderId == folder
+            }
+        assertTrue(repo.foldInto(targetId = tile.id, dropped = Dropped.Item(c.id)))
+        assertEquals(emptySet<AppRef>(), repo.observeHiddenApps().first())
+        assertEquals(setOf(appA, appB, appC), folderApps(folder).toSet())
+    }
+
+    @Test
     fun `a fold with nothing to fold leaves the target as it was`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }

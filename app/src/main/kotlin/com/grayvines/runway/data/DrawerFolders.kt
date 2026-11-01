@@ -17,8 +17,8 @@ fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<ItemEntity>> =
     dao.observeItems(Container.DRAWER)
 
 /**
- * A new drawer folder holding [app], which leaves any other drawer folder it was in; one emptied by
- * that goes, as with [addToDrawerFolder].
+ * A new drawer folder holding [app], which leaves any other drawer folder it was in and is no
+ * longer hidden; one emptied by that goes, as with [addToDrawerFolder].
  */
 suspend fun WorkspaceRepository.createDrawerFolder(app: AppRef): Long = write {
     val folderId = dao.insertFolder(FolderEntity(name = NEW_FOLDER_NAME))
@@ -30,7 +30,10 @@ suspend fun WorkspaceRepository.createDrawerFolder(app: AppRef): Long = write {
     folderId
 }
 
-/** Puts [app] in the drawer folder [folderId], out of any other; one emptied by that goes. */
+/**
+ * Puts [app] in the drawer folder [folderId], out of any other and no longer hidden; one emptied by
+ * that goes.
+ */
 suspend fun WorkspaceRepository.addToDrawerFolder(folderId: Long, app: AppRef) = write {
     dao.moveIntoDrawerFolder(folderId, app)
     dao.deleteEmptyFolders()
@@ -70,7 +73,12 @@ suspend fun WorkspaceRepository.placeFolder(
 /** Deletes the folder outright: every placement of it goes, and its apps are loose again. */
 suspend fun WorkspaceRepository.deleteFolder(folderId: Long) = write { dao.deleteFolder(folderId) }
 
-private suspend fun WorkspaceDao.moveIntoDrawerFolder(folderId: Long, app: AppRef) {
+/**
+ * Puts [app] in the drawer folder [folderId], out of any other drawer folder it was in and out of
+ * `hidden_apps`: an app in a drawer folder is in the drawer.
+ */
+internal suspend fun WorkspaceDao.moveIntoDrawerFolder(folderId: Long, app: AppRef) {
+    deleteHiddenApp(app.component, app.profile)
     leaveDrawerFolders(app.component, app.profile)
     addToFolder(folderId, app)
 }

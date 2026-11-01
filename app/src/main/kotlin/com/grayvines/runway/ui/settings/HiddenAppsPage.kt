@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.settings
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,14 +31,22 @@ import com.grayvines.runway.system.apps.AppEntry
 internal fun HiddenAppsPage(
     apps: List<AppEntry>,
     hidden: Set<AppRef>,
+    searchHiddenApps: Boolean,
+    onSearchHiddenChange: (Boolean) -> Unit,
     onHide: (app: AppRef, hidden: Boolean) -> Unit,
     padding: PaddingValues,
 ) {
     LazyColumn(Modifier.padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
         item {
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                Toggle("Find in search", searchHiddenApps, onSearchHiddenChange)
+            }
+        }
+        item {
             Text(
-                "A hidden app is left out of the drawer and its search, and taken out of any " +
-                    "drawer folder. On the home screen and in the dock it stays where it is.",
+                "A hidden app is left out of the drawer's grid (and out of search unless enabled " +
+                    "above), and taken out of any drawer folder. On the home screen and in the " +
+                    "dock it stays where it is.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

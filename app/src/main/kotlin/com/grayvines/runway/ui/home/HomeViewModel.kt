@@ -126,12 +126,18 @@ data class HomeState(
     val searchTarget: SearchTarget? = null,
     /** Every launchable app, alphabetically, the hidden ones included. */
     val apps: List<AppEntry> = emptyList(),
-    /** [apps] but the hidden ones: what the drawer shows and searches, and its folders add. */
+    /** [apps] but the hidden ones: what the drawer's grid shows and its folders add. */
     val drawerApps: List<AppEntry> = emptyList(),
     /** The folders atop the drawer, by name. */
     val drawerFolders: List<HomeItem> = emptyList(),
     val loaded: Boolean = false,
-)
+) {
+    /**
+     * What the drawer's search may find: [apps] when hidden ones are included, else [drawerApps].
+     */
+    val searchableApps: List<AppEntry>
+        get() = if (settings.searchHiddenApps) apps else drawerApps
+}
 
 fun HomeState.pages(container: Container) =
     if (container == Container.DOCK) dockPages else homePages
@@ -478,7 +484,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
      */
     fun launchDrawerMatch() {
         if (drawerQuery.isBlank()) return
-        state.value.drawerApps.matching(drawerQuery).firstOrNull()?.let(::launch)
+        state.value.searchableApps.matching(drawerQuery).firstOrNull()?.let(::launch)
     }
 
     /**

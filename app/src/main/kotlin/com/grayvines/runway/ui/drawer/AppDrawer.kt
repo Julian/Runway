@@ -108,6 +108,7 @@ fun AppDrawer(
     /** Something (a folder's sheet) is over the drawer, with the keyboard's focus. */
     covered: Boolean,
     apps: List<AppEntry>,
+    searchableApps: List<AppEntry>,
     folders: List<HomeItem>,
     query: DrawerQuery,
     keyboard: Boolean,
@@ -145,9 +146,9 @@ fun AppDrawer(
     val searching = query.text.isNotBlank()
     val shownFolders = if (searching) emptyList() else folders
     val shownApps =
-        remember(apps, folders, query.text) {
+        remember(apps, searchableApps, folders, query.text) {
             if (searching) {
-                apps.matching(query.text)
+                searchableApps.matching(query.text)
             } else {
                 val folded = folders.flatMapTo(HashSet()) { f -> f.folder.map { it.key } }
                 apps.filter { it.key !in folded }

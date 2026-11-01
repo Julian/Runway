@@ -85,7 +85,15 @@ fun SettingsScreen(
                         onOpenHidden = { page = SettingsPage.HIDDEN_APPS },
                     )
                 }
-            SettingsPage.HIDDEN_APPS -> HiddenAppsPage(apps, hiddenApps, onHide, padding)
+            SettingsPage.HIDDEN_APPS ->
+                HiddenAppsPage(
+                    apps = apps,
+                    hidden = hiddenApps,
+                    searchHiddenApps = settings.searchHiddenApps,
+                    onSearchHiddenChange = { v -> onChange { it.copy(searchHiddenApps = v) } },
+                    onHide = onHide,
+                    padding = padding,
+                )
             SettingsPage.SEARCH_BAR ->
                 Scrolling(padding, body) { SearchBarPage(settings, searchTargets, onChange) }
             SettingsPage.GESTURES ->

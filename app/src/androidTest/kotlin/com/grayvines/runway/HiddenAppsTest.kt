@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
@@ -51,6 +52,8 @@ class HiddenAppsTest : LauncherFixture() {
 
     @Test
     fun searchingLeavesOutAHiddenApp_andEnterLaunchesNothing() {
+        val top = labels.first()
+        hide(top)
         hide(firstHomeApp)
         cellIcon(firstHomeApp).assertIsDisplayed() // hidden from the drawer, not from the pages
         openDrawer()
@@ -62,6 +65,13 @@ class HiddenAppsTest : LauncherFixture() {
         Thread.sleep(WRITE_GRACE_MS) // a launch would have taken the screen by now
         assertStillOnLauncher()
         compose.onNodeWithTag(DRAWER_TAG).assertIsDisplayed()
+
+        // With search allowed to find hidden apps, the query finds it, while the grid without a
+        // query still leaves hidden apps out.
+        runBlocking { graph.settings.update { it.copy(searchHiddenApps = true) } }
+        waitUntil { shownDrawerLabels() == listOf(firstHomeApp) }
+        compose.onNodeWithTag(DRAWER_SEARCH_TAG).performTextClearance()
+        waitUntil { shownDrawerLabels().isNotEmpty() && top !in shownDrawerLabels() }
     }
 
     @Test

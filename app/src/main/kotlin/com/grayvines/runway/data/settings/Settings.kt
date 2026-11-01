@@ -42,6 +42,8 @@ data class Settings(
     val drawerColumns: Int? = null,
     /** An alphabet down the drawer's right edge that jumps the list. */
     val drawerIndex: Boolean = false,
+    /** Whether the drawer's search also finds apps hidden from the drawer. */
+    val searchHiddenApps: Boolean = false,
     /** What swiping right from the first home page does; null, nothing. */
     val swipeRight: SwipeAction? = null,
 ) {
