@@ -84,7 +84,10 @@ fun WidgetResizeFrame(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val info = remember(item.appWidgetId) { item.appWidgetId?.let(context.appGraph.widgets::info) }
+    val info =
+        remember(item.appWidgetId, item.label) {
+            item.appWidgetId?.let(context.appGraph.widgets::info)
+        }
     val limits = remember(info, cell, grid) { info.limits(cell, grid, density) }
     val cellPx = with(density) { Size(cell.width.toPx(), cell.height.toPx()) }
     val pull =

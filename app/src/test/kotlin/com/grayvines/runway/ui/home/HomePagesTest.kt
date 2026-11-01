@@ -67,7 +67,7 @@ class HomePagesTest {
     }
 
     @Test
-    fun `a widget is drawn over its span, named by its provider, and cannot be folded into`() {
+    fun `a widget is drawn over its span, named by its app or package, and cannot be folded into`() {
         val widget =
             ItemEntity(
                 4,
@@ -89,7 +89,8 @@ class HomePagesTest {
         assertEquals(Footprint(1, 2, 3, 2), drawn.footprint)
         assertEquals(42, drawn.appWidgetId)
         assertEquals("pkg/.Widget", drawn.provider)
-        assertEquals("pkg/.Widget", drawn.label)
+        assertEquals("pkg", drawn.label)
+        assertEquals("Clock", widgetLabel("pkg/.Widget", mapOf("pkg" to "Clock")))
         assertEquals(listOf(Placed(4, Footprint(1, 2, 3, 2), foldable = false)), page.occupied)
     }
 

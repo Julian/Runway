@@ -1,10 +1,13 @@
 package com.grayvines.runway
 
+import android.content.ComponentName
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -88,18 +91,36 @@ class WidgetTest : LauncherFixture() {
     }
 
     @Test
-    fun aWidgetWithNoProviderBehindItsIdStandsInForItAndThePageStaysUp() {
+    fun aWidgetWithNoProviderBehindItsIdStandsInForItWithItsAppsName() {
         placeFixtureWidget(0, 0, bound = false)
-        waitUntil {
-            compose
-                .onAllNodes(hasText(FIXTURE_WIDGET.flattenToString()), useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
+        awaitWidgetCell()
+        compose
+            .onNode(
+                hasText(FIXTURE_APP_LABEL) and hasAnyAncestor(hasTestTag(WIDGET_TAG)),
+                useUnmergedTree = true,
+            )
+            .assertIsDisplayed()
         val beside = labelAtHomeCell(2, 0)
         val cell = Grid(settings.columns, settings.pageRows, settings.dockSlots).homeCell(2, 0)
         val centre = cellIcon(beside).fetchSemanticsNode().boundsInRoot.center
         assertTrue("$beside drawn at $centre, not at $cell", (centre - cell).getDistance() < 2f)
+    }
+
+    @Test
+    fun aWidgetWhoseAppIsGoneShowsItsPackageName() {
+        placeFixtureWidget(
+            0,
+            0,
+            bound = false,
+            provider = ComponentName("com.example.gone", ".Widget"),
+        )
+        awaitWidgetCell()
+        compose
+            .onNode(
+                hasText("com.example.gone") and hasAnyAncestor(hasTestTag(WIDGET_TAG)),
+                useUnmergedTree = true,
+            )
+            .assertIsDisplayed()
     }
 
     @Test
@@ -163,6 +184,7 @@ class WidgetTest : LauncherFixture() {
     private fun Rect.covers(p: Offset) = contains(p.x.toInt(), p.y.toInt())
 
     private companion object {
+        const val FIXTURE_APP_LABEL = "Fixture"
         const val FIXTURE_WIDGET_TEXT = "Fixture widget"
     }
 }

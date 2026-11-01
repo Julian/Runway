@@ -26,8 +26,12 @@ internal fun ContainerContent.toHomePages(
 ): List<HomePage> {
     // One collator for the whole layout: making one costs more than the sorts do.
     val byLabel = LabelOrder.comparator()
+    val appLabels =
+        apps.entries.associate { (key, app) ->
+            key.substringAfter('/').substringBefore('/') to app.label
+        }
     return pages.map { page ->
-        val items = page.items.mapNotNull { it.toHomeItem(apps, folders, byLabel) }
+        val items = page.items.mapNotNull { it.toHomeItem(apps, appLabels, folders, byLabel) }
         val drawn = items.mapTo(mutableSetOf()) { it.id }
         HomePage(
             index = page.index,
@@ -104,6 +108,7 @@ private fun FolderContent.held(
 /** Null when the item has no cell or its app is absent; those are not drawn. */
 private fun ItemEntity.toHomeItem(
     apps: Map<String, AppEntry>,
+    appLabels: Map<String, String>,
     folders: Map<Long, FolderContent>,
     byLabel: Comparator<String>,
 ): HomeItem? {
@@ -119,7 +124,12 @@ private fun ItemEntity.toHomeItem(
         y = cellY,
         spanX = spanX,
         spanY = spanY,
-        label = labelOverride ?: app?.label ?: folder?.name ?: provider ?: "",
+        label =
+            labelOverride
+                ?: app?.label
+                ?: folder?.name
+                ?: provider?.let { widgetLabel(it, appLabels) }
+                ?: "",
         app = app,
         folder = folder?.held(apps, byLabel).orEmpty(),
         folderId = folder?.id,
@@ -127,4 +137,13 @@ private fun ItemEntity.toHomeItem(
         appWidgetId = appWidgetId,
         provider = provider,
     )
+}
+
+/**
+ * The name of the app that owns a widget's [provider] (a flattened component name), from the
+ * installed apps' [appLabels] (by package name), or the package name itself once the app is gone.
+ */
+internal fun widgetLabel(provider: String, appLabels: Map<String, String>): String {
+    val pkg = provider.substringBefore('/')
+    return appLabels[pkg] ?: pkg
 }

@@ -14,7 +14,7 @@ import com.grayvines.runway.model.overlaps
  * moved.
  */
 suspend fun WorkspaceRepository.addWidget(
-    appWidgetId: Int,
+    appWidgetId: Int?,
     provider: String,
     page: Int,
     x: Int,

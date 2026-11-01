@@ -259,6 +259,21 @@ class WidgetResizeTest : LauncherFixture() {
     }
 
     @Test
+    fun holdingADeadWidgetFramesItWithRemoveOnly_andRemoveDropsIt() {
+        val itemId = placeFixtureWidget(0, 0, bound = false)
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        compose.onNode(hasContentDescription("Remove") and inFrame()).assertIsDisplayed()
+        listOf("Left edge", "Top edge", "Right edge", "Bottom edge", "Edit").forEach {
+            compose.onAllNodes(hasContentDescription(it) and inFrame()).assertCountEquals(0)
+        }
+        compose.onNode(hasContentDescription("Remove") and inFrame()).performClick()
+        awaitGone(WIDGET_TAG)
+        assertNull(widgets().firstOrNull { it.id == itemId })
+    }
+
+    @Test
     fun aWidgetWhoseProviderTakesNoSetupAgainHasNoEditOnItsFrame() {
         placeFixtureWidget(0, 0)
         awaitWidgetCell()

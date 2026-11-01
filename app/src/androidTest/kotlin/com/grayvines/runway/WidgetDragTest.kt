@@ -117,6 +117,21 @@ class WidgetDragTest : LauncherFixture() {
     }
 
     @Test
+    fun droppingADeadWidgetOnFreeCellsMovesItThere() {
+        val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
+        placeFixtureWidget(0, 0, bound = false)
+        clearHomeCells(0 to 2, 1 to 2)
+        awaitWidgetCell()
+        val target = (grid.homeCell(0, 2) + grid.homeCell(1, 2)) / 2f
+        holdDragAt(widgetCentre(), target)
+        release()
+        awaitWidgetAt(0 to 2)
+        assertEquals(2 to 1, widget().spanX to widget().spanY)
+        awaitGone(DRAG_OVERLAY_TAG)
+        awaitFrame()
+    }
+
+    @Test
     fun droppingAWidgetOntoIconsPushesThemAside() {
         val grid = Grid(settings.columns, settings.pageRows, settings.dockSlots)
         placeFixtureWidget(0, 0)
