@@ -42,7 +42,10 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout = read {
     )
 }
 
-/** What a backup carries for this item: an app or a folder in a cell; nothing for anything else. */
+/**
+ * What a backup carries for this item: an app, a folder or a widget in a cell; nothing for anything
+ * else.
+ */
 private fun ItemEntity.placement(
     folders: Map<Long, FolderEntity>,
     folderApps: Map<Long, List<FolderAppEntity>>,
@@ -55,9 +58,11 @@ private fun ItemEntity.placement(
     val inDrawer = folderId?.let { drawerIndex[it] }
     return when {
         kind == ItemKind.APP -> appRef()?.let { Placement(container, page, x, y, app = it) }
+        kind == ItemKind.WIDGET ->
+            provider?.let { Placement(container, page, x, y, widget = Widget(it, spanX, spanY)) }
         inDrawer != null -> Placement(container, page, x, y, drawerFolder = inDrawer)
         folder != null -> Placement(container, page, x, y, folder = folder.backup(folderApps))
-        else -> null // widgets and shortcuts stay with the device they were made on
+        else -> null // shortcuts stay with the device they were made on
     }
 }
 
@@ -67,95 +72,116 @@ private fun FolderEntity.backup(folderApps: Map<Long, List<FolderAppEntity>>): F
 }
 
 /**
- * Replaces the layout with [layout], in one transaction, except for the widgets already placed: a
- * backup carries none, so they stay where they are, their pages with them, and a restored placement
- * that would land on one is skipped. Apps are matched against [installed] by component and profile,
- * or by component alone where that app is installed in exactly one profile (a new phone numbers its
- * profiles differently); anything else is skipped, and a folder none of whose apps are installed
- * goes with them. Apps of a [quiet] profile, one that exists but reports nothing (a work profile
- * that is paused), are taken as they are: there is nothing to check them against, and they come
- * back with the profile. The hidden apps are matched the same way and replaced too, unless the file
- * is from before Runway could hide apps; one not installed is dropped and not counted as skipped:
- * nothing on screen is missing for it.
+ * Replaces the whole layout with [layout], in one transaction. Apps are matched against [installed]
+ * by component and profile, or by component alone where that app is installed in exactly one
+ * profile (a new phone numbers its profiles differently); anything else is skipped, and a folder
+ * none of whose apps are installed goes with them. Apps of a [quiet] profile, one that exists but
+ * reports nothing (a work profile that is paused), are taken as they are: there is nothing to check
+ * them against, and they come back with the profile. Widgets are bound through [bindWidget] where
+ * the host can bind them as they are, and placed unbound (shown as a placeholder) where it cannot;
+ * the host ids of the widgets [layout] replaces go to [deleteWidget]. The hidden apps are matched
+ * the same way and replaced too, unless the file is from before Runway could hide apps; one not
+ * installed is dropped and not counted as skipped: nothing on screen is missing for it.
  */
 suspend fun WorkspaceRepository.restoreLayout(
     layout: Layout,
     installed: Set<AppRef>,
     quiet: Set<Long> = emptySet(),
-): Restored = write {
-    val match = AppMatcher(installed, quiet)
-    val widgets = dao.itemsOfKind(ItemKind.WIDGET)
-    dao.deleteItemsExceptKind(ItemKind.WIDGET)
-    dao.deleteAllFolders()
-    dao.deleteAllPages()
-    val lastWidgetPage = widgets.maxOfOrNull { it.pageIndex ?: 0 } ?: -1
-    repeat(maxOf(layout.homePages, 1, lastWidgetPage + 1)) {
-        dao.insertPage(PageEntity(Container.HOME, it))
-    }
-    repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
-    layout.hiddenApps?.let { hidden ->
-        dao.deleteAllHiddenApps()
-        hidden.mapNotNull(match::find).forEach {
-            dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
-        }
-    }
-    val counts = Counts()
-    // Drawer folders first: a placement may refer to one by index.
-    val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
-    var placed = counts.placed
-    var skipped = counts.skipped
-    val (blocked, open) = layout.placements.partition { p -> widgets.any { it.covers(p) } }
-    skipped += blocked.size
-    for (placement in open) {
-        val folder = placement.folder
-        val app = placement.app?.let(match::find)
-        val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
-        when {
-            app != null -> {
-                dao.insertItem(placement.entity(ItemKind.APP, app = app))
-                placed++
-            }
-            drawerFolder != null -> {
-                dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
-                placed++
-            }
-            folder != null -> {
-                val apps = folder.apps.mapNotNull(match::find)
-                skipped += folder.apps.size - apps.size
-                if (apps.isEmpty()) continue
-                val folderId = dao.insertFolder(FolderEntity(name = folder.name))
-                dao.fill(folderId, apps, folder.handSorted)
-                dao.insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
-                placed++
-            }
-            else -> {
-                skipped++
+    bindWidget: (provider: String) -> Int? = { null },
+    deleteWidget: (id: Int) -> Unit = {},
+): Restored {
+    val oldWidgets = mutableListOf<Int>()
+    val restored = write {
+        val match = AppMatcher(installed, quiet)
+        oldWidgets += dao.itemsOfKind(ItemKind.WIDGET).mapNotNull { it.appWidgetId }
+        dao.deleteAllItems()
+        dao.deleteAllFolders()
+        dao.deleteAllPages()
+        repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
+        repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
+        layout.hiddenApps?.let { hidden ->
+            dao.deleteAllHiddenApps()
+            hidden.mapNotNull(match::find).forEach {
+                dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
             }
         }
+        val counts = Counts()
+        // Drawer folders first: a placement may refer to one by index.
+        val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
+        for (placement in layout.placements) {
+            dao.restorePlacement(placement, match, drawerIds, bindWidget, counts)
+        }
+        Restored(counts.placed, counts.skipped)
     }
-    Restored(placed, skipped, widgetsKept = widgets.size)
+    oldWidgets.forEach(deleteWidget)
+    return restored
 }
 
-/** Whether this widget's cells include the one [placement] would take. */
-private fun ItemEntity.covers(placement: Placement): Boolean {
-    val x = x ?: return false
-    val y = y ?: return false
-    return container == placement.container &&
-        pageIndex == placement.page &&
-        placement.x in x until x + spanX &&
-        placement.y in y until y + spanY
+private suspend fun WorkspaceDao.restorePlacement(
+    placement: Placement,
+    match: AppMatcher,
+    drawerIds: Map<Int, Long>,
+    bindWidget: (provider: String) -> Int?,
+    counts: Counts,
+) {
+    val folder = placement.folder
+    val app = placement.app?.let(match::find)
+    val drawerFolder = placement.drawerFolder?.let { drawerIds[it] }
+    val widget = placement.widget
+    when {
+        app != null -> {
+            insertItem(placement.entity(ItemKind.APP, app = app))
+            counts.placed++
+        }
+        drawerFolder != null -> {
+            insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
+            counts.placed++
+        }
+        folder != null -> {
+            val apps = folder.apps.mapNotNull(match::find)
+            counts.skipped += folder.apps.size - apps.size
+            if (apps.isEmpty()) return
+            val folderId = insertFolder(FolderEntity(name = folder.name))
+            fill(folderId, apps, folder.handSorted)
+            insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
+            counts.placed++
+        }
+        widget != null -> {
+            insertItem(
+                placement.entity(
+                    ItemKind.WIDGET,
+                    widget = widget,
+                    appWidgetId = bindWidget(widget.provider),
+                )
+            )
+            counts.placed++
+        }
+        else -> {
+            counts.skipped++
+        }
+    }
 }
 
-private fun Placement.entity(kind: ItemKind, app: AppRef? = null, folderId: Long? = null) =
+private fun Placement.entity(
+    kind: ItemKind,
+    app: AppRef? = null,
+    folderId: Long? = null,
+    widget: Widget? = null,
+    appWidgetId: Int? = null,
+) =
     ItemEntity(
         kind = kind,
         container = container,
         pageIndex = page,
         x = x,
         y = y,
+        spanX = widget?.spanX ?: 1,
+        spanY = widget?.spanY ?: 1,
         component = app?.component,
         profile = app?.profile,
         folderId = folderId,
+        appWidgetId = appWidgetId,
+        provider = widget?.provider,
     )
 
 /** Finds the installed app a backed-up reference means, or null; see [restoreLayout]. */

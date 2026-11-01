@@ -155,12 +155,11 @@ class SettingsActivity : ComponentActivity() {
         val quiet =
             appGraph.appRepository.profiles() - installed.mapTo(mutableSetOf()) { it.profile }
         val restored = appGraph.backup.restore(text, installed, quiet)
-        val notes =
-            listOfNotNull(
-                "${restored.widgetsKept} widgets kept".takeIf { restored.widgetsKept > 0 },
-                "${restored.skipped} apps are not installed".takeIf { restored.skipped > 0 },
-            )
-        return (listOf("Restored ${restored.placed} items") + notes).joinToString("; ")
+        return if (restored.skipped == 0) {
+            "Restored ${restored.placed} items"
+        } else {
+            "Restored ${restored.placed} items; ${restored.skipped} apps are not installed"
+        }
     }
 
     private companion object {

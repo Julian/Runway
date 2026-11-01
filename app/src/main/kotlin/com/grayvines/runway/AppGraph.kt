@@ -34,7 +34,7 @@ class AppGraph(private val context: Context) {
     val workspace: WorkspaceRepository by lazy { WorkspaceRepository(database) }
     val settings: SettingsRepository by lazy { SettingsRepository(context) }
     val searchTargets: SearchTargetResolver by lazy { SearchTargetResolver(context) }
-    val backup: BackupService by lazy { BackupService(workspace, settings) }
+    val backup: BackupService by lazy { BackupService(workspace, settings, widgets) }
     val wallpapers: WallpaperPicker by lazy { WallpaperPicker(context) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
     val widgets: WidgetHost by lazy { WidgetHost(context) }

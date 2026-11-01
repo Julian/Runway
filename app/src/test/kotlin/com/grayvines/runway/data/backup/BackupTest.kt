@@ -21,6 +21,13 @@ class BackupTest {
                     Placement(Container.DOCK, 0, 0, 0, app = AppRef("a/.Main", 0)),
                     Placement(
                         Container.HOME,
+                        0,
+                        0,
+                        0,
+                        widget = Widget("w/.Clock", spanX = 2, spanY = 1),
+                    ),
+                    Placement(
+                        Container.HOME,
                         1,
                         2,
                         3,
@@ -90,13 +97,36 @@ class BackupTest {
                 .message
                 .orEmpty()
         val app = AppRef("a/.Main", 0)
+        val widget = Widget("w/.One", spanX = 2, spanY = 2)
         assertTrue("two things in one cell" in refusal(place(0, 0, 0, app), place(0, 0, 0, app)))
+        assertTrue(
+            "two things in one cell" in
+                refusal(Placement(Container.HOME, 0, 0, 0, widget = widget), place(0, 1, 1, app))
+        )
         assertTrue("no such page" in refusal(Placement(Container.HOME, 2, 0, 0, app = app)))
         assertTrue("off the grid" in refusal(Placement(Container.HOME, 0, 4, 0, app = app)))
         assertTrue("off the grid" in refusal(Placement(Container.HOME, 0, 0, 3, app = app)))
         assertTrue("off the grid" in refusal(Placement(Container.DOCK, 0, 3, 0, app = app)))
+        assertTrue("off the grid" in refusal(Placement(Container.HOME, 0, 3, 0, widget = widget)))
+        assertTrue("off the grid" in refusal(Placement(Container.HOME, 0, 0, 2, widget = widget)))
+        assertTrue(
+            "at least 1x1" in
+                refusal(Placement(Container.HOME, 0, 0, 0, widget = Widget("w/.One", 0, 1)))
+        )
+        assertTrue(
+            "home screen only" in refusal(Placement(Container.DOCK, 0, 0, 0, widget = widget))
+        )
+        assertTrue(
+            "no provider" in refusal(Placement(Container.HOME, 0, 0, 0, widget = Widget(" ")))
+        )
+        assertTrue(
+            "no provider" in refusal(Placement(Container.HOME, 0, 0, 0, widget = Widget("plain")))
+        )
         assertTrue("no cells" in refusal(Placement(Container.DRAWER, 0, 0, 0, app = app)))
         assertTrue("exactly one" in refusal(Placement(Container.HOME, 0, 0, 0)))
+        assertTrue(
+            "exactly one" in refusal(Placement(Container.HOME, 0, 0, 0, app = app, widget = widget))
+        )
         assertTrue(
             "no such drawer folder" in refusal(Placement(Container.HOME, 0, 0, 0, drawerFolder = 0))
         )

@@ -5,7 +5,6 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.Dropped
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.RunwayDatabase
 import com.grayvines.runway.data.WorkspaceRepository
@@ -26,6 +25,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -77,28 +77,48 @@ class LayoutBackupTest {
     }
 
     @Test
-    fun `widgets on the device stay through a restore, with their pages, and are not built over`() =
+    fun `widgets travel by provider and span, rebinding where possible and leaving placeholders otherwise`() =
         runTest {
-            val layout = seed() // page 0: a folder at (1,0) and an app at (2,0)
-            repo.autoFill(emptyList(), columns = 3, pageRows = 1, dockSlots = 1)
-            repo.addPage(Container.HOME, 1)
-            repo.addPage(Container.HOME, 2)
-            assertNotNull(repo.addWidget(7, "w/.One", 0, 0, 0, 2, 1)) // over (0,0) and (1,0)
-            assertNotNull(repo.addWidget(8, "w/.Two", 2, 0, 0, 1, 1)) // on a page the file lacks
-
-            val restored = repo.restoreLayout(layout, apps.toSet())
-
-            assertEquals(Restored(placed = 3, skipped = 1, widgetsKept = 2), restored)
-            val pages = repo.observe(Container.HOME).first().pages
-            assertEquals(listOf(0, 1, 2), pages.map { it.index })
-            val first = pages[0].items
-            assertEquals(setOf(7), first.mapNotNull { it.appWidgetId }.toSet())
-            assertEquals(
-                listOf(2 to 0),
-                first.filter { it.kind == ItemKind.APP }.map { it.x to it.y },
+            seed()
+            assertNotNull(
+                repo.addWidget(7, "w/.Live", page = 1, x = 1, y = 0, spanX = 2, spanY = 1)
             )
-            assertEquals(emptyList<ItemEntity>(), first.filter { it.kind == ItemKind.FOLDER })
-            assertEquals(listOf(8), pages[2].items.map { it.appWidgetId })
+            val layout = repo.layoutBackup()
+            assertEquals(
+                listOf(Placement(Container.HOME, 1, 1, 0, widget = Widget("w/.Live", 2, 1))),
+                layout.placements.filter { it.widget != null },
+            )
+            // Another widget sits on the device before the restore; its host id is given back.
+            repo.addPage(Container.HOME, 2)
+            assertNotNull(repo.addWidget(8, "w/.Old", page = 2, x = 0, y = 0, spanX = 1, spanY = 1))
+            val deleted = mutableListOf<Int>()
+
+            val restored =
+                repo.restoreLayout(
+                    layout,
+                    apps.toSet(),
+                    bindWidget = { provider -> if (provider == "w/.Live") 42 else null },
+                    deleteWidget = deleted::add,
+                )
+
+            assertEquals(Restored(placed = 5, skipped = 0), restored)
+            assertEquals(listOf(7, 8), deleted)
+            assertEquals(layout, repo.layoutBackup())
+            val pages = repo.observe(Container.HOME).first().pages
+            assertEquals(listOf(0, 1), pages.map { it.index })
+            val live = pages[1].items.single { it.kind == ItemKind.WIDGET }
+            assertEquals(42, live.appWidgetId)
+            assertEquals("w/.Live", live.provider)
+            assertEquals(2 to 1, live.spanX to live.spanY)
+
+            // When the host cannot rebind the widget, the placement still lands, with no host id.
+            repo.restoreLayout(layout, apps.toSet())
+            val unbound =
+                repo.observe(Container.HOME).first().pages[1].items.single {
+                    it.kind == ItemKind.WIDGET
+                }
+            assertNull(unbound.appWidgetId)
+            assertEquals("w/.Live", unbound.provider)
         }
 
     @Test

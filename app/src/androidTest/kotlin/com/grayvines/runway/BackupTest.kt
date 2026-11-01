@@ -1,17 +1,26 @@
 package com.grayvines.runway
 
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import com.grayvines.runway.data.Container
+import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.clear
 import com.grayvines.runway.data.hideApp
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.unhideApp
+import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,6 +66,58 @@ class BackupTest : LauncherFixture() {
         assertEquals(setOf(hidden), runBlocking { graph.workspace.observeHiddenApps().first() })
         waitUntil(TIMEOUT_MS) {
             compose.activity.viewModel.state.value.drawerApps.none { it.ref == hidden }
+        }
+    }
+
+    @Test
+    fun restoringABackupRebindsAWidgetAndLeavesAPlaceholderWhereSetupIsNeeded() {
+        placeFixtureWidget(0, 0, provider = FIXTURE_WIDGET)
+        placeFixtureWidget(2, 0, provider = FIXTURE_SETUP_WIDGET)
+        awaitWidgetCell()
+        val backup = runBlocking { graph.backup.export() }
+
+        runBlocking { graph.workspace.clear() }
+        awaitGone(WIDGET_TAG)
+
+        val installed = runBlocking {
+            graph.appRepository.apps.first()
+        }
+            .mapTo(mutableSetOf()) { it.ref }
+        runBlocking { graph.backup.restore(backup, installed) }
+        try {
+            awaitWidgetCell()
+            val widgets = runBlocking {
+                graph.workspace
+                    .observe(Container.HOME)
+                    .first()
+                    .pages
+                    .first()
+                    .items
+                    .filter { it.kind == ItemKind.WIDGET }
+                    .associateBy { it.provider }
+            }
+            assertNotNull(widgets[FIXTURE_WIDGET.flattenToString()]?.appWidgetId)
+            assertNull(widgets[FIXTURE_SETUP_WIDGET.flattenToString()]?.appWidgetId)
+            assertTrue(
+                "the rebound widget's view is not on screen",
+                device.wait(Until.hasObject(By.text("Fixture widget")), TIMEOUT_MS),
+            )
+            compose
+                .onNode(
+                    hasText("Fixture") and hasAnyAncestor(hasTestTag(WIDGET_TAG)),
+                    useUnmergedTree = true,
+                )
+                .assertIsDisplayed()
+        } finally {
+            runBlocking {
+                graph.workspace
+                    .observe(Container.HOME)
+                    .first()
+                    .pages
+                    .flatMap { it.items }
+                    .mapNotNull { it.appWidgetId }
+                    .forEach(graph.widgets::deleteId)
+            }
         }
     }
 

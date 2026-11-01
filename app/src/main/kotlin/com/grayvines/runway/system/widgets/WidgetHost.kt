@@ -36,11 +36,14 @@ class WidgetProvider(
 
     /** The widget insists on its configuration activity before it can be shown. */
     val needsSetup: Boolean
-        get() =
-            info.configure != null &&
-                info.widgetFeatures and
-                    AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL == 0
+        get() = info.needsSetup
 }
+
+/** The widget insists on its configuration activity before it can be shown. */
+val AppWidgetProviderInfo.needsSetup: Boolean
+    get() =
+        configure != null &&
+            widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL == 0
 
 /**
  * The provider offers a setup screen that may be run again for a widget already placed, rather than
@@ -94,6 +97,26 @@ class WidgetHost(context: Context) {
         manager.bindAppWidgetIdIfAllowed(id, user, provider, null)
 
     /**
+     * Binds a fresh id to [provider] (a flattened component name) when it is installed, needs no
+     * setup screen of its own, and the system allows the bind without asking; null otherwise.
+     */
+    fun restore(provider: String): Int? {
+        val component = ComponentName.unflattenFromString(provider) ?: return null
+        val info =
+            userManager.userProfiles
+                .flatMap { manager.getInstalledProvidersForProfile(it) }
+                .firstOrNull { it.provider == component && !it.needsSetup }
+        if (info == null) return null
+        val id = allocateId()
+        return if (bind(id, component, info.profile)) {
+            id
+        } else {
+            deleteId(id)
+            null
+        }
+    }
+
+    /**
      * Starts the setup screen of the widget bound to [id] from [activity], which hears back in its
      * activity result under [requestCode]. Only the host may start it: the system hands the screen
      * a token for the id.
@@ -145,16 +168,6 @@ class WidgetHost(context: Context) {
             null
         }
 
-    /** The drawable as a bitmap no wider or taller than [maxPx], keeping its shape. */
-    private fun Drawable.toPicture(maxPx: Int): ImageBitmap? {
-        val w = intrinsicWidth
-        val h = intrinsicHeight
-        if (w <= 0 || h <= 0) return null
-        val scale = minOf(1f, maxPx.toFloat() / w, maxPx.toFloat() / h)
-        return toBitmap((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
-            .asImageBitmap()
-    }
-
     companion object {
         /** Never change: the ids in the database were allocated under it. */
         const val HOST_ID = 0x52574159 // "RWAY"
@@ -162,4 +175,14 @@ class WidgetHost(context: Context) {
         private const val PREVIEW_DP = 240
         private const val TAG = "Runway"
     }
+}
+
+/** The drawable as a bitmap no wider or taller than [maxPx], keeping its shape. */
+private fun Drawable.toPicture(maxPx: Int): ImageBitmap? {
+    val w = intrinsicWidth
+    val h = intrinsicHeight
+    if (w <= 0 || h <= 0) return null
+    val scale = minOf(1f, maxPx.toFloat() / w, maxPx.toFloat() / h)
+    return toBitmap((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
+        .asImageBitmap()
 }

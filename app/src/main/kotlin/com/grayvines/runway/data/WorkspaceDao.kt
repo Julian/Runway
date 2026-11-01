@@ -128,9 +128,6 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM items") suspend fun deleteAllItems()
 
-    @Query("DELETE FROM items WHERE kind != :kind")
-    suspend fun deleteItemsExceptKind(kind: ItemKind)
-
     @Query("DELETE FROM pages") suspend fun deleteAllPages()
 
     @Query("SELECT * FROM hidden_apps") fun observeHiddenApps(): Flow<List<HiddenAppEntity>>

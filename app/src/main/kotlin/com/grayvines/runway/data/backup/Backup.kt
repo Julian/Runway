@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 
 /**
  * Everything a fresh install needs to become this one again: the settings, and the layout as
- * placements of apps and folders. Widgets and shortcuts are not carried: their ids belong to the
+ * placements of apps, folders and widgets. Shortcuts are not carried: their ids belong to the
  * device they were made on. The file is JSON, so it can be read, kept and edited by hand.
  */
 @Serializable
@@ -47,35 +47,14 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
 /**
  * Throws [IllegalArgumentException], naming the first fault, for a layout no restore should try: a
  * cell off the grid [settings] describes, a page the file does not have, two things in one cell, a
- * placement that is not exactly one of an app, a folder or a drawer folder, a drawer folder index
- * there is no folder for, or a hidden app in a drawer folder. Checked whole before anything is
- * written, so a bad file changes nothing.
+ * placement that is not exactly one of an app, a folder, a drawer folder or a widget, a widget off
+ * the home screen or with no provider, a drawer folder index there is no folder for, or a hidden
+ * app in a drawer folder. Checked whole before anything is written, so a bad file changes nothing.
  */
 internal fun Layout.validate(settings: Settings) {
     require(homePages >= 0 && dockPages >= 0) { "negative page counts" }
     val cells = mutableSetOf<List<Int>>()
-    placements.forEachIndexed { i, p ->
-        val where = "placement ${i + 1} (${p.container} page ${p.page}, cell ${p.x},${p.y})"
-        val pages = if (p.container == Container.DOCK) dockPages else homePages
-        val (columns, rows) =
-            when (p.container) {
-                Container.HOME -> settings.columns to settings.pageRows
-                Container.DOCK -> settings.dockSlots to 1
-                Container.DRAWER ->
-                    throw IllegalArgumentException("$where: the drawer has no cells")
-            }
-        require(p.page in 0 until pages) { "$where: no such page" }
-        require(p.x in 0 until columns && p.y in 0 until rows) { "$where: off the grid" }
-        require(listOfNotNull(p.app, p.folder, p.drawerFolder).size == 1) {
-            "$where: must be exactly one of an app, a folder or a drawer folder"
-        }
-        p.drawerFolder?.let {
-            require(it in drawerFolders.indices) { "$where: no such drawer folder" }
-        }
-        require(cells.add(listOf(p.container.ordinal, p.page, p.x, p.y))) {
-            "$where: two things in one cell"
-        }
-    }
+    placements.forEachIndexed { i, p -> p.validate(i + 1, this, settings, cells) }
     val hidden = hiddenApps.orEmpty().toSet()
     drawerFolders.forEach { folder ->
         folder.apps
@@ -86,6 +65,46 @@ internal fun Layout.validate(settings: Settings) {
                 )
             }
     }
+}
+
+private fun Placement.validate(
+    number: Int,
+    layout: Layout,
+    settings: Settings,
+    cells: MutableSet<List<Int>>,
+) {
+    val where = "placement $number ($container page $page, cell $x,$y)"
+    val pages = if (container == Container.DOCK) layout.dockPages else layout.homePages
+    val (columns, rows) =
+        when (container) {
+            Container.HOME -> settings.columns to settings.pageRows
+            Container.DOCK -> settings.dockSlots to 1
+            Container.DRAWER -> throw IllegalArgumentException("$where: the drawer has no cells")
+        }
+    require(page in 0 until pages) { "$where: no such page" }
+    require(listOfNotNull(app, folder, drawerFolder, widget).size == 1) {
+        "$where: must be exactly one of an app, a folder, a drawer folder or a widget"
+    }
+    drawerFolder?.let {
+        require(it in layout.drawerFolders.indices) { "$where: no such drawer folder" }
+    }
+    widget?.validate(where, container)
+    val spanX = widget?.spanX ?: 1
+    val spanY = widget?.spanY ?: 1
+    require(x in 0..columns - spanX && y in 0..rows - spanY) { "$where: off the grid" }
+    for (cellY in y until y + spanY) {
+        for (cellX in x until x + spanX) {
+            require(cells.add(listOf(container.ordinal, page, cellX, cellY))) {
+                "$where: two things in one cell"
+            }
+        }
+    }
+}
+
+private fun Widget.validate(where: String, container: Container) {
+    require(container == Container.HOME) { "$where: widgets live on the home screen only" }
+    require(provider.isNotBlank() && '/' in provider) { "$where: widget has no provider" }
+    require(spanX >= 1 && spanY >= 1) { "$where: widget span must be at least 1x1" }
 }
 
 /** The pages of each container and what sits on them. */
@@ -104,8 +123,9 @@ data class Layout(
 )
 
 /**
- * One cell's content: an [app], a [folder] of apps of its own, or [drawerFolder], an index into
- * [Layout.drawerFolders], for a drawer folder placed in a cell as well.
+ * One cell's content: an [app], a [folder] of apps of its own, [drawerFolder], an index into
+ * [Layout.drawerFolders], for a drawer folder placed in a cell as well, or a [widget] spanning
+ * cells from this one.
  */
 @Serializable
 data class Placement(
@@ -116,6 +136,15 @@ data class Placement(
     val app: AppRef? = null,
     val folder: Folder? = null,
     @SerialName("drawer_folder") val drawerFolder: Int? = null,
+    val widget: Widget? = null,
+)
+
+/** A widget as a backup carries it: its provider component name and the cells it spans. */
+@Serializable
+data class Widget(
+    val provider: String,
+    @SerialName("span_x") val spanX: Int = 1,
+    @SerialName("span_y") val spanY: Int = 1,
 )
 
 /**
@@ -131,8 +160,4 @@ data class Folder(
 )
 
 /** How a restore went: the placements made, and the apps left out for not being installed. */
-/**
- * What a restore came to: [placed] placements written, [skipped] apps or placements left out, and
- * [widgetsKept] widgets already on the device left as they were (a backup carries none).
- */
-data class Restored(val placed: Int, val skipped: Int, val widgetsKept: Int = 0)
+data class Restored(val placed: Int, val skipped: Int)
