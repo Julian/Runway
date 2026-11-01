@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -120,16 +121,18 @@ fun WidgetCell(
     }
     val label = remember(info) { info.loadLabel(context.packageManager) }
     val size = SizeF(cell.width.value * item.spanX, cell.height.value * item.spanY)
-    AndroidView(
-        factory = { ctx ->
-            WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { frame = it }
-        },
-        update = { f ->
-            f.muted = framed
-            f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
-        },
-        modifier = cellModifier.semantics { contentDescription = label },
-    )
+    key(id) {
+        AndroidView(
+            factory = { ctx ->
+                WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { frame = it }
+            },
+            update = { f ->
+                f.muted = framed
+                f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
+            },
+            modifier = cellModifier.semantics { contentDescription = label },
+        )
+    }
 }
 
 /**

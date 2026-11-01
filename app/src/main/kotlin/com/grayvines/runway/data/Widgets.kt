@@ -67,6 +67,26 @@ suspend fun WorkspaceRepository.resizeWidget(id: Long, to: Footprint): Boolean =
     }
 }
 
+/**
+ * Replaces the host ids of placed widgets according to [remapped] (old id to new id), as a system
+ * restore hands them over, and returns the new ids that matched no placement so the caller can
+ * release them from the host.
+ */
+suspend fun WorkspaceRepository.remapWidgets(remapped: Map<Int, Int>): Set<Int> {
+    if (remapped.isEmpty()) return emptySet()
+    return write {
+        val used = mutableSetOf<Int>()
+        // Read before any row is written: an old id in one row may be the new id of another, and a
+        // query per old id would then remap the first row twice.
+        for (item in dao.itemsOfKind(ItemKind.WIDGET)) {
+            val newId = item.appWidgetId?.let(remapped::get) ?: continue
+            dao.updateItem(item.copy(appWidgetId = newId))
+            used += newId
+        }
+        remapped.values.toSet() - used
+    }
+}
+
 private fun ItemEntity.footprint(): Footprint? {
     val cellX = x ?: return null
     val cellY = y ?: return null

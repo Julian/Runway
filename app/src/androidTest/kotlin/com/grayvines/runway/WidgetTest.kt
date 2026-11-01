@@ -1,6 +1,8 @@
 package com.grayvines.runway
 
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.Intent
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
@@ -18,12 +20,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.system.widgets.WidgetHost
+import com.grayvines.runway.system.widgets.WidgetRestoredReceiver
 import com.grayvines.runway.ui.drawer.DRAWER_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.shade.SHADE_HINT_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -176,6 +181,57 @@ class WidgetTest : LauncherFixture() {
         }
         assertTrue("the widget's app never opened", opened.isSuccess)
         device.pressBack()
+    }
+
+    @Test
+    fun aRestoredWidgetTakesItsNewHostIdAndGivesBackUnusedOnes() {
+        val receivers =
+            app.packageManager.queryBroadcastReceivers(
+                Intent(AppWidgetManager.ACTION_APPWIDGET_HOST_RESTORED).setPackage(app.packageName),
+                0,
+            )
+        assertEquals(
+            listOf(WidgetRestoredReceiver::class.java.name),
+            receivers.map { it.activityInfo.name },
+        )
+        val itemId = placeFixtureWidget(0, 0, bound = false)
+        awaitWidgetCell()
+        val oldId = runBlocking {
+            graph.workspace
+                .observe(Container.HOME)
+                .first()
+                .pages
+                .first()
+                .items
+                .single { it.id == itemId }
+                .appWidgetId!!
+        }
+        val newId = allocateFixtureWidget()
+        val orphanId = allocateFixtureWidget()
+        assertNotNull(graph.widgets.info(orphanId))
+
+        // Another host's restore leaves ours alone.
+        WidgetRestoredReceiver()
+            .onReceive(
+                app,
+                Intent(AppWidgetManager.ACTION_APPWIDGET_HOST_RESTORED)
+                    .putExtra(AppWidgetManager.EXTRA_HOST_ID, 0)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_OLD_IDS, intArrayOf(oldId))
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(newId)),
+            )
+        assertNotNull(graph.widgets.info(orphanId))
+
+        WidgetRestoredReceiver()
+            .onReceive(
+                app,
+                Intent(AppWidgetManager.ACTION_APPWIDGET_HOST_RESTORED)
+                    .putExtra(AppWidgetManager.EXTRA_HOST_ID, WidgetHost.HOST_ID)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_OLD_IDS, intArrayOf(oldId, -1))
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(newId, orphanId)),
+            )
+        waitUntil(TIMEOUT_MS) {
+            device.hasObject(By.text(FIXTURE_WIDGET_TEXT)) && graph.widgets.info(orphanId) == null
+        }
     }
 
     private fun widgetCentre() =

@@ -373,6 +373,25 @@ open class LauncherFixture {
     }
 
     /**
+     * Allocates a host id for this test and, when [bound], binds [provider] to it; the id is
+     * released after the test.
+     */
+    protected fun allocateFixtureWidget(
+        bound: Boolean = true,
+        provider: ComponentName = FIXTURE_WIDGET,
+    ): Int {
+        allowWidgetBinding(true)
+        val id = graph.widgets.allocateId().also { boundIds += it }
+        if (bound) {
+            assertTrue(
+                "could not bind $provider",
+                graph.widgets.bind(id, provider, Process.myUserHandle()),
+            )
+        }
+        return id
+    }
+
+    /**
      * Binds one of the fixture's widgets ([provider]) the way the picker does and puts it over
      * [spanX] × [spanY] cells of the first page from ([x], [y]), whose icons make way; the
      * placement's id. Not [bound], the id has no provider behind it, as when the widget's app has
@@ -386,14 +405,7 @@ open class LauncherFixture {
         bound: Boolean = true,
         provider: ComponentName = FIXTURE_WIDGET,
     ): Long {
-        allowWidgetBinding(true)
-        val id = graph.widgets.allocateId().also { boundIds += it }
-        if (bound) {
-            assertTrue(
-                "could not bind $provider",
-                graph.widgets.bind(id, provider, Process.myUserHandle()),
-            )
-        }
+        val id = allocateFixtureWidget(bound, provider)
         return runBlocking {
             val page = graph.workspace.observe(Container.HOME).first().pages.first()
             page.items

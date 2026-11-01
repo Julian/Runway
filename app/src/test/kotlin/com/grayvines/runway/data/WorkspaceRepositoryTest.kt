@@ -488,6 +488,47 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `remapWidgets updates matching widget ids and returns unused new ids`() = runTest {
+        repo.ensureInitialised()
+        repo.addApp(AppRef("pkg/.Main", 0), Container.HOME, 0, 0, 0)
+        val first = repo.addWidget(10, "pkg/.One", page = 0, x = 1, y = 0, spanX = 2, spanY = 1)!!
+        val second = repo.addWidget(20, "pkg/.Two", page = 0, x = 0, y = 1, spanX = 1, spanY = 2)!!
+        val kept = repo.addWidget(30, "pkg/.Three", page = 0, x = 2, y = 1, spanX = 1, spanY = 1)!!
+        val unbound =
+            repo.addWidget(null, "pkg/.Four", page = 0, x = 3, y = 1, spanX = 1, spanY = 1)!!
+
+        assertEquals(emptySet<Int>(), repo.remapWidgets(emptyMap()))
+        val unused = repo.remapWidgets(mapOf(10 to 100, 20 to 200, 99 to 999))
+        assertEquals(setOf(999), unused)
+
+        val byId = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+        assertEquals(100, byId.getValue(first).appWidgetId)
+        assertEquals("pkg/.One", byId.getValue(first).provider)
+        assertEquals(200, byId.getValue(second).appWidgetId)
+        assertEquals(30, byId.getValue(kept).appWidgetId)
+        assertEquals(null, byId.getValue(unbound).appWidgetId)
+    }
+
+    @Test
+    fun `remapWidgets remaps chained and swapped widget ids once each`() = runTest {
+        repo.ensureInitialised()
+        val first = repo.addWidget(10, "pkg/.One", page = 0, x = 0, y = 0, spanX = 1, spanY = 1)!!
+        val second = repo.addWidget(20, "pkg/.Two", page = 0, x = 1, y = 0, spanX = 1, spanY = 1)!!
+
+        assertEquals(emptySet<Int>(), repo.remapWidgets(mapOf(10 to 20, 20 to 30)))
+        val afterChain =
+            repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+        assertEquals(20, afterChain.getValue(first).appWidgetId)
+        assertEquals(30, afterChain.getValue(second).appWidgetId)
+
+        assertEquals(emptySet<Int>(), repo.remapWidgets(mapOf(20 to 30, 30 to 20)))
+        val afterSwap =
+            repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+        assertEquals(30, afterSwap.getValue(first).appWidgetId)
+        assertEquals(20, afterSwap.getValue(second).appWidgetId)
+    }
+
+    @Test
     fun `retainApps drops placements of apps gone from a reported profile only`() = runTest {
         val work = AppRef("work/.Main", 10)
         repo.autoFill(apps(3) + work, columns = 3, pageRows = 1, dockSlots = 1)
