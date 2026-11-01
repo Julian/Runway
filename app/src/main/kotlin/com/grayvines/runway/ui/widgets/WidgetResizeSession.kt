@@ -29,7 +29,7 @@ import com.grayvines.runway.ui.home.HomeState
 @Stable
 class WidgetResizeSession(
     private val shownOf: State<Long?>,
-    val onResize: (itemId: Long, to: Footprint) -> Unit,
+    val onResize: (itemId: Long, to: Footprint, displaced: Map<Long, Footprint>) -> Unit,
     val onEdit: (HomeItem) -> Unit,
     val onRemove: (HomeItem) -> Unit,
     val onDismiss: () -> Unit,
@@ -47,6 +47,13 @@ class WidgetResizeSession(
     var preview by mutableStateOf<Pair<Long, Footprint>?>(null)
         internal set
 
+    /**
+     * Where single-cell neighbours pushed aside by [preview] go while the handle is pulled, and
+     * after, until the layout shows the result.
+     */
+    var displaced by mutableStateOf<Map<Long, Footprint>>(emptyMap())
+        internal set
+
     /** A handle is under a finger: the preview is the pull's, whether or not it changes. */
     var pulling by mutableStateOf(false)
         internal set
@@ -60,9 +67,17 @@ class WidgetResizeSession(
 
     fun frames(itemId: Long) = shown == itemId
 
+    fun resizing(itemId: Long) = preview?.first == itemId
+
     fun anchorFor(itemId: Long): Rect? = anchor?.takeIf { it.first == itemId }?.second
 
-    fun previewFor(itemId: Long): Footprint? = preview?.takeIf { it.first == itemId }?.second
+    fun previewFor(itemId: Long): Footprint? =
+        preview?.takeIf { it.first == itemId }?.second ?: displaced[itemId]
+
+    internal fun clearPreview() {
+        preview = null
+        displaced = emptyMap()
+    }
 
     /** The framed widget's cell is at [bounds] (root px); anything else's is not of interest. */
     fun positioned(itemId: Long, bounds: Rect) {

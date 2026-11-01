@@ -43,11 +43,16 @@ suspend fun WorkspaceRepository.addWidget(
 }
 
 /**
- * The widget placed as [id] now covers [to] on its page. False, and nothing changed, when it is not
- * a placed widget any more or another item on the page is under [to]: the frame was pulled over a
- * picture of the layout that has changed since.
+ * The widget placed as [id] now covers [to] on its page, after moving aside the neighbours it
+ * [displaced]. False, and nothing changed, when it is not a placed widget any more, a displaced
+ * neighbour has left the page, or another item on the page is under [to]: the frame was pulled over
+ * a picture of the layout that has changed since.
  */
-suspend fun WorkspaceRepository.resizeWidget(id: Long, to: Footprint): Boolean = write {
+suspend fun WorkspaceRepository.resizeWidget(
+    id: Long,
+    to: Footprint,
+    displaced: Map<Long, Footprint> = emptyMap(),
+): Boolean = write {
     val item = dao.item(id)
     val page = item?.pageIndex
     if (item == null || item.kind != ItemKind.WIDGET || page == null) {
@@ -58,12 +63,14 @@ suspend fun WorkspaceRepository.resizeWidget(id: Long, to: Footprint): Boolean =
                 other.id != id &&
                     other.container == item.container &&
                     other.pageIndex == page &&
-                    other.footprint()?.overlaps(to) == true
+                    (displaced[other.id] ?: other.footprint())?.overlaps(to) == true
             }
-        if (!taken) {
+        if (taken || !makeRoom(item.container, page, displaced, mover = id)) {
+            false
+        } else {
             dao.updateItem(item.copy(x = to.x, y = to.y, spanX = to.width, spanY = to.height))
+            true
         }
-        !taken
     }
 }
 

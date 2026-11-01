@@ -40,10 +40,10 @@ class WidgetResizeHost(
         _shown.value = null
     }
 
-    /** A handle was let go with the widget over [to]. */
-    fun resize(itemId: Long, to: Footprint) {
+    /** A handle was let go with the widget over [to], pushing [displaced] aside. */
+    fun resize(itemId: Long, to: Footprint, displaced: Map<Long, Footprint> = emptyMap()) {
         scope.writing("resize the widget") {
-            check(graph.workspace.resizeWidget(itemId, to)) {
+            check(graph.workspace.resizeWidget(itemId, to, displaced)) {
                 "the widget or its page changed under the frame; nothing saved"
             }
         }

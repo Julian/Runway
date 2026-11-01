@@ -18,6 +18,17 @@ object LayoutEngine {
     }
 
     /**
+     * New footprints for the single-cell items among [others] that must move so [target] can take
+     * its cells, or null if that is impossible (off-grid, blocked by a multi-cell item, or no room
+     * left for the displaced items).
+     */
+    fun displaceFor(
+        grid: GridSize,
+        others: List<Placed>,
+        target: Footprint,
+    ): Map<Long, Footprint>? = displaceFor(grid, others, movingId = -1, target = target)
+
+    /**
      * New footprints for the single-cell items that must move so [movingId] can land on [target],
      * or null if the drop is impossible (off-grid, or blocked by a multi-cell item).
      */

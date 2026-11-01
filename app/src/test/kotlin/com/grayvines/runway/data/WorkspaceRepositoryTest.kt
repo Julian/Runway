@@ -529,6 +529,48 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
+    fun `resizeWidget grows the widget and moves its displaced neighbours aside together`() =
+        runTest {
+            repo.ensureInitialised()
+            val widgetId =
+                repo.addWidget(7, "pkg/.Widget", page = 0, x = 0, y = 0, spanX = 2, spanY = 1)!!
+            repo.addApp(apps(1).single(), Container.HOME, page = 0, x = 2, y = 0)
+            val neighbour =
+                repo.observe(Container.HOME).first().pages.single().items.single {
+                    it.kind == ItemKind.APP
+                }
+
+            // Non-widgets and cells already taken without displacement are refused.
+            assertFalse(repo.resizeWidget(neighbour.id, Footprint(2, 0, 2, 1)))
+            assertFalse(repo.resizeWidget(widgetId, Footprint(0, 0, 3, 1)))
+            // A neighbour that is not on the page refuses the resize too.
+            assertFalse(
+                repo.resizeWidget(
+                    widgetId,
+                    Footprint(0, 0, 3, 1),
+                    displaced = mapOf(neighbour.id to Footprint(3, 0), 99L to Footprint(0, 1)),
+                )
+            )
+            // With the neighbour displaced to a free cell, both move in one transaction.
+            assertTrue(
+                repo.resizeWidget(
+                    widgetId,
+                    Footprint(0, 0, 3, 1),
+                    displaced = mapOf(neighbour.id to Footprint(3, 0)),
+                )
+            )
+            val byId =
+                repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+            val resized = byId.getValue(widgetId)
+            assertEquals(
+                Footprint(0, 0, 3, 1),
+                Footprint(resized.x!!, resized.y!!, resized.spanX, resized.spanY),
+            )
+            val moved = byId.getValue(neighbour.id)
+            assertEquals(3 to 0, moved.x to moved.y)
+        }
+
+    @Test
     fun `retainApps drops placements of apps gone from a reported profile only`() = runTest {
         val work = AppRef("work/.Main", 10)
         repo.autoFill(apps(3) + work, columns = 3, pageRows = 1, dockSlots = 1)

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.grayvines.runway.appGraph
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
+import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.widgets.isReconfigurable
 import com.grayvines.runway.ui.home.HomeItem
@@ -238,10 +239,10 @@ private fun Reflected(item: HomeItem, session: WidgetResizeSession) {
     val pulling = session.pulling
     LaunchedEffect(preview, item.footprint, pulling) {
         if (preview != null && preview == item.footprint) {
-            session.preview = null
+            session.clearPreview()
         } else if (preview != null && !pulling) {
             delay(REFLECT_TIMEOUT_MS)
-            if (session.previewFor(item.id) == preview) session.preview = null
+            if (session.previewFor(item.id) == preview) session.clearPreview()
         }
     }
 }
@@ -257,7 +258,7 @@ private class Pull(
     private val grid: GridSize,
     private val cellPx: Size,
 ) {
-    /** The page's other items, which the widget may not grow over. */
+    /** The page's other items; single-cell ones with somewhere to go are pushed aside. */
     var others: List<Placed> = emptyList()
 
     /** The cells the widget has now, previewed or stored. */
@@ -310,7 +311,9 @@ private class Pull(
         pulled += outward
         px = pulled.coerceIn(within.start, within.endInclusive)
         cells = cellsPulled(px, cell, cells)
-        session.preview = itemId to resized(origin, e, cells, limits, grid, others)
+        val to = resized(origin, e, cells, limits, grid, others)
+        session.preview = itemId to to
+        session.displaced = LayoutEngine.displaceFor(grid, others, to).orEmpty()
         session.outline = outline(pulled)
     }
 
@@ -318,10 +321,11 @@ private class Pull(
         session.pulling = false
         session.outline = null
         val to = session.previewFor(itemId)
+        val displaced = session.displaced
         edge = null
         px = 0f
         pulled = 0f
-        if (to != null && to != origin) session.onResize(itemId, to)
+        if (to != null && to != origin) session.onResize(itemId, to, displaced)
     }
 
     /** The outline as drawn: the widget's cell with the pulled edge as far as it can go. */

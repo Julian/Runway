@@ -327,7 +327,7 @@ private fun rememberCellDrag(
             settlingHere = derivedStateOf { drag?.takeIf { it.settling?.itemId == item.id } },
             lifted = derivedStateOf { item.id == drag?.draggedId },
             receiving = derivedStateOf { item.id == drag?.foldTargetId },
-            resizing = derivedStateOf { resize?.previewFor(item.id) != null },
+            resizing = derivedStateOf { resize?.resizing(item.id) == true },
             framed = derivedStateOf { resize?.frames(item.id) == true },
         )
     }

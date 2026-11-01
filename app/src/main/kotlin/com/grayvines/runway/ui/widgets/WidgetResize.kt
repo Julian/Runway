@@ -74,9 +74,9 @@ private fun mostCells(maxDp: Float, cellDp: Float, cells: Int) =
 
 /**
  * [current] with its [edge] pulled [cells] outward (inward when negative), as far as that can go:
- * within [limits], inside [grid], and over no cell of [others]. A pull past what is possible stops
- * where it must, so the widget grows as far as it can toward the finger; one that cannot move at
- * all leaves the footprint as it is.
+ * within [limits], inside [grid], and over only such of [others] as can make way on the page. A
+ * pull past what is possible stops where it must, so the widget grows as far as it can toward the
+ * finger; one that cannot move at all leaves the footprint as it is.
  */
 fun resized(
     current: Footprint,
@@ -118,7 +118,7 @@ fun reach(
 private fun Footprint.fits(limits: ResizeLimits, grid: GridSize, others: List<Placed>) =
     width in limits.minWidth..limits.maxWidth &&
         height in limits.minHeight..limits.maxHeight &&
-        LayoutEngine.canPlace(grid, others, this)
+        LayoutEngine.displaceFor(grid, others, this) != null
 
 /** This footprint with [edge] moved [by] cells outward, or null when that leaves no cell. */
 private fun Footprint.pulled(edge: Edge, by: Int): Footprint? {

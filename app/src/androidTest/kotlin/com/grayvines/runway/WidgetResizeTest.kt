@@ -131,11 +131,40 @@ class WidgetResizeTest : LauncherFixture() {
     }
 
     @Test
-    fun aPulledHandleStopsAtANeighbour() {
-        // Small cells, so the provider's largest size is several of them and the neighbour, not
-        // that, is what stops the pull.
+    fun pullingAHandleIntoANeighbourPushesItAside() {
         val grid = useGrid(columns = 10, rows = 7)
+        val neighbour = labelAtHomeCell(2, 0)
         placeFixtureWidget(0, 0) // (2, 0) stays the seed's icon
+        clearHomeCells(3 to 0)
+        awaitWidgetCell()
+        holdWidget()
+        release()
+        val start = handle("Right edge").boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(start)
+            var p = start
+            repeat(DRAG_STEPS) {
+                p += Offset(grid.cellWidth() / DRAG_STEPS, 0f)
+                moveTo(p)
+                advanceEventTime(DRAG_STEP_MS)
+            }
+        }
+        // While the handle is held, the neighbour has already slid to the nearest free cell.
+        waitUntil {
+            grid.cellAt(cellIcon(neighbour).fetchSemanticsNode().boundsInRoot.center) == 3 to 0
+        }
+        compose.onRoot().performTouchInput { up() }
+        awaitWidgetSize(3 to 1)
+        assertEquals(3 to 0, homeCellOf(neighbour))
+    }
+
+    @Test
+    fun aPulledHandleStopsAtANeighbour() {
+        // Small cells, so the provider's largest size is several of them and the two-cell
+        // neighbour, not that, is what stops the pull.
+        val grid = useGrid(columns = 10, rows = 7)
+        placeFixtureWidget(0, 0)
+        placeFixtureWidget(2, 0)
         awaitWidgetCell()
         holdWidget()
         release()
@@ -152,7 +181,7 @@ class WidgetResizeTest : LauncherFixture() {
         // The cell would already be drawn at the pulled size were the pull taken, and the outline
         // (the handle rides its edge) stops where the widget does rather than following the finger
         // over the neighbour.
-        val shown = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot
+        val shown = compose.onAllNodesWithTag(WIDGET_TAG)[0].fetchSemanticsNode().boundsInRoot
         assertTrue("drawn ${shown.width} wide", abs(shown.width - grid.cellWidth() * 2) < 2f)
         val edge = handle("Right edge").boundsInRoot.center.x
         assertTrue(
@@ -310,7 +339,8 @@ class WidgetResizeTest : LauncherFixture() {
 
     /** A long press on the widget, finger left down; the frame is up when this returns. */
     private fun holdWidget() {
-        val centre = compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
+        val centre =
+            compose.onAllNodesWithTag(WIDGET_TAG)[0].fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput { down(centre) }
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
         waitUntil {
@@ -355,7 +385,7 @@ class WidgetResizeTest : LauncherFixture() {
             }
     }
 
-    private fun widget(): ItemEntity = widgets().single()
+    private fun widget(): ItemEntity = widgets().first()
 
     private companion object {
         /** The fixture widget's maxResizeWidth. */

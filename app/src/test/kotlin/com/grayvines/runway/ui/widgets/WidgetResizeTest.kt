@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.widgets
 
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
+import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -72,10 +73,28 @@ class WidgetResizeTest {
     }
 
     @Test
-    fun `a pull stops at a neighbour, the grid's edge and the largest size`() {
+    fun `a pull pushes a single-cell neighbour aside when the page has room, and stops when it does not`() {
         val at = Footprint(1, 1, 1, 1)
-        val neighbour = listOf(Placed(9, Footprint(4, 1)))
-        assertEquals(Footprint(1, 1, 3, 1), resized(at, Edge.RIGHT, 4, both, grid, neighbour))
+        val icon = listOf(Placed(9, Footprint(2, 1)))
+        val grown = resized(at, Edge.RIGHT, 2, both, grid, icon)
+        assertEquals(Footprint(1, 1, 3, 1), grown)
+        assertEquals(mapOf(9L to Footprint(2, 0)), LayoutEngine.displaceFor(grid, icon, grown))
+
+        // On a 4x1 grid with only one free cell, the first neighbour takes that cell and the
+        // second has nowhere to go.
+        val row = GridSize(4, 1)
+        val twoIcons = listOf(Placed(8, Footprint(1, 0)), Placed(9, Footprint(2, 0)))
+        assertEquals(
+            Footprint(0, 0, 2, 1),
+            resized(Footprint(0, 0, 1, 1), Edge.RIGHT, 2, both, row, twoIcons),
+        )
+    }
+
+    @Test
+    fun `a pull stops at a multi-cell neighbour, the grid's edge and the largest size`() {
+        val at = Footprint(1, 1, 1, 1)
+        val widget = listOf(Placed(9, Footprint(4, 1, 1, 2)))
+        assertEquals(Footprint(1, 1, 3, 1), resized(at, Edge.RIGHT, 4, both, grid, widget))
         assertEquals(Footprint(0, 1, 2, 1), resized(at, Edge.LEFT, 3, both, grid, emptyList()))
         assertEquals(Footprint(1, 1, 1, 3), resized(at, Edge.BOTTOM, 5, both, grid, emptyList()))
     }
@@ -83,11 +102,16 @@ class WidgetResizeTest {
     @Test
     fun `the reach of an edge is as far as the neighbours, the grid and the sizes allow, both ways`() {
         val at = Footprint(1, 1, 2, 1)
-        val neighbour = listOf(Placed(9, Footprint(4, 1)))
+        val widget = listOf(Placed(9, Footprint(4, 1, 1, 2)))
         assertEquals(
             -1..1,
-            reach(at, Edge.RIGHT, both, grid, neighbour),
-        ) // one cell to the neighbour
+            reach(at, Edge.RIGHT, both, grid, widget),
+        ) // one cell to the widget neighbour
+        val icon = listOf(Placed(9, Footprint(3, 1)))
+        assertEquals(
+            -1..2,
+            reach(at, Edge.RIGHT, both, grid, icon),
+        ) // pushes the single-cell neighbour aside up to maxWidth
         assertEquals(-1..1, reach(at, Edge.LEFT, both, grid, emptyList())) // one cell to the grid
         assertEquals(0..2, reach(at, Edge.BOTTOM, both, grid, emptyList())) // the largest height
         assertEquals(0..0, reach(at, Edge.RIGHT, both.copy(horizontal = false), grid, emptyList()))
@@ -98,7 +122,7 @@ class WidgetResizeTest {
         val at = Footprint(0, 0, 2, 1)
         assertEquals(at, resized(at, Edge.LEFT, 2, both, grid, emptyList()))
         assertEquals(at, resized(at, Edge.TOP, 1, both, grid, emptyList()))
-        val blocked = listOf(Placed(9, Footprint(2, 0)))
+        val blocked = listOf(Placed(9, Footprint(2, 0, 2, 1)))
         assertEquals(at, resized(at, Edge.RIGHT, 1, both, grid, blocked))
     }
 
