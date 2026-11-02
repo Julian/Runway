@@ -1,15 +1,19 @@
 package com.grayvines.runway
 
+import android.app.Instrumentation
+import android.content.Intent
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.settings.Settings
@@ -20,10 +24,12 @@ import com.grayvines.runway.ui.home.SEARCH_MENU_TAG
 import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -98,6 +104,52 @@ class LauncherShellTest : LauncherFixture() {
             "${target!!.label} did not come to the front",
             device.wait(Until.hasObject(By.pkg(target.packageName)), TIMEOUT_MS),
         )
+        sendHomeIntent()
+        waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
+    }
+
+    @Test
+    fun holdingTheSearchBarOpensTheTargetAppsFrontPage() {
+        val target =
+            graph.searchTargets.handlers().firstOrNull {
+                app.packageManager.getLaunchIntentForPackage(it.packageName) != null
+            }
+        assumeTrue(NO_HANDLER, target != null)
+        target!!
+        runBlocking { graph.settings.update { it.copy(searchTarget = target.packageName) } }
+        waitUntil(TIMEOUT_MS) {
+            compose
+                .onAllNodesWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .any { it.config[SemanticsProperties.ContentDescription] == listOf(target.label) }
+        }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val launched = AtomicReference<Intent?>()
+        val monitor =
+            object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    launched.set(intent)
+                    return null
+                }
+            }
+        instrumentation.addMonitor(monitor)
+        try {
+            compose.onNodeWithTag(SEARCH_BAR_TAG).performTouchInput { longClick() }
+            assertTrue(
+                "${target.label} did not come to the front",
+                device.wait(Until.hasObject(By.pkg(target.packageName)), TIMEOUT_MS),
+            )
+            val intent = launched.get()
+            assertEquals(Intent.ACTION_MAIN, intent?.action)
+            assertTrue(intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true)
+            assertEquals(
+                target.packageName,
+                intent?.`package` ?: intent?.component?.packageName,
+            )
+            assertNull(intent?.getStringExtra("open_to_search"))
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
         sendHomeIntent()
         waitUntil(TIMEOUT_MS) { icon(firstHomeApp).isDisplayedOrFalse() }
     }

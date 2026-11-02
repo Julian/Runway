@@ -66,7 +66,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
     }
 
     private val caughtUp = Animatable(0f)
-    private var heightPx = 0f
+    private var heightPx by mutableFloatStateOf(0f)
 
     /**
      * Of the screen: the drawer showing when the pull began, and what it must gain to be at the

@@ -145,6 +145,34 @@ class BackupTest {
         )
     }
 
+    @Test
+    fun `refuses negative or excessive page counts`() {
+        assertTrue(
+            "negative page counts" in
+                assertThrows(IllegalArgumentException::class.java) {
+                        Layout(-1, 1, emptyList()).validate(settings)
+                    }
+                    .message
+                    .orEmpty()
+        )
+        assertTrue(
+            "too many pages" in
+                assertThrows(IllegalArgumentException::class.java) {
+                        Layout(MAX_PAGES + 1, 1, emptyList()).validate(settings)
+                    }
+                    .message
+                    .orEmpty()
+        )
+        assertTrue(
+            "too many pages" in
+                assertThrows(IllegalArgumentException::class.java) {
+                        Layout(1, MAX_PAGES + 1, emptyList()).validate(settings)
+                    }
+                    .message
+                    .orEmpty()
+        )
+    }
+
     private fun place(page: Int, x: Int, y: Int, app: AppRef) =
         Placement(Container.HOME, page, x, y, app = app)
 

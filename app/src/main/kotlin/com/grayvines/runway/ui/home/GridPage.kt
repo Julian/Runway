@@ -12,7 +12,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -35,7 +34,6 @@ import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -76,36 +74,33 @@ internal fun GridPage(
     val density = LocalDensity.current
     val cellW = with(density) { cell.width.roundToPx() }
     val cellH = with(density) { cell.height.roundToPx() }
-    // The page's own long press (on empty space) takes the same hold as an icon's lift.
-    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        GridLayout(items, cellW, cellH, onHoldEmpty, modifier.outlines(landing, cellW, cellH)) {
-            items.forEach { item ->
-                key(item.id) {
-                    val cellDrag = rememberCellDrag(item, drag, resize)
-                    val settlingHere = cellDrag.settlingHere
-                    val placement = Modifier.then(rememberCellPlacement(cellDrag, cellW, cellH))
-                    if (item.kind == ItemKind.WIDGET) {
-                        WidgetCell(
-                            item,
-                            cell,
-                            modifier = placement,
-                            drag = handlersFor(item),
-                            session = drag,
-                            lifted = cellDrag.lifted || settlingHere != null,
-                            settlingHere = settlingHere,
-                            framedBy = resize?.takeIf { cellDrag.framed },
-                        )
-                    } else {
-                        IconCell(
-                            item,
-                            cellDrag,
-                            iconSize,
-                            labels,
-                            onLaunch,
-                            handlersFor(item),
-                            placement,
-                        )
-                    }
+    GridLayout(items, cellW, cellH, onHoldEmpty, modifier.outlines(landing, cellW, cellH)) {
+        items.forEach { item ->
+            key(item.id) {
+                val cellDrag = rememberCellDrag(item, drag, resize)
+                val settlingHere = cellDrag.settlingHere
+                val placement = Modifier.then(rememberCellPlacement(cellDrag, cellW, cellH))
+                if (item.kind == ItemKind.WIDGET) {
+                    WidgetCell(
+                        item,
+                        cell,
+                        modifier = placement,
+                        drag = handlersFor(item),
+                        session = drag,
+                        lifted = cellDrag.lifted || settlingHere != null,
+                        settlingHere = settlingHere,
+                        framedBy = resize?.takeIf { cellDrag.framed },
+                    )
+                } else {
+                    IconCell(
+                        item,
+                        cellDrag,
+                        iconSize,
+                        labels,
+                        onLaunch,
+                        handlersFor(item),
+                        placement,
+                    )
                 }
             }
         }

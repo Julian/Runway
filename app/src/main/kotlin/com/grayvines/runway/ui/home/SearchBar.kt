@@ -1,6 +1,6 @@
 package com.grayvines.runway.ui.home
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,8 +48,9 @@ private const val EDGE_OUTLINE_ALPHA = 0.9f
 
 /**
  * A transparent bar: a magnifying glass, the word "Search", and a menu on the far side that opens
- * the home menu. A tap on the bar hands off to the search app; the glass is described by that app's
- * name, so what a tap does is said out loud and can be checked.
+ * the home menu. A tap on the bar hands off to the search app; a long press opens its front page;
+ * the glass is described by that app's name, so what a tap does is said out loud and can be
+ * checked.
  *
  * The bar's row is out of the grid, so a widget carried or resized against it stops with nothing to
  * show why: while [pressedBy] (root px) reaches into the row, the row is outlined as the edge the
@@ -60,6 +61,7 @@ fun SearchBar(
     rowHeight: Dp,
     target: SearchTarget?,
     onSearch: () -> Unit,
+    onLongClick: () -> Unit,
     /** The three dots were tapped; where they are (root px), for a menu to sit under. */
     onMenu: (Bounds) -> Unit,
     modifier: Modifier = Modifier,
@@ -74,20 +76,7 @@ fun SearchBar(
                 .fillMaxWidth()
                 .height(rowHeight)
                 .onGloballyPositioned { bounds = it.boundsInRoot() }
-                .drawBehind {
-                    if (pressed) {
-                        val corner = CornerRadius(EDGE_CORNER.toPx())
-                        drawRoundRect(
-                            Color.White.copy(alpha = EDGE_FILL_ALPHA),
-                            cornerRadius = corner,
-                        )
-                        drawRoundRect(
-                            Color.White.copy(alpha = EDGE_OUTLINE_ALPHA),
-                            cornerRadius = corner,
-                            style = Stroke(EDGE_STROKE.toPx()),
-                        )
-                    }
-                }
+                .edgeOutline { pressed }
                 .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -96,9 +85,11 @@ fun SearchBar(
             glassDescription = target?.label,
             modifier =
                 Modifier.clip(CircleShape)
-                    .clickable(
+                    .combinedClickable(
                         onClickLabel = target?.let { "Search with ${it.label}" } ?: "Search",
                         role = Role.Button,
+                        onLongClickLabel = target?.let { "Open ${it.label}" },
+                        onLongClick = onLongClick,
                         onClick = onSearch,
                     )
                     .testTag(SEARCH_BAR_TAG),
@@ -111,11 +102,29 @@ fun SearchBar(
             )
             var dots by remember { mutableStateOf<LayoutCoordinates?>(null) }
             IconButton(
-                onClick = { onMenu(dots?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)) },
+                onClick = {
+                    onMenu(dots?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
+                },
                 modifier = Modifier.onGloballyPositioned { dots = it }.testTag(SEARCH_MENU_TAG),
             ) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Runway menu", tint = ink.color)
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = "Runway menu",
+                    tint = ink.color,
+                )
             }
         }
+    }
+}
+
+private fun Modifier.edgeOutline(pressed: () -> Boolean): Modifier = drawBehind {
+    if (pressed()) {
+        val corner = CornerRadius(EDGE_CORNER.toPx())
+        drawRoundRect(Color.White.copy(alpha = EDGE_FILL_ALPHA), cornerRadius = corner)
+        drawRoundRect(
+            Color.White.copy(alpha = EDGE_OUTLINE_ALPHA),
+            cornerRadius = corner,
+            style = Stroke(EDGE_STROKE.toPx()),
+        )
     }
 }

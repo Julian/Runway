@@ -142,9 +142,11 @@ private suspend fun WorkspaceDao.restorePlacement(
             insertItem(placement.entity(ItemKind.APP, app = app))
             counts.placed++
         }
-        drawerFolder != null -> {
-            insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
-            counts.placed++
+        placement.drawerFolder != null -> {
+            if (drawerFolder != null) {
+                insertItem(placement.entity(ItemKind.FOLDER, folderId = drawerFolder))
+                counts.placed++
+            }
         }
         folder != null -> {
             val apps = folder.apps.mapNotNull(match::find)
@@ -210,7 +212,7 @@ private class AppMatcher(private val installed: Set<AppRef>, private val quiet: 
  * was a hand's; otherwise the folder takes none, and lists them as the drawer does.
  */
 private suspend fun WorkspaceDao.fill(folderId: Long, apps: List<AppRef>, handSorted: Boolean) {
-    apps.forEachIndexed { i, ref ->
+    apps.distinct().forEachIndexed { i, ref ->
         val position = i.takeIf { handSorted }
         insertFolderApp(FolderAppEntity(folderId, ref.component, ref.profile, position))
     }
@@ -226,10 +228,13 @@ private suspend fun WorkspaceDao.restoreDrawerFolders(
     counts: Counts,
 ): Map<Int, Long> {
     val ids = mutableMapOf<Int, Long>()
+    val claimed = mutableSetOf<AppRef>()
     folders.forEachIndexed { index, folder ->
-        val apps = folder.apps.mapNotNull(match::find)
-        counts.skipped += folder.apps.size - apps.size
+        val matched = folder.apps.mapNotNull(match::find)
+        counts.skipped += folder.apps.size - matched.size
+        val apps = matched.distinct().filter { claimed.add(it) }
         if (apps.isNotEmpty()) {
+            apps.forEach { deleteHiddenApp(it.component, it.profile) }
             val folderId = insertFolder(FolderEntity(name = folder.name))
             fill(folderId, apps, folder.handSorted)
             insertItem(

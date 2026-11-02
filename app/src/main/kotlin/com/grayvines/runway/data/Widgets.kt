@@ -1,7 +1,6 @@
 package com.grayvines.runway.data
 
 import com.grayvines.runway.model.Footprint
-import com.grayvines.runway.model.overlaps
 
 /*
  * Widget placements. A widget lives on a home page only, as the id the widget host allocated for
@@ -23,7 +22,7 @@ suspend fun WorkspaceRepository.addWidget(
     spanY: Int,
     displaced: Map<Long, Footprint> = emptyMap(),
 ): Long? = write {
-    if (!makeRoom(Container.HOME, page, displaced)) {
+    if (!makeRoom(Container.HOME, page, displaced, target = Footprint(x, y, spanX, spanY))) {
         null
     } else {
         dao.insertItem(
@@ -53,24 +52,13 @@ suspend fun WorkspaceRepository.resizeWidget(
     to: Footprint,
     displaced: Map<Long, Footprint> = emptyMap(),
 ): Boolean = write {
-    val item = dao.item(id)
+    val item = dao.item(id)?.takeIf { it.kind == ItemKind.WIDGET }
     val page = item?.pageIndex
-    if (item == null || item.kind != ItemKind.WIDGET || page == null) {
+    if (page == null || !makeRoom(item.container, page, displaced, mover = id, target = to)) {
         false
     } else {
-        val taken =
-            dao.items().any { other ->
-                other.id != id &&
-                    other.container == item.container &&
-                    other.pageIndex == page &&
-                    (displaced[other.id] ?: other.footprint())?.overlaps(to) == true
-            }
-        if (taken || !makeRoom(item.container, page, displaced, mover = id)) {
-            false
-        } else {
-            dao.updateItem(item.copy(x = to.x, y = to.y, spanX = to.width, spanY = to.height))
-            true
-        }
+        dao.updateItem(item.copy(x = to.x, y = to.y, spanX = to.width, spanY = to.height))
+        true
     }
 }
 
@@ -92,10 +80,4 @@ suspend fun WorkspaceRepository.remapWidgets(remapped: Map<Int, Int>): Set<Int> 
         }
         remapped.values.toSet() - used
     }
-}
-
-private fun ItemEntity.footprint(): Footprint? {
-    val cellX = x ?: return null
-    val cellY = y ?: return null
-    return Footprint(cellX, cellY, spanX, spanY)
 }

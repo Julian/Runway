@@ -57,7 +57,7 @@ class BaselineProfileGenerator {
         const val PACKAGE = "com.grayvines.runway"
         const val TIMEOUT_MS = 10_000L
         const val STEPS = 20
-        const val HOLD_STEPS = 60 // long enough to read as a long press
+        const val HOLD_STEPS = 140 // ~700 ms, well above the 550 ms lift hold
         const val MIDDLE = 0.5f
         const val NEAR_TOP = 0.15f
         const val UPPER = 0.25f

@@ -36,7 +36,6 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
-import com.grayvines.runway.system.apps.LabelOrder
 import com.grayvines.runway.system.search.SearchTarget
 import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.drag.Bounds
@@ -51,6 +50,7 @@ import com.grayvines.runway.ui.folder.FolderActions
 import com.grayvines.runway.ui.menu.HomeMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuHost
 import com.grayvines.runway.ui.menu.ItemMenuState
+import com.grayvines.runway.ui.widgets.REFLECT_TIMEOUT_MS
 import com.grayvines.runway.ui.widgets.WidgetPickerHost
 import com.grayvines.runway.ui.widgets.WidgetResizeHost
 import com.grayvines.runway.ui.writing
@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -74,7 +75,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 fun HomeState.allItems(): List<HomeItem> =
     (homePages + dockPages).flatMap { it.items } + drawerFolders
 
-/** A folder placement that is open, and the cell it opened out of. */
 /**
  * The folder whose sheet is up, opened out of [from]; [leaving] once something was dragged out of
  * it, when the sheet slides away under the finger before it goes.
@@ -283,6 +283,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             }
             .distinctUntilChanged()
 
+    /** The latest x tapped in a sheet, which the sweep as the sheet closes must come after. */
+    private var lastRemoval: Job? = null
+
     val state: StateFlow<HomeState> =
         combine(
                 graph.settings.settings,
@@ -306,7 +309,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 @Suppress("UNCHECKED_CAST") val hidden = flows[7] as Set<AppRef>
                 @Suppress("UNCHECKED_CAST") val badgeCounts = flows[8] as Map<PackageKey, Int>
                 @Suppress("UNCHECKED_CAST") val badgeMutes = flows[9] as Set<AppRef>
-                val sorted = apps.sortedWith(compareBy(LabelOrder.comparator()) { it.label })
                 val byKey = apps.associateBy { it.key }
                 val byFolder = folders.associateBy { it.id }
                 HomeState(
@@ -315,8 +317,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     dockPages = dock.toHomePages(byKey, byFolder),
                     drawerFolders = drawer.toDrawerFolders(byKey, byFolder),
                     searchTarget = target,
-                    apps = sorted,
-                    drawerApps = sorted.filter { it.ref !in hidden },
+                    apps = apps,
+                    drawerApps = apps.filter { it.ref !in hidden },
                     badgeCounts = badgeCounts,
                     badgeMutes = badgeMutes,
                     // Not before the app list: with it empty every icon would be hidden and
@@ -325,10 +327,18 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 )
             }
             .flowOn(Dispatchers.Default)
+            // A folder whose placement goes (uninstalled away, removed) is no longer open; nor is a
+            // menu or resize frame whose item goes, which would otherwise keep offering actions on
+            // nothing.
+            .onEach { s ->
+                val open = _openFolder.value
+                if (open != null && s.loaded && s.item(open.itemId) == null) closeFolder()
+                val menu = itemMenu.state.value
+                if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
+                val framed = widgetResize.shown.value
+                if (framed != null && s.loaded && s.item(framed) == null) widgetResize.dismiss()
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())
-
-    /** The latest x tapped in a sheet, which the sweep as the sheet closes must come after. */
-    private var lastRemoval: Job? = null
 
     /** What an open folder's sheet can do. Renaming applies to whichever folder is open. */
     val folderActions =
@@ -365,20 +375,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             graph.workspace.ensureInitialised()
             // A folder emptied in a sheet that was open when the launcher last stopped.
             graph.workspace.pruneEmptyFolders()
-        }
-        // A folder whose placement goes (uninstalled away, removed) is no longer open; nor is a
-        // menu whose item goes, which would otherwise keep offering actions on nothing.
-        viewModelScope.launch {
-            state.collect { s ->
-                val open = _openFolder.value
-                if (open != null && s.loaded && s.allItems().none { it.id == open.itemId }) {
-                    closeFolder()
-                }
-                val menu = itemMenu.state.value
-                if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
-                val framed = widgetResize.shown.value
-                if (framed != null && s.loaded && s.item(framed) == null) widgetResize.dismiss()
-            }
         }
         // A placed widget's drag ends with the widget framed, wherever it came to rest: moved,
         // refused (nowhere to go) or put back by Back alike, each of which settles it into a cell.
@@ -474,6 +470,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         graph.searchTargets.search(state.value.searchTarget)
     }
 
+    /** The search bar was held: open the target app's normal front page. */
+    internal fun openSearchTarget() {
+        graph.searchTargets.open(state.value.searchTarget)
+    }
+
     /** Launches from the drawer or an open folder; whichever was open closes behind the app. */
     fun launch(app: AppEntry) {
         graph.appRepository.launch(app)
@@ -532,7 +533,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
-        const val REFLECT_TIMEOUT_MS = 3_000L
         const val TAG = "Runway"
     }
 }

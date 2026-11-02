@@ -13,14 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -40,6 +39,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.ItemKind
@@ -155,19 +155,19 @@ internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
 internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier = Modifier) {
     val badges = LocalBadges.current
     Box {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(FOLDER_PREVIEW_COLUMNS),
-            userScrollEnabled = false,
+        FolderPreviewGrid(
             modifier =
                 modifier
                     .semantics { contentDescription = name }
                     .folderTile()
-                    .padding(fraction = FOLDER_TILE_INSET),
+                    .padding(fraction = FOLDER_TILE_INSET)
         ) {
-            items(apps.take(FOLDER_PREVIEW_COUNT), key = { it.key }) { app ->
-                // Part of the tile, which the folder's name describes: not an icon in its own
-                // right.
-                AppIcon(app, Modifier.fillMaxWidth().padding(2.dp), described = false)
+            apps.take(FOLDER_PREVIEW_COUNT).forEach { app ->
+                key(app.key) {
+                    // Part of the tile, which the folder's name describes: not an icon in its
+                    // own right.
+                    AppIcon(app, Modifier.fillMaxSize().padding(2.dp), described = false)
+                }
             }
         }
         Badge(
@@ -175,6 +175,23 @@ internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier =
             style = badges.style,
             modifier = Modifier.align(Alignment.TopEnd),
         )
+    }
+}
+
+@Composable
+private fun FolderPreviewGrid(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val cellW = constraints.maxWidth / FOLDER_PREVIEW_COLUMNS
+        val cellH = constraints.maxHeight / FOLDER_PREVIEW_COLUMNS
+        val cellConstraints = Constraints.fixed(cellW, cellH)
+        val placeables = measurables.map { it.measure(cellConstraints) }
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placeables.forEachIndexed { index, placeable ->
+                val col = index % FOLDER_PREVIEW_COLUMNS
+                val row = index / FOLDER_PREVIEW_COLUMNS
+                placeable.place(col * cellW, row * cellH)
+            }
+        }
     }
 }
 

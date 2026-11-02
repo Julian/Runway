@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.home
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.pointer.PointerId
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -75,5 +76,29 @@ class DragSessionTest {
         assertNull(session.plannedHomeFootprint(0))
         dragging(DropPlan.Invalid)
         assertNull(session.plannedHomeFootprint(0))
+    }
+
+    @Test
+    fun `onFinger names the pointer while idle, ignores a second finger mid-drag, and clears on end or cancel`() {
+        val item = HomeItem(1, ItemKind.APP, 0, 0, 1, 1, "App", null)
+        val handlers = session.handlersFor(item, page = 0)
+        assertNull(session.finger)
+
+        handlers.onFinger(PointerId(1L))
+        assertEquals(PointerId(1L), session.finger)
+
+        dragging(DropPlan.Move(DropTarget.HomeCell(0, 1, 0), emptyMap()))
+        handlers.onFinger(PointerId(2L))
+        assertEquals(PointerId(1L), session.finger)
+
+        session.end()
+        assertNull(session.finger)
+
+        drag.value = null
+        handlers.onFinger(PointerId(3L))
+        assertEquals(PointerId(3L), session.finger)
+
+        session.cancel()
+        assertNull(session.finger)
     }
 }

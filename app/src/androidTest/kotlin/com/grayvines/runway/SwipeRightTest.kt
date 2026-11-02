@@ -221,6 +221,6 @@ class SwipeRightTest : LauncherFixture() {
         const val SLOW_STEPS = 8
         const val SLOW_STEP_MS = 100L
 
-        const val OPEN_GRACE_MS = 1_500L
+        const val OPEN_GRACE_MS = 300L
     }
 }

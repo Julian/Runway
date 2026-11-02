@@ -3,6 +3,8 @@ package com.grayvines.runway.ui.home
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
@@ -49,6 +51,9 @@ class DragSession(
 ) {
     val state: DragState?
         get() = stateOf.value
+
+    /** Whether a drag is in progress; derived, so pointer moves do not recompose readers. */
+    val active: Boolean by derivedStateOf { stateOf.value != null }
 
     val picture: ImageBitmap?
         get() = pictureOf.value

@@ -153,7 +153,7 @@ class WidgetHost(context: Context) {
     @Suppress("TooGenericExceptionCaught")
     private fun AppWidgetProviderInfo.toProvider(pm: PackageManager, density: Float) =
         try {
-            val app = pm.getApplicationInfo(provider.packageName, 0)
+            val app = activityInfo.applicationInfo
             WidgetProvider(
                 info = this,
                 label = loadLabel(pm),
@@ -163,6 +163,9 @@ class WidgetHost(context: Context) {
                 minWidthDp = minWidth / density,
                 minHeightDp = minHeight / density,
             )
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "could not read widget $provider; left out of the list", e)
+            null
         } catch (e: RuntimeException) {
             Log.w(TAG, "could not read widget $provider; left out of the list", e)
             null

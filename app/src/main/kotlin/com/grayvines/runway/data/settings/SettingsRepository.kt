@@ -25,13 +25,13 @@ internal val settingsCorruptionHandler = ReplaceFileCorruptionHandler { emptyPre
 internal val Context.settingsStore: DataStore<Preferences> by
     preferencesDataStore("settings", corruptionHandler = settingsCorruptionHandler)
 
-class SettingsRepository(context: Context) {
-    private val store = context.settingsStore
-
+class SettingsRepository internal constructor(private val store: DataStore<Preferences>) {
     val settings: Flow<Settings> = store.data.map { it.toSettings() }
 
+    constructor(context: Context) : this(context.settingsStore)
+
     suspend fun update(transform: (Settings) -> Settings) {
-        store.edit { prefs -> transform(prefs.toSettings()).writeTo(prefs) }
+        store.edit { prefs -> transform(prefs.toSettings()).clamped().writeTo(prefs) }
     }
 
     private object Keys {

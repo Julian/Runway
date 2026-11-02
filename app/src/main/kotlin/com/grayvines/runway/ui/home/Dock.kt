@@ -44,7 +44,7 @@ fun Dock(
     Box(Modifier.fillMaxWidth().height(slot.height)) {
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = drag?.state == null, // as on the home pages
+            userScrollEnabled = drag?.active != true, // as on the home pages
             modifier = Modifier.fillMaxSize().testTag(DOCK_TAG),
         ) { page ->
             GridPage(

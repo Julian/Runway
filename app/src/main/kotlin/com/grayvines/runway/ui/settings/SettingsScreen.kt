@@ -1,8 +1,10 @@
 package com.grayvines.runway.ui.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,6 +65,7 @@ fun SettingsScreen(
     onHide: (app: AppRef, hidden: Boolean) -> Unit,
     onChange: ((Settings) -> Settings) -> Unit,
     onOpenHome: (() -> Unit)?,
+    onSetDefaultHome: (() -> Unit)? = null,
     backupActions: BackupActions,
     debugActions: DebugActions?,
     hasNotificationAccess: Boolean = true,
@@ -75,7 +79,9 @@ fun SettingsScreen(
         when (page) {
             null ->
                 Scrolling(padding) {
-                    PageList(onOpenHome, debug = debugActions != null) { page = it }
+                    PageList(onOpenHome, onSetDefaultHome, debug = debugActions != null) {
+                        page = it
+                    }
                 }
             SettingsPage.HOME ->
                 Scrolling(padding, body) {
@@ -151,11 +157,25 @@ private fun Header(page: SettingsPage?, onBack: () -> Unit) {
 
 /** Every listed page, title over summary; the debug page only in a debug build. */
 @Composable
-private fun PageList(onOpenHome: (() -> Unit)?, debug: Boolean, onOpen: (SettingsPage) -> Unit) {
-    if (onOpenHome != null) {
-        // Runway is not the home app yet: a way to try it without switching.
-        Button(onClick = onOpenHome, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text("Open home screen")
+private fun PageList(
+    onOpenHome: (() -> Unit)?,
+    onSetDefaultHome: (() -> Unit)?,
+    debug: Boolean,
+    onOpen: (SettingsPage) -> Unit,
+) {
+    if (onOpenHome != null || onSetDefaultHome != null) {
+        // Runway is not the home app yet: a way to make it so, or try it without switching.
+        FlowRow(
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (onSetDefaultHome != null) {
+                Button(onClick = onSetDefaultHome) { Text("Set as default home app") }
+            }
+            if (onOpenHome != null) {
+                OutlinedButton(onClick = onOpenHome) { Text("Open home screen") }
+            }
         }
     }
     SettingsPage.entries

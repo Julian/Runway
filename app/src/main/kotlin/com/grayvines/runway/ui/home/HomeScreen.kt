@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -65,8 +66,6 @@ internal const val ICON_INSET = 0.3f
 
 private val DRAG_CORNER = 28.dp
 
-/** A dwell flips every 450 ms; the scroll must be over well before the next tick. */
-
 /**
  * The launcher surface. The grid is [Settings.columns] × [Settings.rows]; the search bar and the
  * dock each occupy one full row and the pages get the rest. Icons everywhere share one size,
@@ -81,6 +80,7 @@ fun HomeScreen(
     flipDockPage: Flow<Int>,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
+    onSearchLongClick: () -> Unit,
     /** A swipe right on the first home page, where there is no page to go to. */
     onSwipePastFirstPage: () -> Unit,
     drag: DragSession,
@@ -118,7 +118,10 @@ fun HomeScreen(
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)
-    CompositionLocalProvider(LocalBadges provides badges) {
+    CompositionLocalProvider(
+        LocalBadges provides badges,
+        LocalViewConfiguration provides rememberLiftConfiguration(),
+    ) {
         BoxWithConstraints(Modifier.fillMaxSize().rootGestures(drag, widgetResize, drawer)) {
             val insets = WindowInsets.systemBars.asPaddingValues()
             val cell = cellSize(DpSize(maxWidth, maxHeight), insets, settings)
@@ -139,6 +142,7 @@ fun HomeScreen(
                 iconSize = iconSize,
                 onLaunch = onLaunch,
                 onSearch = onSearch,
+                onSearchLongClick = onSearchLongClick,
                 onSwipePastFirstPage = onSwipePastFirstPage,
                 onMenu = homeMenu.onOpen,
                 drag = drag,
@@ -276,6 +280,7 @@ private fun HomeColumn(
     iconSize: Dp,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
+    onSearchLongClick: () -> Unit,
     onSwipePastFirstPage: () -> Unit,
     onMenu: (Bounds) -> Unit,
     drag: DragSession,
@@ -293,17 +298,19 @@ private fun HomeColumn(
     val cellPx = with(LocalDensity.current) { Size(cell.width.toPx(), cell.height.toPx()) }
     // A widget on the move (root px): carried under the finger, or pulled by a resize handle.
     val widgetOnTheMove = { carriedWidget(drag, cellPx) ?: resize.outline }
+    @Composable
+    fun Bar() =
+        SearchBar(
+            rowHeight = cell.height,
+            target = state.searchTarget,
+            onSearch = onSearch,
+            onLongClick = onSearchLongClick,
+            onMenu = onMenu,
+            modifier = Modifier.drawerPull(drawer),
+            pressedBy = widgetOnTheMove,
+        )
     Column(modifier) {
-        if (settings.searchBarAtTop) {
-            SearchBar(
-                rowHeight = cell.height,
-                target = state.searchTarget,
-                onSearch = onSearch,
-                onMenu = onMenu,
-                modifier = Modifier.drawerPull(drawer),
-                pressedBy = widgetOnTheMove,
-            )
-        }
+        if (settings.searchBarAtTop) Bar()
         Workspace(
             pages = state.homePages,
             pagerState = homePager,
@@ -324,16 +331,7 @@ private fun HomeColumn(
                     .drawerPull(drawer),
             resize = resize,
         )
-        if (!settings.searchBarAtTop) {
-            SearchBar(
-                rowHeight = cell.height,
-                target = state.searchTarget,
-                onSearch = onSearch,
-                onMenu = onMenu,
-                modifier = Modifier.drawerPull(drawer),
-                pressedBy = widgetOnTheMove,
-            )
-        }
+        if (!settings.searchBarAtTop) Bar()
         Dock(
             pages = state.dockPages,
             pagerState = dockPager,
@@ -445,7 +443,7 @@ private fun cellSize(window: DpSize, insets: PaddingValues, settings: Settings):
 @Composable
 private fun liftProgress(drag: DragSession): State<Float> {
     // Whether anything is lifted, not where it is: the finger's moves must not restart this.
-    val lifting by remember(drag) { derivedStateOf { drag.state != null } }
+    val lifting = drag.active
     val lift = remember { Animatable(0f) }
     LaunchedEffect(lifting) {
         if (lifting) {
@@ -476,5 +474,7 @@ private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
     }
 
 internal fun HomeState.item(id: Long?): HomeItem? = id?.let {
-    allItems().firstOrNull { it.id == id }
+    homePages.firstNotNullOfOrNull { page -> page.items.firstOrNull { it.id == id } }
+        ?: dockPages.firstNotNullOfOrNull { page -> page.items.firstOrNull { it.id == id } }
+        ?: drawerFolders.firstOrNull { it.id == id }
 }

@@ -84,9 +84,13 @@ interface WorkspaceDao {
     /** An app is in at most one drawer folder: this takes it out of whichever it is in. */
     @Query(
         "DELETE FROM folder_apps WHERE component = :component AND profile = :profile " +
-            "AND folder_id IN (SELECT folder_id FROM items WHERE container = 'DRAWER')"
+            "AND folder_id IN (SELECT folder_id FROM items WHERE container = :container)"
     )
-    suspend fun leaveDrawerFolders(component: String, profile: Long)
+    suspend fun leaveDrawerFolders(
+        component: String,
+        profile: Long,
+        container: Container = Container.DRAWER,
+    )
 
     /** Whether the folder has a placement in [container]: in the drawer, say. */
     @Query(

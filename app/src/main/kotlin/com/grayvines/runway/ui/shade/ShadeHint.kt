@@ -11,6 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,7 +36,8 @@ private val RING_COLOUR = Color(0xFF202124)
  */
 @Composable
 fun ShadeHint(given: () -> Float, insets: PaddingValues) {
-    if (given() <= 0f) return
+    val visible by remember(given) { derivedStateOf { given() > 0f } }
+    if (!visible) return
     Box(Modifier.fillMaxSize().graphicsLayer { alpha = given() * DIM }.background(Color.Black))
     Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.TopCenter) {
         Box(

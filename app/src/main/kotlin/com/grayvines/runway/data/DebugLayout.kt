@@ -5,12 +5,17 @@ package com.grayvines.runway.data
  * on-device tests' seeding. Kept apart from the repository proper.
  */
 
-suspend fun WorkspaceRepository.clear() = write {
-    dao.deleteAllItems()
-    dao.deleteAllFolders()
-    dao.deleteAllPages()
-    dao.insertPage(PageEntity(Container.HOME, 0))
-    dao.insertPage(PageEntity(Container.DOCK, 0))
+suspend fun WorkspaceRepository.clear(deleteWidget: (id: Int) -> Unit = {}) {
+    val oldWidgets = write {
+        val bound = dao.itemsOfKind(ItemKind.WIDGET).mapNotNull { it.appWidgetId }
+        dao.deleteAllItems()
+        dao.deleteAllFolders()
+        dao.deleteAllPages()
+        dao.insertPage(PageEntity(Container.HOME, 0))
+        dao.insertPage(PageEntity(Container.DOCK, 0))
+        bound
+    }
+    oldWidgets.forEach(deleteWidget)
 }
 
 /** Debug helper: fills the dock, then home pages row by row, with [apps] in order. */
@@ -19,22 +24,30 @@ suspend fun WorkspaceRepository.autoFill(
     columns: Int,
     pageRows: Int,
     dockSlots: Int,
-) = write {
-    dao.deleteAllItems()
-    dao.deleteAllFolders()
-    dao.deleteAllPages()
-    dao.insertPage(PageEntity(Container.DOCK, 0))
-    apps.take(dockSlots).forEachIndexed { slot, app ->
-        dao.insertItem(app.placement(Container.DOCK, page = 0, x = slot, y = 0))
-    }
-    val perPage = columns * pageRows
-    apps.drop(dockSlots).chunked(perPage).forEachIndexed { page, pageApps ->
-        dao.insertPage(PageEntity(Container.HOME, page))
-        pageApps.forEachIndexed { i, app ->
-            dao.insertItem(app.placement(Container.HOME, page, x = i % columns, y = i / columns))
+    deleteWidget: (id: Int) -> Unit = {},
+) {
+    val oldWidgets = write {
+        val bound = dao.itemsOfKind(ItemKind.WIDGET).mapNotNull { it.appWidgetId }
+        dao.deleteAllItems()
+        dao.deleteAllFolders()
+        dao.deleteAllPages()
+        dao.insertPage(PageEntity(Container.DOCK, 0))
+        apps.take(dockSlots).forEachIndexed { slot, app ->
+            dao.insertItem(app.placement(Container.DOCK, page = 0, x = slot, y = 0))
         }
+        val perPage = columns * pageRows
+        apps.drop(dockSlots).chunked(perPage).forEachIndexed { page, pageApps ->
+            dao.insertPage(PageEntity(Container.HOME, page))
+            pageApps.forEachIndexed { i, app ->
+                dao.insertItem(
+                    app.placement(Container.HOME, page, x = i % columns, y = i / columns)
+                )
+            }
+        }
+        dao.insertPage(PageEntity(Container.HOME, 0))
+        bound
     }
-    dao.insertPage(PageEntity(Container.HOME, 0))
+    oldWidgets.forEach(deleteWidget)
 }
 
 private fun AppRef.placement(container: Container, page: Int, x: Int, y: Int) =

@@ -100,7 +100,7 @@ suspend fun WorkspaceRepository.unfold(
     y: Int,
     displaced: Map<Long, Footprint> = emptyMap(),
 ): Boolean = write {
-    if (!makeRoom(container, page, displaced)) {
+    if (!makeRoom(container, page, displaced, target = Footprint(x, y))) {
         false
     } else {
         dao.insertItem(

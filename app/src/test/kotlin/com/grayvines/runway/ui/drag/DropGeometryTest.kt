@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.drag
 
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.model.Footprint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -95,5 +96,15 @@ class DropGeometryTest {
     fun `outside every area is no target`() {
         assertNull(areas.targetFor(Point(150f, 300f), noGrab, 1, 1))
         assertNull(DropAreas().targetFor(Point(10f, 10f), noGrab, 1, 1))
+    }
+
+    @Test
+    fun `centreOf gives the middle of a home footprint or dock slot, and null for the drawer`() {
+        assertEquals(Point(150f, 50f), areas.centreOf(Container.HOME, Footprint(1, 0, 1, 1)))
+        assertEquals(Point(200f, 100f), areas.centreOf(Container.HOME, Footprint(1, 0, 2, 2)))
+        assertEquals(Point(250f, 225f), areas.centreOf(Container.DOCK, Footprint(2, 0)))
+        assertNull(areas.centreOf(Container.DRAWER, Footprint(0, 0)))
+        assertNull(DropAreas().centreOf(Container.HOME, Footprint(0, 0)))
+        assertNull(DropAreas().centreOf(Container.DOCK, Footprint(0, 0)))
     }
 }

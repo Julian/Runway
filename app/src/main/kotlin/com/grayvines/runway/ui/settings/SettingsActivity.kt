@@ -1,8 +1,8 @@
 package com.grayvines.runway.ui.settings
 
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -24,7 +24,9 @@ import com.grayvines.runway.data.hideApp
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.unhideApp
+import com.grayvines.runway.system.search.SearchTarget
 import com.grayvines.runway.ui.theme.SettingsTheme
+import java.io.FileOutputStream
 import java.io.IOException
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
@@ -46,25 +48,24 @@ class SettingsActivity : ComponentActivity() {
                 withFile("could not read the backup") { restore(uri) }
             }
         }
+    private val requestHomeRole =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            isDefault = isDefaultHome()
+        }
 
     private var hasNotificationAccess by mutableStateOf(false)
+    private var searchTargets by mutableStateOf(emptyList<SearchTarget>())
+    private var isDefault by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = appGraph
         hasNotificationAccess = graph.badges.hasAccess()
+        searchTargets = graph.searchTargets.handlers()
+        isDefault = isDefaultHome()
         val debugActions = debugActions()
-        val searchTargets = graph.searchTargets.handlers()
         val hiddenApps = graph.workspace.observeHiddenApps()
-        val isHome =
-            packageManager
-                .resolveActivity(
-                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
-                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()),
-                )
-                ?.activityInfo
-                ?.packageName == packageName
         setContent {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
@@ -79,10 +80,26 @@ class SettingsActivity : ComponentActivity() {
                     hasNotificationAccess = hasNotificationAccess,
                     onGrantNotificationAccess = graph.badges::openAccessSettings,
                     onOpenHome =
-                        if (isHome) {
+                        if (isDefault) {
                             null
                         } else {
                             { startActivity(Intent(this, LauncherActivity::class.java)) }
+                        },
+                    onSetDefaultHome =
+                        if (isDefault) {
+                            null
+                        } else {
+                            {
+                                val roleManager = getSystemService(RoleManager::class.java)
+                                if (
+                                    roleManager != null &&
+                                        roleManager.isRoleAvailable(RoleManager.ROLE_HOME)
+                                ) {
+                                    requestHomeRole.launch(
+                                        roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                                    )
+                                }
+                            }
                         },
                     onChange = { transform ->
                         graph.appScope.launch { graph.settings.update(transform) }
@@ -100,8 +117,14 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        hasNotificationAccess = appGraph.badges.hasAccess()
+        val graph = appGraph
+        hasNotificationAccess = graph.badges.hasAccess()
+        searchTargets = graph.searchTargets.handlers()
+        isDefault = isDefaultHome()
     }
+
+    private fun isDefaultHome(): Boolean =
+        getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true
 
     /** Leaves [app] out of the drawer, or shows it there again. */
     private fun setHidden(app: AppRef, hidden: Boolean) {
@@ -118,12 +141,22 @@ class SettingsActivity : ComponentActivity() {
         return DebugActions(
             fillWithAllApps = {
                 graph.appScope.launch {
-                    val apps = graph.appRepository.apps.first().map { it.ref }
+                    val apps = graph.appRepository.apps.first { it.isNotEmpty() }.map { it.ref }
                     val s = graph.settings.settings.first()
-                    graph.workspace.autoFill(apps, s.columns, s.pageRows, s.dockSlots)
+                    graph.workspace.autoFill(
+                        apps,
+                        s.columns,
+                        s.pageRows,
+                        s.dockSlots,
+                        deleteWidget = graph.widgets::deleteId,
+                    )
                 }
             },
-            clearLayout = { graph.appScope.launch { graph.workspace.clear() } },
+            clearLayout = {
+                graph.appScope.launch {
+                    graph.workspace.clear(deleteWidget = graph.widgets::deleteId)
+                }
+            },
         )
     }
 
@@ -152,8 +185,10 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private fun write(uri: android.net.Uri, text: String): String {
-        contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) }
-            ?: throw IOException("nothing to write to")
+        contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+            (stream as? FileOutputStream)?.channel?.truncate(0)
+            stream.write(text.toByteArray())
+        } ?: throw IOException("nothing to write to")
         return "Backup saved"
     }
 

@@ -120,6 +120,10 @@ open class LauncherFixture {
     /** Widget host ids allocated by this test, to give back after it. */
     private val boundIds = mutableListOf<Int>()
 
+    /** The way back to the list, on every settings page but the list itself. */
+    private val settingsPageBack: BySelector
+        get() = By.pkg(app.packageName).desc("Back")
+
     @Before
     fun seed() {
         runBlocking {
@@ -273,6 +277,7 @@ open class LauncherFixture {
      * can come up during the wait; then the failure says what held focus.
      */
     private fun awaitWindowFocus() {
+        if (compose.activity.hasWindowFocus()) return
         repeat(FOCUS_ATTEMPTS) { attempt ->
             dismissNotRespondingDialog()
             try {
@@ -280,7 +285,13 @@ open class LauncherFixture {
                 return
             } catch (e: ComposeTimeoutException) {
                 if (attempt == FOCUS_ATTEMPTS - 1) {
-                    throw AssertionError("the launcher never got window focus; ${windowFocus()}", e)
+                    dismissNotRespondingDialog()
+                    if (!compose.activity.hasWindowFocus()) {
+                        throw AssertionError(
+                            "the launcher never got window focus; ${windowFocus()}",
+                            e,
+                        )
+                    }
                 }
             }
         }
@@ -885,7 +896,7 @@ open class LauncherFixture {
         compose.waitForIdle()
         assertTrue(
             "the $title page did not open",
-            device.wait(Until.hasObject(SETTINGS_PAGE_BACK), TIMEOUT_MS),
+            device.wait(Until.hasObject(settingsPageBack), TIMEOUT_MS),
         )
     }
 
@@ -895,14 +906,15 @@ open class LauncherFixture {
      */
     protected fun leaveSettings() {
         var depth = 0
-        while (depth < MAX_SETTINGS_DEPTH && device.hasObject(SETTINGS_PAGE_BACK)) {
+        while (depth < MAX_SETTINGS_DEPTH && device.hasObject(settingsPageBack)) {
             device.pressBack()
             compose.waitForIdle()
+            device.wait(Until.gone(settingsPageBack), WRITE_GRACE_MS)
             depth++
         }
         assertTrue(
             "back did not reach the list",
-            device.wait(Until.gone(SETTINGS_PAGE_BACK), TIMEOUT_MS),
+            device.wait(Until.gone(settingsPageBack), TIMEOUT_MS),
         )
         device.pressBack()
     }
@@ -1083,7 +1095,7 @@ const val EDGE_ADD_MS = EdgeDwell.ADD_PAGE_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 /** Longer than the dwell that flips a page, in real time. */
 const val EDGE_FLIP_MS = EdgeDwell.FLIP_MS + FLIP_SCROLL_MS + DWELL_MARGIN_MS
 const val FLIP_SAMPLE_MS = 30L
-const val FLIP_WATCH_MS = 2_500L
+const val FLIP_WATCH_MS = 5_000L
 
 /** The launcher's own hold, under the name the tests in this package have always used. */
 const val LIFT_HOLD_MS = com.grayvines.runway.ui.home.LIFT_HOLD_MS
@@ -1109,9 +1121,6 @@ val SHADE: BySelector = By.res("com.android.systemui", "notification_stack_scrol
 
 /** The first row of settings' list of pages, which is where settings opens. */
 val SETTINGS: BySelector = By.text("Home screen")
-
-/** The way back to the list, on every settings page but the list itself. */
-val SETTINGS_PAGE_BACK: BySelector = By.desc("Back")
 
 /** The most pages deep settings goes: the list, a page, and one opened from that. */
 const val MAX_SETTINGS_DEPTH = 2

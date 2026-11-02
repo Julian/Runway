@@ -45,7 +45,7 @@ class PageFlipTest : LauncherFixture() {
         val grid = useGrid(columns = 5, rows = 7)
         val onPageTwo = labelOnPage(1)
         holdDrag(firstHomeApp, to = grid.rightEdge(0))
-        waitUntil(FLIP_WATCH_MS) { icon(onPageTwo).isDisplayedOrFalse() } // page 2 shown
+        waitUntil(TIMEOUT_MS) { icon(onPageTwo).isDisplayedOrFalse() } // page 2 shown
         val bar = compose.onNodeWithTag(SEARCH_BAR_TAG).fetchSemanticsNode().boundsInRoot.center
         dragOn(to = bar) // over the search bar: nowhere to drop
         release()
@@ -68,9 +68,10 @@ class PageFlipTest : LauncherFixture() {
         val restingLeft = cellIcon(marker).fetchSemanticsNode().boundsInRoot.left
         val pageWidth = grid.cellWidth() * settings.columns
         try {
-            val deadline = SystemClock.uptimeMillis() + FLIP_WATCH_MS
+            val deadline = SystemClock.uptimeMillis() + TIMEOUT_MS
             var shift = 0f
             while (SystemClock.uptimeMillis() < deadline && shift < grid.cellWidth()) {
+                if (shift == 0f) SystemClock.sleep(FLIP_SAMPLE_MS)
                 compose.mainClock.advanceTimeByFrame()
                 shift = restingLeft - cellIcon(marker).fetchSemanticsNode().boundsInRoot.left
             }

@@ -131,17 +131,8 @@ fun AppDrawer(
     // not recompose the drawer, only redraw it.
     val present by remember(open) { derivedStateOf { open || shown.value > 0f } }
     if (!present) return
-    val pull = rememberUpdatedState(onPull)
-    val pullEnd = rememberUpdatedState(onPullEnd)
     val list = rememberLazyGridState()
-    val pullToClose = remember {
-        PullToClose(
-            revealed = { shown.value },
-            atTop = { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0 },
-            onPull = { pull.value(it) },
-            onPullEnd = { pullEnd.value(it) },
-        )
-    }
+    val pullToClose = rememberPullToClose(open, shown, list, onPull, onPullEnd)
     // Apps in drawer folders are reached through them, or by search, not from the grid.
     val searching = query.text.isNotBlank()
     val shownFolders = if (searching) emptyList() else folders
@@ -386,6 +377,26 @@ private fun DrawerApp(
             .padding(vertical = 8.dp)
             .testTag(DRAWER_ITEM_TAG),
     )
+}
+
+@Composable
+private fun rememberPullToClose(
+    open: Boolean,
+    shown: State<Float>,
+    list: LazyGridState,
+    onPull: (Float) -> Unit,
+    onPullEnd: (Float) -> Unit,
+): PullToClose {
+    val pull = rememberUpdatedState(onPull)
+    val pullEnd = rememberUpdatedState(onPullEnd)
+    return remember(open) {
+        PullToClose(
+            revealed = { shown.value },
+            atTop = { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0 },
+            onPull = { pull.value(it) },
+            onPullEnd = { pullEnd.value(it) },
+        )
+    }
 }
 
 /**

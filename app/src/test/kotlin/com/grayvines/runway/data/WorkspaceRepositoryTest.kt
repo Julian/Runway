@@ -1,16 +1,14 @@
 package com.grayvines.runway.data
 
 import androidx.room3.Room
-import androidx.sqlite.SQLiteException
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -338,12 +336,7 @@ class WorkspaceRepositoryTest {
 
     @Test
     fun `removing a folder placement or clearing the layout drops the folder itself`() = runTest {
-        repo.autoFill(
-            apps(5),
-            columns = 4,
-            pageRows = 1,
-            dockSlots = 1,
-        ) // one in the dock, four home
+        repo.autoFill(apps(5), columns = 4, pageRows = 1, dockSlots = 1)
         val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
         repo.foldInto(targetId = b.id, dropped = Dropped.Item(a.id))
         repo.removeItem(b.id)
@@ -491,17 +484,20 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `removeItem drops that placement only, and a page it leaves empty`() = runTest {
-        repo.autoFill(apps(4), columns = 3, pageRows = 1, dockSlots = 1)
-        // Dock: app 1. Home page 0: apps 2, 3, 4 fill the row... move 4 to a page of its own.
-        repo.addPage(Container.HOME, 1)
-        repo.moveItem(4, Container.HOME, 1, 0, 0, emptyMap())
-        repo.removeItem(4)
-        val home = repo.observe(Container.HOME).first()
-        assertEquals(listOf(0), home.pages.map { it.index })
-        assertEquals(listOf(2L, 3L), home.pages.single().items.map { it.id })
-        assertEquals(1, repo.observe(Container.DOCK).first().pages.single().items.size)
-    }
+    fun `removeItem drops that placement only, returns it, and prunes a page it leaves empty`() =
+        runTest {
+            repo.autoFill(apps(4), columns = 3, pageRows = 1, dockSlots = 1)
+            // Dock: app 1. Home page 0: apps 2, 3, 4 fill the row... move 4 to a page of its own.
+            repo.addPage(Container.HOME, 1)
+            repo.moveItem(4, Container.HOME, 1, 0, 0, emptyMap())
+            val removed = repo.removeItem(4)
+            assertEquals(4L, removed?.id)
+            assertNull(repo.removeItem(999))
+            val home = repo.observe(Container.HOME).first()
+            assertEquals(listOf(0), home.pages.map { it.index })
+            assertEquals(listOf(2L, 3L), home.pages.single().items.map { it.id })
+            assertEquals(1, repo.observe(Container.DOCK).first().pages.single().items.size)
+        }
 
     @Test
     fun `addWidget stores a home placement with its span, id and provider`() = runTest {
@@ -518,45 +514,35 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `remapWidgets updates matching widget ids and returns unused new ids`() = runTest {
-        repo.ensureInitialised()
-        repo.addApp(AppRef("pkg/.Main", 0), Container.HOME, 0, 0, 0)
-        val first = repo.addWidget(10, "pkg/.One", page = 0, x = 1, y = 0, spanX = 2, spanY = 1)!!
-        val second = repo.addWidget(20, "pkg/.Two", page = 0, x = 0, y = 1, spanX = 1, spanY = 2)!!
-        val kept = repo.addWidget(30, "pkg/.Three", page = 0, x = 2, y = 1, spanX = 1, spanY = 1)!!
-        val unbound =
-            repo.addWidget(null, "pkg/.Four", page = 0, x = 3, y = 1, spanX = 1, spanY = 1)!!
+    fun `remapWidgets updates matching, chained and swapped widget ids and returns unused new ids`() =
+        runTest {
+            repo.ensureInitialised()
+            repo.addApp(AppRef("pkg/.Main", 0), Container.HOME, 0, 0, 0)
+            val first =
+                repo.addWidget(10, "pkg/.One", page = 0, x = 1, y = 0, spanX = 2, spanY = 1)!!
+            val second =
+                repo.addWidget(20, "pkg/.Two", page = 0, x = 0, y = 1, spanX = 1, spanY = 2)!!
+            val kept =
+                repo.addWidget(30, "pkg/.Three", page = 0, x = 2, y = 1, spanX = 1, spanY = 1)!!
+            val unbound =
+                repo.addWidget(null, "pkg/.Four", page = 0, x = 3, y = 1, spanX = 1, spanY = 1)!!
 
-        assertEquals(emptySet<Int>(), repo.remapWidgets(emptyMap()))
-        val unused = repo.remapWidgets(mapOf(10 to 100, 20 to 200, 99 to 999))
-        assertEquals(setOf(999), unused)
+            assertEquals(emptySet<Int>(), repo.remapWidgets(emptyMap()))
+            assertEquals(setOf(999), repo.remapWidgets(mapOf(10 to 20, 20 to 200, 99 to 999)))
+            val byId =
+                repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+            assertEquals(20, byId.getValue(first).appWidgetId)
+            assertEquals("pkg/.One", byId.getValue(first).provider)
+            assertEquals(200, byId.getValue(second).appWidgetId)
+            assertEquals(30, byId.getValue(kept).appWidgetId)
+            assertEquals(null, byId.getValue(unbound).appWidgetId)
 
-        val byId = repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
-        assertEquals(100, byId.getValue(first).appWidgetId)
-        assertEquals("pkg/.One", byId.getValue(first).provider)
-        assertEquals(200, byId.getValue(second).appWidgetId)
-        assertEquals(30, byId.getValue(kept).appWidgetId)
-        assertEquals(null, byId.getValue(unbound).appWidgetId)
-    }
-
-    @Test
-    fun `remapWidgets remaps chained and swapped widget ids once each`() = runTest {
-        repo.ensureInitialised()
-        val first = repo.addWidget(10, "pkg/.One", page = 0, x = 0, y = 0, spanX = 1, spanY = 1)!!
-        val second = repo.addWidget(20, "pkg/.Two", page = 0, x = 1, y = 0, spanX = 1, spanY = 1)!!
-
-        assertEquals(emptySet<Int>(), repo.remapWidgets(mapOf(10 to 20, 20 to 30)))
-        val afterChain =
-            repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
-        assertEquals(20, afterChain.getValue(first).appWidgetId)
-        assertEquals(30, afterChain.getValue(second).appWidgetId)
-
-        assertEquals(emptySet<Int>(), repo.remapWidgets(mapOf(20 to 30, 30 to 20)))
-        val afterSwap =
-            repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
-        assertEquals(30, afterSwap.getValue(first).appWidgetId)
-        assertEquals(20, afterSwap.getValue(second).appWidgetId)
-    }
+            assertEquals(emptySet<Int>(), repo.remapWidgets(mapOf(20 to 200, 200 to 20)))
+            val swapped =
+                repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+            assertEquals(200, swapped.getValue(first).appWidgetId)
+            assertEquals(20, swapped.getValue(second).appWidgetId)
+        }
 
     @Test
     fun `resizeWidget grows the widget and moves its displaced neighbours aside together`() =
@@ -666,21 +652,48 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `addApp onto a taken cell is refused by the database`() = runTest {
-        repo.autoFill(apps(2), columns = 3, pageRows = 1, dockSlots = 1)
-        assertThrows(SQLiteException::class.java) {
-            runBlocking { repo.addApp(apps(2)[0], Container.HOME, 0, 0, 0) }
+    fun `placements and moves refuse negative cells, widgets in the dock, and any cell overlap`() =
+        runTest {
+            repo.autoFill(apps(3), columns = 4, pageRows = 2, dockSlots = 1) // home: a(0,0), b(1,0)
+            val (a, b) = repo.observe(Container.HOME).first().pages.single().items.sortedBy { it.x }
+            val widgetId =
+                repo.addWidget(7, "pkg/.W", page = 0, x = 2, y = 0, spanX = 2, spanY = 2)!!
+
+            // Direct overlap on (0,0), interior widget cell (3,1), negative cells, dock bounds.
+            assertFalse(repo.addApp(apps(1)[0], Container.HOME, 0, 0, 0))
+            assertFalse(repo.addApp(apps(1)[0], Container.HOME, 0, 3, 1))
+            assertFalse(repo.addApp(apps(1)[0], Container.HOME, 0, -1, 0))
+            assertFalse(repo.addApp(apps(1)[0], Container.DOCK, 0, 1, 1))
+            assertNull(repo.addWidget(8, "pkg/.W", page = 0, x = 1, y = 0, spanX = 2, spanY = 1))
+            assertFalse(repo.moveItem(a.id, Container.HOME, 0, 3, 1, emptyMap()))
+            assertFalse(repo.moveItem(a.id, Container.DOCK, 0, 1, 1, emptyMap()))
+            assertFalse(repo.moveItem(widgetId, Container.DOCK, 0, 1, 0, emptyMap()))
+            // Displaced neighbour landing on the widget (2,0) leaves both a and b untouched.
+            assertFalse(
+                repo.moveItem(a.id, Container.HOME, 0, 1, 0, mapOf(b.id to Footprint(2, 0)))
+            )
+            val after =
+                repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
+            assertEquals(0 to 0, after.getValue(a.id).let { it.x to it.y })
+            assertEquals(1 to 0, after.getValue(b.id).let { it.x to it.y })
         }
-    }
 
     @Test
-    fun `clear leaves an empty first page in each container`() = runTest {
-        repo.autoFill(apps(10), columns = 7, pageRows = 1, dockSlots = 6)
-        repo.clear()
+    fun `clear and autoFill release bound widget ids and leave an empty first page`() = runTest {
+        repo.ensureInitialised()
+        repo.addWidget(11, "pkg/.One", page = 0, x = 0, y = 0, spanX = 1, spanY = 1)
+        val cleared = mutableListOf<Int>()
+        repo.clear(deleteWidget = cleared::add)
+        assertEquals(listOf(11), cleared)
         val home = repo.observe(Container.HOME).first()
         assertEquals(1, home.pages.size)
         assertTrue(home.pages.single().items.isEmpty())
         assertTrue(repo.observe(Container.DOCK).first().pages.single().items.isEmpty())
+
+        repo.addWidget(22, "pkg/.Two", page = 0, x = 0, y = 0, spanX = 1, spanY = 1)
+        val filled = mutableListOf<Int>()
+        repo.autoFill(apps(2), columns = 4, pageRows = 1, dockSlots = 1, deleteWidget = filled::add)
+        assertEquals(listOf(22), filled)
     }
 
     @Test

@@ -253,7 +253,7 @@ class DragCoordinator(
             } finally {
                 if (_pending.value == pendingMove) _pending.value = null
             }
-            workspace.pruneEmptyPages()
+            if (drag.value == null) workspace.pruneEmptyPages()
         }
     }
 

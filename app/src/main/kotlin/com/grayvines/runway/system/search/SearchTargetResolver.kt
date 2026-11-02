@@ -55,9 +55,27 @@ class SearchTargetResolver(private val context: Context) {
         try {
             context.startActivity(search.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            openInstead(packageName, e)
+            Log.w(TAG, "$packageName would not take the search; opening it instead", e)
+            open(target)
         } catch (e: SecurityException) {
-            openInstead(packageName, e)
+            Log.w(TAG, "$packageName would not take the search; opening it instead", e)
+            open(target)
+        }
+    }
+
+    /**
+     * Opens [target]'s normal front page, without asking for a search; with no target or no launch
+     * activity, nothing happens.
+     */
+    fun open(target: SearchTarget?) {
+        val packageName = target?.packageName ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
+        try {
+            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "$packageName could not be opened", e)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "$packageName could not be opened", e)
         }
     }
 
@@ -73,14 +91,6 @@ class SearchTargetResolver(private val context: Context) {
         } else {
             Intent(Intent.ACTION_WEB_SEARCH).setPackage(packageName)
         }
-
-    /** The target no longer handles the search, or refuses it (not exported after all). */
-    private fun openInstead(packageName: String, why: Exception) {
-        Log.w(TAG, "$packageName would not take the search; opening it instead", why)
-        context.packageManager.getLaunchIntentForPackage(packageName)?.let {
-            context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
 
     private companion object {
         const val FIREFOX = "org.mozilla.firefox"

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,7 +37,7 @@ internal const val LIFT_HOLD_MS = 550L
 /**
  * An icon over its label, the way everything in a grid is drawn: on the home screen, in the drawer
  * and in an open folder. [content] fills the top of the column; the label, when [labelled], sits
- * under it in one line. A long press on a tile takes the same hold everywhere.
+ * under it in one line.
  */
 @Composable
 fun AppTile(
@@ -47,20 +46,18 @@ fun AppTile(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-            content()
-            if (labelled) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
-                )
-            }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        content()
+        if (labelled) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+            )
         }
     }
 }

@@ -30,9 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -66,7 +65,6 @@ import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
 import com.grayvines.runway.ui.home.liftable
-import com.grayvines.runway.ui.home.rememberLiftConfiguration
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -154,18 +152,22 @@ fun FolderSheet(
         )
         val columns = columnsFor(folder, listing, mode.editing)
         var size by remember { mutableStateOf(IntSize.Zero) }
-        val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
         Surface(
             modifier =
                 Modifier.width(CELL * columns + 32.dp)
                     .onSizeChanged { size = it }
                     .growingFrom(from, room, size) { motion.progress }
-                    .graphicsLayer { alpha = solid }
+                    .graphicsLayer {
+                        val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
+                        alpha = solid
+                        shadowElevation = (SHADOW * solid).toPx()
+                        shape = RoundedCornerShape(CORNER)
+                        clip = true
+                    }
                     .testTag(FOLDER_TAG),
             shape = RoundedCornerShape(CORNER),
             color = SURFACE,
             contentColor = Color.White,
-            shadowElevation = SHADOW * solid,
         ) {
             SheetContent(
                 folder,
@@ -274,24 +276,21 @@ private fun FolderGrid(
         } else {
             Modifier
         }
-    // The same deliberate hold as anywhere else an icon is picked up.
-    CompositionLocalProvider(LocalViewConfiguration provides rememberLiftConfiguration()) {
-        LazyVerticalGrid(columns = GridCells.Fixed(columns), state = grid, modifier = rearranging) {
-            items(order.shown, key = { it.key }) { app ->
-                // The held tile goes where the finger does; the rest spring to their new slots.
-                val placed = if (order.held == app.key) Modifier else Modifier.animateItem()
-                FolderTile(
-                    app,
-                    folder,
-                    iconSize,
-                    actions,
-                    drag,
-                    editing,
-                    placed.slotted(app, order),
-                )
-            }
-            after()
+    LazyVerticalGrid(columns = GridCells.Fixed(columns), state = grid, modifier = rearranging) {
+        items(order.shown, key = { it.key }) { app ->
+            // The held tile goes where the finger does; the rest spring to their new slots.
+            val placed = if (order.held == app.key) Modifier else Modifier.animateItem()
+            FolderTile(
+                app,
+                folder,
+                iconSize,
+                actions,
+                drag,
+                editing,
+                placed.slotted(app, order),
+            )
         }
+        after()
     }
 }
 
@@ -355,7 +354,10 @@ private fun Modifier.growingFrom(
 }
 
 /** Opens on arrival; closing runs the motion back before telling [onClose]. */
-private class SheetMotion(val progress: Float, val close: () -> Unit)
+private class SheetMotion(private val progressOf: State<Float>, val close: () -> Unit) {
+    val progress: Float
+        get() = progressOf.value
+}
 
 @Composable
 private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
@@ -370,7 +372,7 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
             progress.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow))
         }
     }
-    return SheetMotion(progress.value) { closing = true }
+    return remember(progress) { SheetMotion(progress.asState()) { closing = true } }
 }
 
 /**

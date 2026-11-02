@@ -12,9 +12,11 @@ import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
+import com.grayvines.runway.data.AppRef
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -115,11 +117,12 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     fun refresh() {
         scope.launch {
             refreshing.withLock {
+                val previous = _apps.value.associateBy { it.ref }
                 // Rasterising every icon is the slow part of a refresh: spread it over the cores.
                 val fresh = coroutineScope {
                     userManager.userProfiles
                         .flatMap { user -> launcherApps.getActivityList(null, user) }
-                        .map { info -> async { info.toEntryOrNull() } }
+                        .map { info -> async { info.toEntryOrNull(previous) } }
                         .awaitAll()
                 }
                     .filterNotNull()
@@ -173,9 +176,9 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
      * the launcher, from ever loading.
      */
     @Suppress("TooGenericExceptionCaught") // whatever a broken package throws, it is left out
-    private fun LauncherActivityInfo.toEntryOrNull(): AppEntry? =
+    private fun LauncherActivityInfo.toEntryOrNull(previous: Map<AppRef, AppEntry>): AppEntry? =
         try {
-            toEntry()
+            toEntry(previous)
         } catch (e: CancellationException) {
             throw e
         } catch (e: RuntimeException) {
@@ -183,16 +186,28 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
             null
         }
 
-    private fun LauncherActivityInfo.toEntry() =
-        AppEntry(
+    private fun LauncherActivityInfo.toEntry(previous: Map<AppRef, AppEntry>): AppEntry {
+        val profileSerial =
+            userManager.getSerialNumberForUser(user) // persistable, unlike UserHandle
+        val ref = AppRef(componentName.flattenToString(), profileSerial)
+        val drawable = getBadgedIcon(0) // device density, with work badge if in a work profile
+        val androidBitmap = drawable.toBitmap(iconPx, iconPx)
+        val prevBitmap = previous[ref]?.bitmap
+        val bitmap =
+            if (prevBitmap != null && prevBitmap.asAndroidBitmap().sameAs(androidBitmap)) {
+                prevBitmap
+            } else {
+                androidBitmap.asImageBitmap()
+            }
+        return AppEntry(
             component = componentName,
             user = user,
-            profileSerial =
-                userManager.getSerialNumberForUser(user), // persistable, unlike UserHandle
+            profileSerial = profileSerial,
             label = label.toString(),
-            icon = getIcon(0), // device density
-            bitmap = getIcon(0).toBitmap(iconPx, iconPx).asImageBitmap(),
+            icon = drawable,
+            bitmap = bitmap,
         )
+    }
 
     private companion object {
         const val STALING_CHANGES =

@@ -64,7 +64,7 @@ fun DragOverlay(
     if (item == null) return
     // Which phase, and whether a fold or the bin is under the finger: derived, so the finger's
     // moves change nothing here.
-    val dragging by remember(drag) { derivedStateOf { drag.state != null } }
+    val dragging = drag.active
     val shrinks by remember(drag) { derivedStateOf { drag.foldTargetId != null || drag.removing } }
     val settling = drag.settling
     val size = DpSize(cell.width * item.spanX, cell.height * item.spanY)
@@ -77,7 +77,7 @@ fun DragOverlay(
                     label = "folding",
                 )
             // Picked up out of a cell mid-drag: the icon slides from there into the finger.
-            val pickedUpFrom = drag.state?.pickedUpFrom
+            val pickedUpFrom by remember(drag) { derivedStateOf { drag.state?.pickedUpFrom } }
             val arrival =
                 remember(pickedUpFrom) { Animatable(if (pickedUpFrom == null) 1f else 0f) }
             LaunchedEffect(pickedUpFrom) {
@@ -158,21 +158,22 @@ private fun Settle(
         }
         onDone()
     }
-    val t = progress.value
-    val centre =
-        if (target == null) {
-            from
-        } else {
-            Point(lerp(from.x, target.x, t), lerp(from.y, target.y, t))
-        }
-    val at = Point(centre.x - half.x, centre.y - half.y)
     OverlayCell(
         item,
         picture,
-        { at },
+        at = {
+            val t = progress.value
+            val centre =
+                if (target == null) {
+                    from
+                } else {
+                    Point(lerp(from.x, target.x, t), lerp(from.y, target.y, t))
+                }
+            Point(centre.x - half.x, centre.y - half.y)
+        },
         size,
         iconSize,
-        scale = { lerp(item.liftedScale(1f), 1f, t) },
+        scale = { lerp(item.liftedScale(1f), 1f, progress.value) },
     )
 }
 
@@ -187,10 +188,6 @@ private fun HomeItem.liftedScale(lift: Float): Float =
         lerp(DragMotion.PRESSED_SCALE, DragMotion.LIFTED_SCALE, lift)
     }
 
-/**
- * The carried item at [at] (root px, top-left), in a box of [size], at [scale]: an icon, or a
- * widget's [picture].
- */
 /** This top-left, kept between the top and bottom of [area] for a box [half] again as tall. */
 private fun Point.heldWithin(area: Rect?, half: Point): Point {
     if (area == null) return this
@@ -198,6 +195,10 @@ private fun Point.heldWithin(area: Rect?, half: Point): Point {
     return Point(x, top)
 }
 
+/**
+ * The carried item at [at] (root px, top-left), in a box of [size], at [scale]: an icon, or a
+ * widget's [picture].
+ */
 @Composable
 private fun OverlayCell(
     item: HomeItem,

@@ -114,10 +114,6 @@ class DragController(private val lookup: WorkspaceLookup) {
     }
 
     /**
-     * [target] is where the item's corner snaps; [over] is the cell the finger itself is well
-     * inside, if any, which is where a dropped app folds with what is there.
-     */
-    /**
      * The drag becomes one of [source] instead, an item already placed, picked up out of its cell
      * at [from] (root px centre). The finger and its grab stay as they are.
      */
@@ -126,6 +122,10 @@ class DragController(private val lookup: WorkspaceLookup) {
         _state.value = current.copy(source = source, pickedUpFrom = from, plan = null)
     }
 
+    /**
+     * [target] is where the item's corner snaps; [over] is the cell the finger itself is well
+     * inside, if any, which is where a dropped app folds with what is there.
+     */
     fun move(
         pointer: Point,
         target: DropTarget?,

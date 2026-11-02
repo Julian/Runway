@@ -254,6 +254,7 @@ class WidgetResizeTest : LauncherFixture() {
         // Whatever the widget would do with a tap (a default view opens its app) must not happen:
         // the launcher's window keeps the screen. Its own views carry the provider's package, so
         // the window is what to look at, not any node of that package.
+        compose.waitForIdle()
         SystemClock.sleep(APP_OPEN_MS)
         assertEquals("the tap reached the widget", app.packageName, device.currentPackageName)
         compose.onNodeWithTag(WIDGET_TAG).assertIsDisplayed()
@@ -392,6 +393,6 @@ class WidgetResizeTest : LauncherFixture() {
         const val FIXTURE_WIDGET_MAX_DP = 400f
 
         /** Long enough for a tapped widget's app to come up, when one does. */
-        const val APP_OPEN_MS = 1_500L
+        const val APP_OPEN_MS = 300L
     }
 }

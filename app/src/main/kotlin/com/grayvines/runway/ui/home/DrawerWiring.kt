@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -58,7 +59,8 @@ internal fun rememberDrawer(
 @Composable
 internal fun PlaceDrawer(drawer: DrawerControls, height: Dp, swipe: DrawerSwipe) {
     val density = LocalDensity.current
-    drawer.motion.laidOut(with(density) { height.toPx() }, density.density, swipe)
+    val heightPx = with(density) { height.toPx() }
+    SideEffect { drawer.motion.laidOut(heightPx, density.density, swipe) }
 }
 
 @Composable

@@ -289,5 +289,52 @@ class LayoutBackupTest {
         assertEquals(setOf(app(3)), repo.observeBadgeMutes().first())
     }
 
+    @Test
+    fun `twins from two profiles collapsing to one installed app are deduplicated across folders`() =
+        runTest {
+            val layout =
+                Layout(
+                    homePages = 1,
+                    dockPages = 1,
+                    placements =
+                        listOf(
+                            Placement(
+                                Container.HOME,
+                                0,
+                                0,
+                                0,
+                                folder =
+                                    Folder(
+                                        "Home",
+                                        listOf(app(1, 0), app(1, 10), app(2, 0)),
+                                        handSorted = true,
+                                    ),
+                            ),
+                            Placement(Container.HOME, 0, 1, 0, drawerFolder = 2),
+                            Placement(Container.HOME, 0, 2, 0, drawerFolder = 3),
+                        ),
+                    drawerFolders =
+                        listOf(
+                            Folder("First", listOf(app(1, 0))),
+                            Folder("Second", listOf(app(1, 10), app(2, 0)), handSorted = true),
+                            Folder("OnlyTwin", listOf(app(1, 10))),
+                            Folder("Missing", listOf(app(9, 0))),
+                        ),
+                    hiddenApps = listOf(app(1, 10)),
+                )
+
+            val restored = repo.restoreLayout(layout, installed = setOf(app(1, 0), app(2, 0)))
+
+            // 1 missing app (app(9, 0)); the home placements of OnlyTwin and Missing do not add to
+            // skipped.
+            assertEquals(Restored(placed = 3, skipped = 1), restored)
+            val folders = repo.observeFolders().first().associateBy { it.name }
+            assertEquals(setOf("Home", "First", "Second"), folders.keys)
+            assertEquals(listOf(app(1, 0), app(2, 0)), folders.getValue("Home").apps)
+            assertEquals(listOf(app(1, 0)), folders.getValue("First").apps)
+            assertEquals(listOf(app(2, 0)), folders.getValue("Second").apps)
+            assertEquals(emptySet<AppRef>(), repo.observeHiddenApps().first())
+        }
+
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()
 }

@@ -142,12 +142,15 @@ class DragFeedbackTest : LauncherFixture() {
         // ...hold the clock, or the frame after the release would be the finished state, and
         // check the neighbour stays put rather than springing back for a frame.
         compose.mainClock.autoAdvance = false
-        release()
-        compose.mainClock.advanceTimeByFrame()
-        val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
-        compose.mainClock.autoAdvance = true
-        assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
-        assertSettlesTowards(firstDockApp, grid.dockSlot(settings.dockSlots - 1))
+        try {
+            release()
+            compose.mainClock.advanceTimeByFrame()
+            val shown = icon(lastDockApp).fetchSemanticsNode().boundsInRoot.center
+            assertEquals(settings.dockSlots - 2, grid.dockSlotAt(shown))
+            assertSettlesTowards(firstDockApp, grid.dockSlot(settings.dockSlots - 1))
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
         // And it stays there while the database catches up.
         compose.mainClock.advanceTimeBy(LIFT_ANIMATION_MS)
         waitUntil(TIMEOUT_MS) { placementOf(firstDockApp)?.x == settings.dockSlots - 1 }

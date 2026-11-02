@@ -4,7 +4,6 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
-import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,68 +17,12 @@ import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DragCoordinatorTest {
-    /** Two 3×2 home pages; item 1 at (0,0) on page 0, item 2 at (1,0) on page 0; one dock slot. */
-    private val lookup =
-        object : WorkspaceLookup {
-            override val grid = GridSize(3, 2)
-            override val dockSlots = 1
-
-            override fun homeItems(page: Int) =
-                if (page == 0) {
-                    listOf(Placed(1, Footprint(0, 0)), Placed(2, Footprint(1, 0)))
-                } else {
-                    emptyList()
-                }
-
-            override fun dockItems(page: Int) = emptyList<Placed>()
-        }
-
-    private class FakeWorkspace(
-        var pages: Int = 2,
-        var dockPages: Int = 1,
-        val moveSucceeds: Boolean = true,
-    ) : DragWorkspace {
-        val moves = mutableListOf<PendingMove>()
-        val reflected = CompletableDeferred<Unit>()
-        var prunes = 0
-
-        override fun pageCount(container: Container) =
-            if (container == Container.DOCK) dockPages else pages
-
-        override suspend fun move(move: PendingMove): Boolean {
-            moves += move
-            return moveSucceeds
-        }
-
-        override suspend fun awaitReflected(move: PendingMove) = reflected.await()
-
-        override suspend fun pruneEmptyPages() {
-            prunes++
-        }
-
-        override suspend fun addPage(container: Container, index: Int): Boolean {
-            if (container == Container.DOCK) {
-                dockPages = maxOf(dockPages, index + 1)
-            } else {
-                pages = maxOf(pages, index + 1)
-            }
-            return true
-        }
-    }
-
     private val source = DragSource(1, ItemKind.APP, Container.HOME, 0, 0, 0)
     private val grab = Point(50f, 50f)
 
     /** The bin, over where the pages meet the dock; the point is in the dock's slot. */
     private val bin = Bounds(125f, 185f, 175f, 215f)
     private val onBin = Point(150f, 205f)
-
-    // Home area 300×200 at the top, dock 300×50 below it; 3 columns, 2 rows.
-    private fun DragCoordinator.layOut() {
-        areas.homePagePositioned(0, Bounds(0f, 0f, 300f, 200f), 3, 2)
-        areas.homePageShown(0, 3, 2)
-        areas.dockPagePositioned(0, Bounds(0f, 200f, 300f, 250f), 1)
-    }
 
     @Test
     fun `a placement let go on the bin is removed, and has no cell to settle into`() = runTest {
@@ -174,6 +117,56 @@ class DragCoordinatorTest {
         workspace.reflected.complete(Unit)
         runCurrent()
         assertNull(c.pending.value)
+    }
+
+    @Test
+    fun `a second drop while the first is still being reflected keeps the new pending move`() =
+        runTest {
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            c.layOut()
+            val firstReflected = workspace.reflected
+            c.startDrag(source, Point(50f, 50f), grab)
+            c.dragTo(Point(250f, 150f))
+            c.endDrag()
+            runCurrent()
+            val firstMove = workspace.moves.single()
+            assertEquals(firstMove, c.pending.value)
+
+            workspace.reflected = CompletableDeferred()
+            c.startDrag(
+                DragSource(2, ItemKind.APP, Container.HOME, 0, 1, 0),
+                Point(150f, 50f),
+                grab,
+            )
+            c.dragTo(Point(250f, 50f))
+            c.endDrag()
+            runCurrent()
+            val secondMove = workspace.moves.last()
+            assertEquals(secondMove, c.pending.value)
+
+            firstReflected.complete(Unit) // the first write lands late: must not clear the second
+            runCurrent()
+            assertEquals(secondMove, c.pending.value)
+
+            workspace.reflected.complete(Unit)
+            runCurrent()
+            assertNull(c.pending.value)
+        }
+
+    @Test
+    fun `moving the finger after the drop has completed does nothing`() = runTest {
+        val workspace = FakeWorkspace()
+        val c = DragCoordinator(backgroundScope, lookup, workspace)
+        c.layOut()
+        c.startDrag(source, Point(50f, 50f), grab)
+        c.dragTo(Point(250f, 150f))
+        c.endDrag()
+        runCurrent()
+        assertNull(c.drag.value)
+        c.dragTo(Point(50f, 50f))
+        assertNull(c.drag.value)
+        assertEquals(1, workspace.moves.size)
     }
 
     @Test
@@ -538,28 +531,11 @@ class DragCoordinatorTest {
             val c = DragCoordinator(backgroundScope, lookup, workspace)
             c.layOut()
             val app = AppRef("new/.Main", 0)
-            val source = DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app)
-            c.startDrag(source.copy(fromFolder = 7L), Point(50f, 50f), grab)
+            c.startDrag(fromDrawer(app).copy(fromFolder = 7L), Point(50f, 50f), grab)
             c.dragTo(Point(250f, 150f)) // cell (2,1), free
             c.endDrag()
             runCurrent()
             assertEquals(7L, workspace.moves.single().fromFolder)
-        }
-
-    /** Page 0 holds the app in cell (0,0), as item 1. */
-    private fun holding(app: AppRef) =
-        object : WorkspaceLookup {
-            override val grid = GridSize(3, 2)
-            override val dockSlots = 1
-
-            override fun homeItems(page: Int) =
-                if (page == 0) {
-                    listOf(Placed(1, Footprint(0, 0), identity = app.identity))
-                } else {
-                    emptyList()
-                }
-
-            override fun dockItems(page: Int) = emptyList<Placed>()
         }
 
     @Test
@@ -569,20 +545,7 @@ class DragCoordinatorTest {
             val workspace = FakeWorkspace()
             val c = DragCoordinator(backgroundScope, holding(app), workspace)
             c.layOut()
-            c.startDrag(
-                DragSource(
-                    0,
-                    ItemKind.APP,
-                    Container.DRAWER,
-                    0,
-                    0,
-                    0,
-                    newApp = app,
-                    identity = app.identity,
-                ),
-                Point(50f, 50f),
-                grab,
-            )
+            c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
             c.dragTo(Point(250f, 150f)) // cell (2,1), free
 
             val state = c.drag.value!!
@@ -639,18 +602,6 @@ class DragCoordinatorTest {
         assertEquals(1L, c.drag.value?.source?.itemId)
     }
 
-    private fun fromDrawer(app: AppRef) =
-        DragSource(
-            0,
-            ItemKind.APP,
-            Container.DRAWER,
-            0,
-            0,
-            0,
-            newApp = app,
-            identity = app.identity,
-        )
-
     @Test
     fun `a placement picked up in a folder app's stead still leaves the folder on the drop`() =
         runTest {
@@ -658,21 +609,7 @@ class DragCoordinatorTest {
             val workspace = FakeWorkspace()
             val c = DragCoordinator(backgroundScope, holding(app), workspace)
             c.layOut()
-            c.startDrag(
-                DragSource(
-                    0,
-                    ItemKind.APP,
-                    Container.DRAWER,
-                    0,
-                    0,
-                    0,
-                    newApp = app,
-                    fromFolder = 7L,
-                    identity = app.identity,
-                ),
-                Point(50f, 50f),
-                grab,
-            )
+            c.startDrag(fromDrawer(app).copy(fromFolder = 7L), Point(50f, 50f), grab)
             c.dragTo(Point(250f, 150f)) // over the page: the placement there is picked up
             assertEquals(7L, c.drag.value?.source?.fromFolder)
             c.endDrag()
@@ -689,20 +626,7 @@ class DragCoordinatorTest {
         val workspace = FakeWorkspace()
         val c = DragCoordinator(backgroundScope, holding(app), workspace)
         c.layOut()
-        c.startDrag(
-            DragSource(
-                0,
-                ItemKind.APP,
-                Container.DRAWER,
-                0,
-                0,
-                0,
-                newApp = app,
-                identity = app.identity,
-            ),
-            Point(50f, 50f),
-            grab,
-        )
+        c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
         c.dragTo(Point(250f, 150f)) // over the page: picked up
         c.dragTo(Point(250f, 400f)) // off every area
         c.endDrag()
@@ -717,11 +641,7 @@ class DragCoordinatorTest {
         val c = DragCoordinator(backgroundScope, lookup, workspace)
         c.layOut()
         val app = AppRef("new/.Main", 0)
-        c.startDrag(
-            DragSource(0, ItemKind.APP, Container.DRAWER, 0, 0, 0, newApp = app),
-            Point(50f, 50f),
-            grab,
-        )
+        c.startDrag(fromDrawer(app), Point(50f, 50f), grab)
         c.dragTo(Point(250f, 150f)) // cell (2,1), free
         c.endDrag()
         runCurrent()

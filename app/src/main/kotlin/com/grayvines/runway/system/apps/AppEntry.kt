@@ -33,7 +33,8 @@ class AppEntry(
         other is AppEntry &&
             other.key == key &&
             other.label == label &&
-            other.bitmap.asAndroidBitmap().sameAs(bitmap.asAndroidBitmap())
+            (other.bitmap === bitmap ||
+                other.bitmap.asAndroidBitmap().sameAs(bitmap.asAndroidBitmap()))
 
     override fun hashCode() = key.hashCode() * 31 + label.hashCode()
 

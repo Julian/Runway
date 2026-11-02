@@ -149,6 +149,35 @@ class SettingsPagesTest {
     }
 
     @Test
+    fun whenNotDefaultHome_theListPromptsToSetDefaultAndOpenHomeScreen() {
+        var isDefault by mutableStateOf(false)
+        var setDefaultClicks = 0
+        var openHomeClicks = 0
+        compose.setContent {
+            SettingsScreen(
+                settings = Settings(),
+                searchTargets = emptyList(),
+                apps = emptyList(),
+                hiddenApps = emptySet(),
+                onHide = { _, _ -> },
+                onChange = {},
+                onOpenHome = { openHomeClicks += 1 }.takeUnless { isDefault },
+                onSetDefaultHome = { setDefaultClicks += 1 }.takeUnless { isDefault },
+                backupActions = BackupActions(save = {}, restore = {}),
+                debugActions = null,
+            )
+        }
+        compose.onNodeWithText("Set as default home app").assertIsDisplayed().performClick()
+        assertEquals(1, setDefaultClicks)
+        compose.onNodeWithText("Open home screen").assertIsDisplayed().performClick()
+        assertEquals(1, openHomeClicks)
+
+        isDefault = true
+        compose.onNodeWithText("Set as default home app").assertDoesNotExist()
+        compose.onNodeWithText("Open home screen").assertDoesNotExist()
+    }
+
+    @Test
     fun anOpenPageStaysOpenWhenTheActivityIsRecreated() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Screen() }

@@ -128,7 +128,10 @@ fun WidgetCell(
             },
             update = { f ->
                 f.muted = framed
-                f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
+                if (size != f.reportedSize) {
+                    f.reportedSize = size
+                    f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
+                }
             },
             modifier = cellModifier.semantics { contentDescription = label },
         )
@@ -163,8 +166,7 @@ private fun Placeholder(label: String, modifier: Modifier = Modifier) {
 /**
  * The hold is the launcher's from then on: the widget must not take the release as a tap. A move
  * after it lifts the widget, which travels as a picture taken at that moment. Read through state by
- * the gesture, which outlives compositions: the session is replaced after every drop, and a picture
- * handed to a stale one would never be drawn.
+ * the gesture, which outlives compositions.
  */
 @Composable
 private fun rememberWidgetHandlers(
@@ -223,6 +225,9 @@ private class WidgetFrame(context: Context) : FrameLayout(context) {
 
     /** While the resize frame is up: every touch is kept from the widget. */
     var muted = false
+
+    /** The size in dp last told to [widget], so recompositions at the same size say nothing. */
+    var reportedSize: SizeF? = null
 
     fun hosting(view: AppWidgetHostView): WidgetFrame {
         widget = view

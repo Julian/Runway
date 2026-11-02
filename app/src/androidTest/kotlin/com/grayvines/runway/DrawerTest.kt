@@ -1,6 +1,5 @@
 package com.grayvines.runway
 
-import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -408,8 +407,9 @@ class DrawerTest : LauncherFixture() {
         // Hold the clock: with it running, the first look would already be the finished close.
         compose.mainClock.autoAdvance = false
         try {
-            device.pressBack() // the drawer's: focus leaves the field as the close begins
-            SystemClock.sleep(PRESS_SETTLE_MS) // the key lands
+            compose.runOnUiThread {
+                compose.activity.onBackPressedDispatcher.onBackPressed()
+            } // the drawer's: focus leaves the field as the close begins
             repeat(CLOSE_FRAMES) { compose.mainClock.advanceTimeByFrame() }
             compose.onNodeWithTag(DRAWER_TAG).assertExists() // still on its way out
             searchField().assertIsNotFocused()

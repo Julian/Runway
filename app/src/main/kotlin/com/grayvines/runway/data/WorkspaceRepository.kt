@@ -7,6 +7,7 @@ import androidx.room3.useWriterConnection
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.Serializable
@@ -76,7 +77,10 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         y: Int,
         displaced: Map<Long, Footprint>,
     ): Boolean {
-        if (dao.item(id) == null || !makeRoom(container, page, displaced, mover = id)) return false
+        val item = dao.item(id) ?: return false
+        if (item.kind == ItemKind.WIDGET && container != Container.HOME) return false
+        val target = Footprint(x, y, item.spanX, item.spanY)
+        if (!makeRoom(container, page, displaced, mover = id, target = target)) return false
         dao.place(id, container, page, x, y)
         return true
     }
@@ -84,21 +88,33 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     /**
      * Inside a write: moves the [displaced] neighbours on [page] to their new cells, first taking
      * them (and [mover], if it is a placement) off their cells, since the moves can chain through
-     * each other's old cells. False, and nothing moved, if the page is gone or a neighbour has left
-     * it: the plan was made from a picture of the layout that has changed since.
+     * each other's old cells. False, and nothing moved, if the page is gone, a neighbour has left
+     * it, or [target] or a displaced neighbour would land on negative coordinates or overlap
+     * anything left on the page: the plan was made from a picture of the layout that has changed
+     * since.
      */
     internal suspend fun makeRoom(
         container: Container,
         page: Int,
         displaced: Map<Long, Footprint>,
         mover: Long? = null,
+        target: Footprint? = null,
     ): Boolean {
         val pageExists = dao.pages(container).any { it.index == page }
-        val neighboursThere =
-            displaced.keys.all { otherId ->
-                dao.item(otherId)?.let { it.container == container && it.pageIndex == page } == true
+        if (!pageExists || mover in displaced) return false
+        val onPage =
+            dao.items().filter {
+                it.container == container && it.pageIndex == page && it.id != mover
             }
-        if (!pageExists || !neighboursThere) return false
+        val byId = onPage.associateBy { it.id }
+        if (!displaced.keys.all { it in byId }) return false
+        val stayed = onPage.filter { it.id !in displaced }.mapNotNull { it.footprint() }
+        val landing =
+            displaced.map { (otherId, to) ->
+                val other = byId.getValue(otherId)
+                Footprint(to.x, to.y, other.spanX, other.spanY)
+            } + listOfNotNull(target)
+        if (!landing.fitsAmong(stayed, container)) return false
         dao.park(displaced.keys.toList() + listOfNotNull(mover))
         displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
         return true
@@ -116,7 +132,7 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         y: Int,
         displaced: Map<Long, Footprint> = emptyMap(),
     ): Boolean = write {
-        if (!makeRoom(container, page, displaced)) {
+        if (!makeRoom(container, page, displaced, target = Footprint(x, y))) {
             false
         } else {
             dao.insertItem(
@@ -135,13 +151,15 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     }
 
     /**
-     * Takes one placement off its page; a page left empty at the end goes with it, and so does a
-     * folder that this was the last placement of.
+     * Takes one placement off its page and returns what it was; a page left empty at the end goes
+     * with it, and so does a folder that this was the last placement of.
      */
-    suspend fun removeItem(id: Long) = write {
+    suspend fun removeItem(id: Long): ItemEntity? = write {
+        val removed = dao.item(id)
         dao.deleteItem(id)
         dao.deleteUnplacedFolders()
         dao.dropTrailingEmptyPages()
+        removed
     }
 
     /**
@@ -188,6 +206,24 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         db.useReaderConnection { transactor ->
             transactor.deferredTransaction { block() }
         }
+
+    /**
+     * Every box has non-negative cells, a positive span, and overlaps neither [existing] nor
+     * another; dock placements must also sit in the single dock row (`y == 0 && height == 1`).
+     */
+    private fun List<Footprint>.fitsAmong(
+        existing: List<Footprint>,
+        container: Container,
+    ): Boolean {
+        val occupied = existing.toMutableList()
+        for (box in this) {
+            val negative = box.x < 0 || box.y < 0 || box.width < 1 || box.height < 1
+            val offDock = container == Container.DOCK && (box.y != 0 || box.height != 1)
+            if (negative || offDock || occupied.any { it.overlaps(box) }) return false
+            occupied += box
+        }
+        return true
+    }
 }
 
 /** Within a transaction: the empty pages after the last used one go, on home and in the dock. */
@@ -197,4 +233,10 @@ internal suspend fun WorkspaceDao.dropTrailingEmptyPages() {
         val keep = LayoutEngine.pageCountAfterPrune(pages.size, usedPages(container).toSet())
         pages.drop(keep).forEach { deletePage(container, it.index) }
     }
+}
+
+internal fun ItemEntity.footprint(): Footprint? {
+    val cellX = x ?: return null
+    val cellY = y ?: return null
+    return Footprint(cellX, cellY, spanX, spanY)
 }

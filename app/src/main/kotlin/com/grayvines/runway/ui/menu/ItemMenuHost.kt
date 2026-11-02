@@ -41,16 +41,7 @@ class ItemMenuHost(
         ItemMenuActions(
             appInfo = { withItem { it.app?.let(graph.appRepository::showAppInfo) } },
             uninstall = { withItem { it.app?.let(graph.appRepository::uninstall) } },
-            remove = {
-                withItem { item ->
-                    write("remove the item") {
-                        removeItem(item.id)
-                        // The host id goes with the placement, or the provider would go on
-                        // thinking it is placed.
-                        item.appWidgetId?.let(graph.widgets::deleteId)
-                    }
-                }
-            },
+            remove = { withItem { item -> write("remove the item") { removeItem(item.id) } } },
             newFolder = {
                 withItem { item ->
                     item.app?.let { app -> write("make a folder") { createDrawerFolder(app.ref) } }

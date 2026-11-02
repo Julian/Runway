@@ -10,21 +10,37 @@ import org.junit.jupiter.api.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class EdgeDwellTest {
     /** A workspace of [pages] pages; the finger is "on" [page]. */
-    private class Fake(var pages: Int, var page: Int, val addFails: Boolean = false) :
-        EdgeDwell.Actions {
+    private class Fake(
+        var pages: Int,
+        var page: Int,
+        val addFails: Boolean = false,
+        var dockPages: Int = 1,
+        var dockPage: Int = 0,
+    ) : EdgeDwell.Actions {
         val events = mutableListOf<String>()
+        val containers = mutableListOf<Container>()
 
-        override fun isPastTheEnd(hover: EdgeHover) = hover.edge == Edge.RIGHT && page >= pages - 1
+        override fun isPastTheEnd(hover: EdgeHover): Boolean {
+            val (shown, count) =
+                if (hover.container == Container.DOCK) dockPage to dockPages else page to pages
+            return hover.edge == Edge.RIGHT && shown >= count - 1
+        }
 
         override fun flip(container: Container, delta: Int) {
-            page = (page + delta).coerceIn(0, pages - 1)
+            if (container == Container.DOCK) {
+                dockPage = (dockPage + delta).coerceIn(0, dockPages - 1)
+            } else {
+                page = (page + delta).coerceIn(0, pages - 1)
+            }
+            containers += container
             events += "flip$delta"
         }
 
         override suspend fun addPage(container: Container): Boolean {
+            containers += container
             events += "add"
             if (addFails) return false
-            pages++
+            if (container == Container.DOCK) dockPages++ else pages++
             return true
         }
     }
@@ -96,4 +112,29 @@ class EdgeDwellTest {
         assertEquals(0, fake.events.count { it == "add" })
         assertEquals(0, fake.page)
     }
+
+    @Test
+    fun `switching between home and dock edges restarts the dwell for the new container`() =
+        runTest {
+            val fake = Fake(pages = 3, page = 0, dockPages = 1, dockPage = 0)
+            val dwell = EdgeDwell(backgroundScope, fake)
+            dwell.hover(EdgeHover(Container.HOME, Edge.RIGHT))
+            advanceTimeBy(EdgeDwell.FLIP_MS + 1)
+            assertEquals(listOf("flip1"), fake.events)
+            assertEquals(listOf(Container.HOME), fake.containers)
+
+            // Switch straight to the dock's right edge (already at the end of its single page).
+            dwell.hover(EdgeHover(Container.DOCK, Edge.RIGHT))
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS) // one tick short on the dock
+            assertEquals(listOf("flip1"), fake.events)
+            advanceTimeBy(EdgeDwell.FLIP_MS)
+            assertEquals(listOf("flip1", "add", "flip1"), fake.events)
+            assertEquals(
+                listOf(Container.HOME, Container.DOCK, Container.DOCK),
+                fake.containers,
+            )
+            assertEquals(2, fake.dockPages)
+            assertEquals(1, fake.dockPage)
+            assertEquals(1, fake.page)
+        }
 }

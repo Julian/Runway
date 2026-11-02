@@ -15,10 +15,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
@@ -28,6 +28,7 @@ import com.grayvines.runway.system.widgets.bindWidgetRequest
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DropAreaTracker
 import com.grayvines.runway.ui.drag.Point
+import com.grayvines.runway.ui.drag.Settling
 import com.grayvines.runway.ui.drawer.DrawerQuery
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.DrawerActions
@@ -64,7 +65,12 @@ class LauncherActivity : ComponentActivity() {
 
     private val homeMenuActions by lazy {
         viewModel.homeMenu.actions(
-            openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
+            openSettings = {
+                startActivity(
+                    Intent(this, SettingsActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
             openWidgets = viewModel.widgetPicker::open,
         )
     }
@@ -126,15 +132,14 @@ class LauncherActivity : ComponentActivity() {
                 val base by viewModel.state.collectAsStateWithLifecycle()
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
-                val itemMenu by viewModel.itemMenu.state.collectAsStateWithLifecycle()
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
-                val homeMenuAt by viewModel.homeMenu.state.collectAsStateWithLifecycle()
                 Notices(viewModel.widgetPicker.notices)
                 val state = remember(base, pending) { base.applying(pending) }
                 // The live settings, not this composition's: page-shown callbacks are kept by
                 // effects that outlive it, and a changed grid must reach them.
-                val reports =
+                val reports = remember {
                     AreaReports(viewModel.dragging.areas) { viewModel.state.value.settings }
+                }
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
@@ -142,23 +147,12 @@ class LauncherActivity : ComponentActivity() {
                     flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
+                    onSearchLongClick = viewModel::openSearchTarget,
                     onSwipePastFirstPage = viewModel.swipedPastFirstPage,
-                    itemMenu =
-                        ItemMenuSession(
-                            itemMenu,
-                            viewModel.itemMenu.actions,
-                            viewModel.itemMenu::dismiss,
-                        ),
-                    widgetPicker = widgetPickerSession(),
+                    itemMenu = viewModel.itemMenuSession(),
+                    widgetPicker = viewModel.widgetPickerSession(),
                     widgetResize = rememberWidgetResizeSession(viewModel.widgetResize),
-                    homeMenu =
-                        HomeMenuSession(
-                            at = homeMenuAt,
-                            actions = homeMenuActions,
-                            onOpen = viewModel.homeMenu::open,
-                            onDismiss = viewModel.homeMenu::dismiss,
-                            showPage = viewModel.homeMenu.showPage,
-                        ),
+                    homeMenu = homeMenuSession(),
                     openFolder = openFolder,
                     folderActions = viewModel.folderActions,
                     drawerOpen = drawerOpen,
@@ -211,16 +205,17 @@ class LauncherActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun widgetPickerSession(): WidgetPickerSession {
-        val open by viewModel.widgetPicker.open.collectAsStateWithLifecycle()
-        val providers by viewModel.widgetPicker.providers.collectAsStateWithLifecycle()
-        return WidgetPickerSession(
-            open = open,
-            providers = providers,
-            onPick = viewModel.widgetPicker::pick,
-            onDismiss = viewModel.widgetPicker::dismiss,
-            spanFor = viewModel.widgetPicker::spanFor,
-        )
+    private fun homeMenuSession(): HomeMenuSession {
+        val homeMenuAt by viewModel.homeMenu.state.collectAsStateWithLifecycle()
+        return remember(homeMenuAt) {
+            HomeMenuSession(
+                at = homeMenuAt,
+                actions = homeMenuActions,
+                onOpen = viewModel.homeMenu::open,
+                onDismiss = viewModel.homeMenu::dismiss,
+                showPage = viewModel.homeMenu.showPage,
+            )
+        }
     }
 
     /** What could not be done, said in a toast. */
@@ -238,11 +233,14 @@ class LauncherActivity : ComponentActivity() {
 
     @Composable
     private fun drawerQuery(): DrawerQuery {
-        return DrawerQuery(
-            viewModel.drawerQuery,
-            { viewModel.drawerQuery = it },
-            viewModel::launchDrawerMatch,
-        )
+        val text = viewModel.drawerQuery
+        return remember(text) {
+            DrawerQuery(
+                text,
+                { viewModel.drawerQuery = it },
+                viewModel::launchDrawerMatch,
+            )
+        }
     }
 
     /** The one drag session, reading the live drag; nothing here changes while a finger moves. */
@@ -250,18 +248,21 @@ class LauncherActivity : ComponentActivity() {
     private fun rememberDragSession(): DragSession {
         val drag = viewModel.dragging.drag.collectAsStateWithLifecycle()
         val settling = viewModel.dragging.settling.collectAsStateWithLifecycle()
-        // A settle target is per drop: it forgets itself when the settling item changes.
-        val settleTarget = remember(settling.value) { mutableStateOf<Point?>(null) }
-        // A carried widget's picture outlives the session, which is remade per drop: the settle
-        // after the drop still draws it.
+        // A settle target is per drop: exposed only while it belongs to the current settle.
+        val targetFor = remember { mutableStateOf<Pair<Settling?, Point>?>(null) }
+        val settleTarget = remember {
+            derivedStateOf { targetFor.value?.takeIf { it.first == settling.value }?.second }
+        }
+        val active by remember { derivedStateOf { drag.value != null || settling.value != null } }
         val picture = remember { mutableStateOf<ImageBitmap?>(null) }
-        return remember(settleTarget) {
+        if (!active) picture.value = null
+        return remember {
             DragSession(
                 stateOf = drag,
                 settlingOf = settling,
                 settleTargetOf = settleTarget,
                 pictureOf = picture,
-                onSettleTargetPositioned = { settleTarget.value = it },
+                onSettleTargetPositioned = { targetFor.value = settling.value to it },
                 onSettled = viewModel.dragging::settled,
                 onBinPositioned = viewModel.dragging.areas::binPositioned,
                 onHold = viewModel.hold,
@@ -305,4 +306,25 @@ private class AreaReports(
 
     fun dockPageShown(page: Int, settled: Boolean) =
         areas.dockPageShown(page, settings().dockSlots, settled)
+}
+
+@Composable
+internal fun HomeViewModel.itemMenuSession(): ItemMenuSession {
+    val open by itemMenu.state.collectAsStateWithLifecycle()
+    return remember(this, open) { ItemMenuSession(open, itemMenu.actions, itemMenu::dismiss) }
+}
+
+@Composable
+internal fun HomeViewModel.widgetPickerSession(): WidgetPickerSession {
+    val open by widgetPicker.open.collectAsStateWithLifecycle()
+    val providers by widgetPicker.providers.collectAsStateWithLifecycle()
+    return remember(this, open, providers) {
+        WidgetPickerSession(
+            open = open,
+            providers = providers,
+            onPick = widgetPicker::pick,
+            onDismiss = widgetPicker::dismiss,
+            spanFor = widgetPicker::spanFor,
+        )
+    }
 }

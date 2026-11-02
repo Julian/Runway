@@ -44,6 +44,8 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
     }
 }
 
+internal const val MAX_PAGES = 100
+
 /**
  * Throws [IllegalArgumentException], naming the first fault, for a layout no restore should try: a
  * cell off the grid [settings] describes, a page the file does not have, two things in one cell, a
@@ -53,6 +55,7 @@ data class Backup(val version: Int = VERSION, val settings: Settings, val layout
  */
 internal fun Layout.validate(settings: Settings) {
     require(homePages >= 0 && dockPages >= 0) { "negative page counts" }
+    require(homePages <= MAX_PAGES && dockPages <= MAX_PAGES) { "too many pages" }
     val cells = mutableSetOf<List<Int>>()
     placements.forEachIndexed { i, p -> p.validate(i + 1, this, settings, cells) }
     val hidden = hiddenApps.orEmpty().toSet()
