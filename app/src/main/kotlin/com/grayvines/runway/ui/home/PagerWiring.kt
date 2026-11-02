@@ -1,14 +1,88 @@
 package com.grayvines.runway.ui.home
 
+import android.app.WallpaperManager
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalView
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * Slides the system wallpaper across [pager]'s pages when [enabled] is true and there is more than
+ * one page, and centres it otherwise. Updated in the draw pass so the wallpaper offset is sent on
+ * the same frame the pager draws, without recomposing the screen or waiting for a coroutine turn.
+ */
+@Composable
+internal fun WallpaperParallax(pager: PagerState, enabled: Boolean) {
+    val view = LocalView.current
+    val wallpaper = remember(view.context) { WallpaperManager.getInstance(view.context) }
+    val sent = remember { ParallaxSent() }
+    Spacer(
+        Modifier.drawBehind {
+            val token = view.windowToken
+            if (token != null) {
+                val count = pager.pageCount
+                val step = wallpaperStep(count, enabled)
+                val offset =
+                    wallpaperOffset(
+                        pager.currentPage,
+                        pager.currentPageOffsetFraction,
+                        count,
+                        enabled,
+                    )
+                if (step != sent.step) {
+                    wallpaper.setWallpaperOffsetSteps(step, 1f)
+                    sent.step = step
+                }
+                if (offset != sent.offset) {
+                    wallpaper.setWallpaperOffsets(token, offset, CENTER_OFFSET)
+                    sent.offset = offset
+                }
+            }
+        }
+    )
+}
+
+private class ParallaxSent {
+    var step: Float = Float.NaN
+    var offset: Float = Float.NaN
+}
+
+/**
+ * The horizontal step size to report to [WallpaperManager.setWallpaperOffsetSteps] for [pageCount]
+ * pages when parallax is [enabled]: `1 / (pageCount - 1)` across multiple pages, or `1` when
+ * parallax is off or there is only one page.
+ */
+internal fun wallpaperStep(pageCount: Int, enabled: Boolean): Float =
+    if (enabled && pageCount > 1) 1f / (pageCount - 1) else 1f
+
+/**
+ * The horizontal wallpaper offset in `[0, 1]` for [page] and [offsetFraction] across [pageCount]
+ * pages when parallax is [enabled], or `0.5` (centred) when parallax is off or there is at most one
+ * page.
+ */
+internal fun wallpaperOffset(
+    page: Int,
+    offsetFraction: Float,
+    pageCount: Int,
+    enabled: Boolean,
+): Float =
+    if (enabled && pageCount > 1) {
+        ((page + offsetFraction) / (pageCount - 1)).coerceIn(0f, 1f)
+    } else {
+        CENTER_OFFSET
+    }
+
+private const val CENTER_OFFSET = 0.5f
 
 /**
  * Reports the page each pager shows, and whether it has settled there or is still scrolling, to

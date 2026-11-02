@@ -135,6 +135,10 @@ class SettingsPagesTest {
 
         granted = true
         compose.onNodeWithText("Allow notification access").assertDoesNotExist()
+
+        compose.onNodeWithText("Parallax").assertIsOn().performClick()
+        assertFalse(settings.wallpaperParallax)
+        compose.onNodeWithText("Parallax").assertIsOff()
     }
 
     @Test

@@ -80,6 +80,11 @@ internal fun HomeScreenPage(
     Toggle("Home", settings.homeLabels) { v -> onChange { it.copy(homeLabels = v) } }
     Toggle("Dock", settings.dockLabels) { v -> onChange { it.copy(dockLabels = v) } }
 
+    Section("Wallpaper")
+    Toggle("Parallax", settings.wallpaperParallax) { v ->
+        onChange { it.copy(wallpaperParallax = v) }
+    }
+
     Section("Badges")
     OptionRow(
         label = "Style",

@@ -50,6 +50,7 @@ class BackupTest {
             drawerSwipe = DrawerSwipe.HIGH,
             drawerColumns = 6,
             searchHiddenApps = true,
+            wallpaperParallax = false,
             searchTarget = "x",
             swipeRight = SwipeAction.OpenApp(AppRef("d/.Main", 10)),
         )

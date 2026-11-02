@@ -52,6 +52,8 @@ data class Settings(
     val drawerIndex: Boolean = false,
     /** Whether the drawer's search also finds apps hidden from the drawer. */
     val searchHiddenApps: Boolean = false,
+    /** Whether the wallpaper slides across home pages as they are swiped. */
+    val wallpaperParallax: Boolean = true,
     /** What swiping right from the first home page does; null, nothing. */
     val swipeRight: SwipeAction? = null,
 ) {

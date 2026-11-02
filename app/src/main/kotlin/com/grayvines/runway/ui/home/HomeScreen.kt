@@ -114,6 +114,7 @@ fun HomeScreen(
     PagerCommands(homePager, goHome, flipHomePage, homeMenu.showPage)
     PageFlips(dockPager, flipDockPage)
     PagesShown(homePager, dockPager, onHomePageShown, onDockPageShown)
+    WallpaperParallax(homePager, settings.wallpaperParallax)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
     val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)

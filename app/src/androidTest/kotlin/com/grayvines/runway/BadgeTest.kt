@@ -94,7 +94,7 @@ class BadgeTest : LauncherFixture() {
         waitUntil {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isEmpty()
         }
-        pressBack()
+        sendHomeIntent()
         awaitDrawerClosed()
         waitUntil {
             compose
@@ -111,7 +111,7 @@ class BadgeTest : LauncherFixture() {
         waitUntil {
             compose.onAllNodesWithTag(ITEM_MENU_TAG).fetchSemanticsNodes().isEmpty()
         }
-        pressBack()
+        sendHomeIntent()
         awaitDrawerClosed()
         waitUntil {
             compose

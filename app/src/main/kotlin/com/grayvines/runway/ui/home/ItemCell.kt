@@ -154,12 +154,12 @@ internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
 @Composable
 internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier = Modifier) {
     val badges = LocalBadges.current
-    Box(modifier) {
+    Box {
         LazyVerticalGrid(
             columns = GridCells.Fixed(FOLDER_PREVIEW_COLUMNS),
             userScrollEnabled = false,
             modifier =
-                Modifier.fillMaxSize()
+                modifier
                     .semantics { contentDescription = name }
                     .folderTile()
                     .padding(fraction = FOLDER_TILE_INSET),
@@ -204,11 +204,11 @@ internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Bo
         return
     }
     val badges = LocalBadges.current
-    Box(modifier) {
+    Box {
         Image(
             bitmap = app.bitmap,
             contentDescription = app.label,
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier,
         )
         Badge(
             count = badges.countFor(app.ref),

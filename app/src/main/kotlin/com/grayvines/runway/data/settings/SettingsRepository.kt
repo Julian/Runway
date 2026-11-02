@@ -49,6 +49,7 @@ class SettingsRepository(context: Context) {
         val drawerColumns = intPreferencesKey("drawer_columns")
         val drawerIndex = booleanPreferencesKey("drawer_index")
         val searchHiddenApps = booleanPreferencesKey("search_hidden_apps")
+        val wallpaperParallax = booleanPreferencesKey("wallpaper_parallax")
         /** The action as JSON: one key holds any kind of action, with whatever it names. */
         val swipeRight = stringPreferencesKey("swipe_right")
     }
@@ -57,20 +58,22 @@ class SettingsRepository(context: Context) {
     private fun Preferences.toSettings(): Settings {
         val defaults = Settings()
         return Settings(
-                columns = this[Keys.columns] ?: defaults.columns,
-                rows = this[Keys.rows] ?: defaults.rows,
-                dockSlots = this[Keys.dockSlots] ?: defaults.dockSlots,
-                homeLabels = this[Keys.homeLabels] ?: defaults.homeLabels,
-                dockLabels = this[Keys.dockLabels] ?: defaults.dockLabels,
-                drawerLabels = this[Keys.drawerLabels] ?: defaults.drawerLabels,
+                columns = getOrDefault(Keys.columns, defaults.columns),
+                rows = getOrDefault(Keys.rows, defaults.rows),
+                dockSlots = getOrDefault(Keys.dockSlots, defaults.dockSlots),
+                homeLabels = getOrDefault(Keys.homeLabels, defaults.homeLabels),
+                dockLabels = getOrDefault(Keys.dockLabels, defaults.dockLabels),
+                drawerLabels = getOrDefault(Keys.drawerLabels, defaults.drawerLabels),
                 badgeStyle = enumOrDefault(Keys.badgeStyle, defaults.badgeStyle),
-                searchBarAtTop = this[Keys.searchBarAtTop] ?: defaults.searchBarAtTop,
+                searchBarAtTop = getOrDefault(Keys.searchBarAtTop, defaults.searchBarAtTop),
                 searchTarget = this[Keys.searchTarget],
                 drawerSwipe = enumOrDefault(Keys.drawerSwipe, defaults.drawerSwipe),
-                drawerKeyboard = this[Keys.drawerKeyboard] ?: defaults.drawerKeyboard,
+                drawerKeyboard = getOrDefault(Keys.drawerKeyboard, defaults.drawerKeyboard),
                 drawerColumns = this[Keys.drawerColumns],
-                drawerIndex = this[Keys.drawerIndex] ?: defaults.drawerIndex,
-                searchHiddenApps = this[Keys.searchHiddenApps] ?: defaults.searchHiddenApps,
+                drawerIndex = getOrDefault(Keys.drawerIndex, defaults.drawerIndex),
+                searchHiddenApps = getOrDefault(Keys.searchHiddenApps, defaults.searchHiddenApps),
+                wallpaperParallax =
+                    getOrDefault(Keys.wallpaperParallax, defaults.wallpaperParallax),
                 swipeRight = this[Keys.swipeRight]?.let(::swipeActionOrNull),
             )
             .clamped()
@@ -91,6 +94,7 @@ class SettingsRepository(context: Context) {
         drawerColumns?.let { prefs[Keys.drawerColumns] = it } ?: prefs.remove(Keys.drawerColumns)
         prefs[Keys.drawerIndex] = drawerIndex
         prefs[Keys.searchHiddenApps] = searchHiddenApps
+        prefs[Keys.wallpaperParallax] = wallpaperParallax
         swipeRight?.let { prefs[Keys.swipeRight] = Json.encodeToString<SwipeAction>(it) }
             ?: prefs.remove(Keys.swipeRight)
     }
@@ -107,6 +111,9 @@ private fun swipeActionOrNull(json: String): SwipeAction? =
         Log.w(TAG, "a swipe action this build cannot read; it does nothing", e)
         null
     }
+
+internal fun <T> Preferences.getOrDefault(key: Preferences.Key<T>, default: T): T =
+    this[key] ?: default
 
 private inline fun <reified E : Enum<E>> Preferences.enumOrDefault(
     key: Preferences.Key<String>,

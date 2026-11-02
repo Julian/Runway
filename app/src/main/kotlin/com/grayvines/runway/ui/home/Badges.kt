@@ -73,8 +73,7 @@ internal fun Badge(count: Int, style: BadgeStyle, modifier: Modifier = Modifier)
                     .padding(
                         horizontal = PILL_HORIZONTAL_PADDING,
                         vertical = PILL_VERTICAL_PADDING,
-                    )
-                    .testTag(BADGE_TAG),
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -88,6 +87,7 @@ internal fun Badge(count: Int, style: BadgeStyle, modifier: Modifier = Modifier)
                         ),
                     maxLines = 1,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag(BADGE_TAG),
                 )
             }
         BadgeStyle.OFF -> Unit
