@@ -178,7 +178,7 @@ class WidgetHost(context: Context) {
 }
 
 /** The drawable as a bitmap no wider or taller than [maxPx], keeping its shape. */
-private fun Drawable.toPicture(maxPx: Int): ImageBitmap? {
+internal fun Drawable.toPicture(maxPx: Int): ImageBitmap? {
     val w = intrinsicWidth
     val h = intrinsicHeight
     if (w <= 0 || h <= 0) return null
