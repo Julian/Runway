@@ -515,12 +515,12 @@ open class LauncherFixture {
         }
     }
 
-    protected fun menuRow(text: String) =
-        compose.onNode(
-            hasText(text) and
-                (hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)) or
-                    hasAnyAncestor(hasTestTag(HOME_MENU_TAG)))
-        )
+    protected fun menuRow(text: String): SemanticsNodeInteraction {
+        val labelMatches = hasText(text) or hasContentDescription(text)
+        val inMenu =
+            hasAnyAncestor(hasTestTag(ITEM_MENU_TAG)) or hasAnyAncestor(hasTestTag(HOME_MENU_TAG))
+        return compose.onNode(labelMatches and inMenu)
+    }
 
     /**
      * On a starved CI emulator the stock launcher can hang, and the system's "isn't responding"

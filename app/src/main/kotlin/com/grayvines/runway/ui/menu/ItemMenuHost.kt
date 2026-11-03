@@ -27,6 +27,8 @@ class ItemMenuHost(
     private val mayOpen: () -> Boolean = { true },
     /** Whether notification badges are currently muted for this app. */
     private val isBadgesMuted: (AppRef) -> Boolean = { false },
+    /** Closes any open drawer or folder behind a shortcut launched from it. */
+    private val onShortcutLaunched: () -> Unit = {},
 ) {
     private val _state = MutableStateFlow<ItemMenuState?>(null)
 
@@ -61,12 +63,29 @@ class ItemMenuHost(
                     }
                 }
             },
+            startShortcut = { shortcut ->
+                withItem { item ->
+                    item.app?.let { app ->
+                        graph.appRepository.startShortcut(app, shortcut.id)
+                        onShortcutLaunched()
+                    }
+                }
+            },
         )
 
     fun hold(item: HomeItem, container: Container, page: Int, cell: Bounds) {
         if (mayOpen()) {
             val muted = item.app?.ref?.let(isBadgesMuted) ?: false
-            _state.value = ItemMenuState(item, container, page, cell, badgesMuted = muted)
+            val shortcuts = item.app?.let(graph.appRepository::shortcuts).orEmpty()
+            _state.value =
+                ItemMenuState(
+                    item,
+                    container,
+                    page,
+                    cell,
+                    badgesMuted = muted,
+                    shortcuts = shortcuts,
+                )
         }
     }
 
@@ -81,6 +100,7 @@ class ItemMenuHost(
                     cell,
                     folderId,
                     badgesMuted = isBadgesMuted(app.ref),
+                    shortcuts = graph.appRepository.shortcuts(app),
                 )
         }
     }

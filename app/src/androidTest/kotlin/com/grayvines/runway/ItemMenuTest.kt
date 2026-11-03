@@ -217,6 +217,40 @@ class ItemMenuTest : LauncherFixture() {
         assertEquals(0 to 0, homeCellOf(removable.label)) // declined: still there
     }
 
+    @Test
+    fun appShortcutsAppearInTheMenuAndLaunch() {
+        device.executeShellCommand(
+            "cmd package set-home-activity ${app.packageName}/com.grayvines.runway.LauncherActivity"
+        )
+        val fixture = runBlocking {
+            graph.appRepository.apps.first { it.isNotEmpty() }
+        }
+            .first { it.component.packageName == FIXTURE_PACKAGE }
+        runBlocking {
+            graph.workspace.removeItem(placementOf(firstHomeApp)!!.id)
+            graph.workspace.moveItem(
+                placementOf(fixture.label)!!.id,
+                Container.HOME,
+                0,
+                0,
+                0,
+                emptyMap(),
+            )
+        }
+        waitUntil(TIMEOUT_MS) { homeCellOf(fixture.label) == 0 to 0 }
+        waitUntil(TIMEOUT_MS) { graph.appRepository.shortcuts(fixture).isNotEmpty() }
+        longPress(fixture.label)
+        release()
+        menuRow("Fixture shortcut").assertIsDisplayed().performClick()
+        assertTrue(
+            "shortcut did not launch fixture",
+            device.wait(Until.hasObject(By.pkg(FIXTURE_PACKAGE)), TIMEOUT_MS),
+        )
+        sendHomeIntent()
+        waitUntil(TIMEOUT_MS) { icon(fixture.label).isDisplayedOrFalse() }
+        awaitMenuGone()
+    }
+
     private fun longPress(label: String) = hold(icon(label))
 
     /**

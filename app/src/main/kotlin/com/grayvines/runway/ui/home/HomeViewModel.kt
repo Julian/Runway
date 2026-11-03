@@ -177,6 +177,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             viewModelScope,
             mayOpen = { dragging.drag.value == null },
             isBadgesMuted = { ref -> ref in state.value.badgeMutes },
+            onShortcutLaunched = {
+                closeDrawer()
+                closeFolder()
+            },
         )
 
     val homeMenu =

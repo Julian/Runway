@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="fixture_shortcut"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_add"
+        android:shortcutShortLabel="@string/fixture_shortcut">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.grayvines.runway.fixture"
+            android:targetClass="com.grayvines.runway.fixture.FixtureActivity" />
+    </shortcut>
+</shortcuts>

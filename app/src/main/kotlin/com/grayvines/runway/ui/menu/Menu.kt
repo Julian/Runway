@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -48,21 +49,24 @@ import com.grayvines.runway.ui.drag.Bounds
 private val MENU_WIDTH = 208.dp
 private val MENU_GAP = 6.dp
 private val CORNER = 20.dp
-private val ROW_ICON = 20.dp
-private const val ICON_ALPHA = 0.8f
+internal val ROW_ICON = 20.dp
+private val ICON_BUTTON_TOUCH = 40.dp
+internal const val ICON_ALPHA = 0.8f
 private val SURFACE = Color(0xFF202124)
 
 /**
  * A small menu of [content] rows beside [anchor] (root px): below it, or above it when there is no
- * room below, and centred on it sideways as far as the screen allows. A tap anywhere else dismisses
- * it, and so does back.
+ * room below, and centred on it sideways as far as the screen allows. [overlay] is drawn in the
+ * same tagged layer (for a corner chip on the held cell). A tap anywhere else dismisses it, and so
+ * does back.
  */
 @Composable
 internal fun Menu(
     anchor: Bounds,
     tag: String,
     onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
+    overlay: @Composable BoxScope.(room: IntSize) -> Unit = {},
+    content: (@Composable ColumnScope.() -> Unit)?,
 ) {
     BackHandler(onBack = onDismiss)
     var room by remember { mutableStateOf(IntSize.Zero) }
@@ -79,32 +83,37 @@ internal fun Menu(
                 )
                 .semantics { contentDescription = "Dismiss" }
         )
-        var size by remember { mutableStateOf(IntSize.Zero) }
         val density = LocalDensity.current
-        val gap = with(density) { MENU_GAP.roundToPx() }
         // The keyboard covers the bottom of the room: the menu keeps clear of it, as it does of
         // the screen's edges, or its rows could not be reached.
         val keyboard = with(density) { WindowInsets.ime.getBottom(this) }
         val clear = IntSize(room.width, (room.height - keyboard).coerceAtLeast(0))
-        Surface(
-            modifier =
-                Modifier.offset { menuOffset(anchor, size, clear, gap) }
-                    .width(MENU_WIDTH)
-                    .heightIn(max = with(density) { clear.height.toDp() })
-                    .onSizeChanged { size = it }
-                    // Not yet measured: not yet placed. One frame in the wrong place would show.
-                    .graphicsLayer { alpha = if (size == IntSize.Zero) 0f else 1f }
-                    .testTag(tag),
-            shape = RoundedCornerShape(CORNER),
-            color = SURFACE,
-            contentColor = Color.White,
-            shadowElevation = 12.dp,
-        ) {
-            // Scrolls when there are more rows than room, as with many drawer folders to add to.
-            Column(
-                Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
-                content = content,
-            )
+        Box(Modifier.fillMaxSize().testTag(tag)) {
+            if (content != null) {
+                var size by remember { mutableStateOf(IntSize.Zero) }
+                val gap = with(density) { MENU_GAP.roundToPx() }
+                Surface(
+                    modifier =
+                        Modifier.offset { menuOffset(anchor, size, clear, gap) }
+                            .width(MENU_WIDTH)
+                            .heightIn(max = with(density) { clear.height.toDp() })
+                            .onSizeChanged { size = it }
+                            // Not yet measured: not yet placed. One frame in the wrong place would
+                            // show.
+                            .graphicsLayer { alpha = if (size == IntSize.Zero) 0f else 1f },
+                    shape = RoundedCornerShape(CORNER),
+                    color = SURFACE,
+                    contentColor = Color.White,
+                    shadowElevation = 12.dp,
+                ) {
+                    // Scrolls when there are more rows than room.
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                        content = content,
+                    )
+                }
+            }
+            if (clear != IntSize.Zero) overlay(clear)
         }
     }
 }
@@ -143,5 +152,23 @@ internal fun MenuRow(label: String, icon: ImageVector, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(16.dp))
         Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+internal fun MenuIconButton(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+            Modifier.size(ICON_BUTTON_TOUCH)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = label },
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = ICON_ALPHA),
+            modifier = Modifier.size(ROW_ICON),
+        )
     }
 }

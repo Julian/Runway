@@ -5,4 +5,5 @@
     <string name="fixture_hidden_widget">Fixture hidden widget</string>
     <string name="fixture_setup_done">Done</string>
     <string name="fixture_setup_cancel">Cancel</string>
+    <string name="fixture_shortcut">Fixture shortcut</string>
 </resources>

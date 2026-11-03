@@ -383,7 +383,7 @@ class DrawerFolderTest : LauncherFixture() {
         menuRow("App info").assertIsDisplayed()
         menuRow("Uninstall").assertIsDisplayed()
         menuRow("New folder").assertDoesNotExist()
-        compose.onAllNodes(hasText("Remove", substring = true)).assertCountEquals(0)
+        menuRow("Remove").assertDoesNotExist()
         sendHomeIntent() // closes the menu
     }
 

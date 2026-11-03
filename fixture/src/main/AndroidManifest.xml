@@ -18,6 +18,9 @@
                 <action android:name="android.intent.action.WEB_SEARCH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/fixture_shortcuts" />
         </activity>
 
         <!-- A widget provider, so the tests have a widget to host. -->

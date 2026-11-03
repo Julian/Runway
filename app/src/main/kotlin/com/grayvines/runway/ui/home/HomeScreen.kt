@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.util.lerp
+import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
@@ -162,7 +163,7 @@ fun HomeScreen(
             // Over the drawer too: a drawer folder opens on top of it, and its menu likewise.
             openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
             WidgetResizeOverlay(state, widgetResize, cell, drag)
-            Menus(itemMenu, homeMenu, widgetPicker, cell, drag)
+            Menus(state.settings, itemMenu, homeMenu, widgetPicker, cell, iconSize, drag)
             // Between the dock and the pages' last row, across the search bar when it sits there,
             // as
             // drawn once the home area has stepped back about the screen's middle.
@@ -200,14 +201,28 @@ private fun carriedWidget(drag: DragSession, cellPx: Size): Rect? {
 /** The item menu, the home menu and the widget picker, whichever is up. */
 @Composable
 private fun Menus(
+    settings: Settings,
     itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
     cell: DpSize,
+    iconSize: Dp,
     drag: DragSession,
 ) {
     itemMenu.at?.let {
-        ItemMenu(it, itemMenu.actions, onDismiss = itemMenu.onDismiss)
+        val labelled =
+            when (it.container) {
+                Container.HOME -> settings.homeLabels
+                Container.DOCK -> settings.dockLabels
+                Container.DRAWER -> true
+            }
+        ItemMenu(
+            it,
+            itemMenu.actions,
+            iconSize,
+            onDismiss = itemMenu.onDismiss,
+            labelled = labelled,
+        )
     }
     homeMenu.at?.let { HomeMenu(it, homeMenu.actions, homeMenu.onDismiss) }
     if (widgetPicker.open) {

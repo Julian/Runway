@@ -44,6 +44,9 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val iconPx: Int
         get() = (ICON_DP * context.resources.displayMetrics.density).toInt()
 
+    private val shortcutIconPx: Int
+        get() = (SHORTCUT_ICON_DP * context.resources.displayMetrics.density).toInt()
+
     /**
      * The configuration the list was last built under. Labels and their order follow the locale,
      * icons the density; a change to either is rebuilt for, other changes are not.
@@ -144,6 +147,33 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /** Static and dynamic shortcuts for [entry], when this launcher is the default home app. */
+    fun shortcuts(entry: AppEntry): List<AppShortcut> =
+        launcherApps.queryShortcuts(
+            entry,
+            context.resources.displayMetrics.densityDpi,
+            shortcutIconPx,
+        )
+
+    /** Launches [shortcutId] of [entry]; if it can't be, logs and refreshes the list. */
+    fun startShortcut(entry: AppEntry, shortcutId: String) {
+        try {
+            launcherApps.startShortcut(
+                entry.component.packageName,
+                shortcutId,
+                null,
+                null,
+                entry.user,
+            )
+        } catch (e: ActivityNotFoundException) {
+            failedLaunch(entry, e)
+        } catch (e: SecurityException) {
+            failedLaunch(entry, e)
+        } catch (e: IllegalStateException) {
+            failedLaunch(entry, e)
+        }
+    }
+
     /** The system's settings page for the app. */
     fun showAppInfo(entry: AppEntry) {
         launcherApps.startAppDetailsActivity(entry.component, entry.user, null, null)
@@ -217,6 +247,8 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
 
         /** The largest an icon gets on screen (dp): a lifted icon on a wide, few-column grid. */
         const val ICON_DP = 72
+        /** Shortcut icons in the long-press menu are drawn at 20 dp. */
+        const val SHORTCUT_ICON_DP = 24
         const val TAG = "Runway"
     }
 }
