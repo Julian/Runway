@@ -213,7 +213,7 @@ open class LauncherFixture {
         }
     }
 
-    private fun dismissKeyboard() {
+    protected fun dismissKeyboard() {
         val window = compose.activity.window
         compose.runOnUiThread {
             window.currentFocus?.clearFocus()
@@ -243,7 +243,8 @@ open class LauncherFixture {
      * [device] instead.
      */
     protected fun pressBack() {
-        awaitNoKeyboard()
+        dismissKeyboard()
+        awaitWindowFocus()
         compose.waitForIdle()
         device.pressBack()
     }

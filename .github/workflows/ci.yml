@@ -100,7 +100,21 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      # Gradle fetches the image, boots the emulator headless, runs the tests and discards it.
+      # Twelve shards pulling a 1.8 GB system image zip from Google's CDN at once occasionally
+      # get a truncated stream ("Error reading Zip content from a SeekableByteChannel"), and AGP
+      # leaves the partial file in .temp and gives up. Wiping .temp and retrying setup rides out
+      # a dropped download before the tests run.
+      - name: Fetch the managed device image
+        env:
+          SETUP: ${{ matrix.device.task }}
+        run: |
+          setup_task=":app:${SETUP%DebugAndroidTest}Setup"
+          for attempt in 1 2 3; do
+            ./gradlew "$setup_task" && break
+            test "$attempt" -lt 3 || exit 1
+            rm -rf "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.temp"
+          done
+      # Gradle boots the emulator headless, runs the tests and discards it.
       # The same task runs on a laptop.
       - name: Run this shard of the instrumented tests on the managed device
         env:

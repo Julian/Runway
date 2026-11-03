@@ -454,6 +454,7 @@ class DrawerFolderTest : LauncherFixture() {
         makeDrawerFolder(label)
         tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
         waitUntil { compose.onAllNodesWithTag(FOLDER_EDIT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        dismissKeyboard()
     }
 
     /** Taps the open folder's pencil, which is where its plus and its x's are. */
