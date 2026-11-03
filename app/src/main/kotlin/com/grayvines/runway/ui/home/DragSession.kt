@@ -40,7 +40,6 @@ class DragSession(
     /** Where the bin is (root px), whenever it is laid out. */
     val onBinPositioned: (Bounds) -> Unit = {},
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
-    private val onHoldInFolder: (AppEntry, folderId: Long, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onStartNew: (DragSource, Point, Point) -> Unit,
     private val onMove: (Point) -> Unit,
@@ -124,17 +123,21 @@ class DragSession(
         )
 
     /**
-     * An app in the open [folder]: a hold shows its menu; moving after the hold carries it out, and
-     * the drop takes it out of the folder. Out of a drawer folder it is copied instead, and stays.
+     * An app carried out of the open [folder]: the drag takes over from [finger] at [pointer], held
+     * at [grab] within the tile, and the drop takes the app out of the folder. Out of a drawer
+     * folder it is copied instead, and stays.
      */
-    fun handlersForFolder(app: AppEntry, folder: HomeItem) =
-        handlers(
-            onHold = { cell -> folder.folderId?.let { onHoldInFolder(app, it, cell) } },
-            onStart = { pointer, grab ->
-                val leaving = folder.folderId.takeUnless { folder.inDrawer }
-                onStartNew(app.fresh(fromFolder = leaving), pointer, grab)
-            },
-        )
+    fun liftFromFolder(
+        app: AppRef,
+        folder: HomeItem,
+        finger: PointerId,
+        pointer: Point,
+        grab: Point,
+    ) {
+        if (state == null) this.finger = finger
+        val leaving = folder.folderId.takeUnless { folder.inDrawer }
+        onStartNew(fresh(newApp = app, fromFolder = leaving), pointer, grab)
+    }
 
     fun handlersFor(item: HomeItem, page: Int, container: Container = Container.HOME) =
         handlers(
@@ -173,10 +176,8 @@ class DragSession(
 /** A drawer app as the menu sees it: no placement of its own. */
 internal fun AppEntry.asItem() = HomeItem(0, ItemKind.APP, 0, 0, 1, 1, label, this)
 
-/**
- * A drag of this app with no cell yet, out of the drawer or out of the folder it is [fromFolder].
- */
-internal fun AppEntry.fresh(fromFolder: Long? = null) = fresh(newApp = ref, fromFolder = fromFolder)
+/** A drag of this app with no cell yet, out of the drawer. */
+internal fun AppEntry.fresh() = fresh(newApp = ref)
 
 /** A drag of a widget with no cell yet, out of the picker. */
 internal fun freshWidget(key: String, span: WidgetSpan) =

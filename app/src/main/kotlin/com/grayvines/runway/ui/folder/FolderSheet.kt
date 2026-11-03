@@ -43,9 +43,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -61,10 +65,8 @@ import androidx.compose.ui.util.lerp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.AppTile
-import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
-import com.grayvines.runway.ui.home.liftable
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -101,11 +103,12 @@ private val SHADOW = 16.dp
 /**
  * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
  * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; a long press shows its menu, and moving on lifts it out;
- * tapping the name edits it. The pencil at the top right puts an x on every app, which takes that
- * app out, and in a drawer folder a plus after them, which lists the rest of [apps] to add. A
- * folder emptied by its x's stays open, and goes only once it is closed empty. Back leaves the
- * list, then the editing; a tap anywhere else, or back, closes the folder.
+ * when closed. Tapping an app launches it; a long press shows its menu, moving on within the sheet
+ * rearranges the folder, and carrying the finger out of the sheet lifts the app out; tapping the
+ * name edits it. The pencil at the top right puts an x on every app, which takes that app out, and
+ * in a drawer folder a plus after them, which lists the rest of [apps] to add. A folder emptied by
+ * its x's stays open, and goes only once it is closed empty. Back leaves the list, then the
+ * editing; a tap anywhere else, or back, closes the folder.
  */
 @Composable
 fun FolderSheet(
@@ -140,23 +143,16 @@ fun FolderSheet(
         contentAlignment = Alignment.Center,
     ) {
         // A sibling, not a parent: a clickable parent would merge the sheet's semantics into it.
-        Spacer(
-            Modifier.fillMaxSize()
-                .graphicsLayer { alpha = motion.progress * SCRIM_ALPHA }
-                .background(Color.Black)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = motion.close,
-                )
-        )
+        SheetScrim({ motion.progress }, onClick = motion.close)
         val columns = columnsFor(folder, listing, mode.editing)
         var size by remember { mutableStateOf(IntSize.Zero) }
+        var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
         Surface(
             modifier =
                 Modifier.width(CELL * columns + 32.dp)
                     .onSizeChanged { size = it }
                     .growingFrom(from, room, size) { motion.progress }
+                    .onGloballyPositioned { sheetCoords = it }
                     .graphicsLayer {
                         val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
                         alpha = solid
@@ -177,10 +173,25 @@ fun FolderSheet(
                 actions,
                 drag,
                 mode,
+                sheetBounds = { sheetCoords?.boundsInRoot() },
                 modifier = Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress },
             )
         }
     }
+}
+
+@Composable
+private fun SheetScrim(progress: () -> Float, onClick: () -> Unit) {
+    Spacer(
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = progress() * SCRIM_ALPHA }
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+    )
 }
 
 /**
@@ -223,6 +234,7 @@ private fun SheetContent(
     actions: FolderActions,
     drag: DragSession?,
     mode: SheetMode,
+    sheetBounds: () -> Rect?,
     modifier: Modifier,
 ) {
     val addTo = folder.addTo
@@ -243,7 +255,7 @@ private fun SheetContent(
                 }
                 EditToggle(mode.editing, onToggle = { mode.editing = !mode.editing })
             }
-            FolderGrid(folder, columns, iconSize, actions, drag, mode.editing) {
+            FolderGrid(folder, columns, iconSize, actions, drag, mode.editing, sheetBounds) {
                 if (addTo != null && folder.showsAdd(mode.editing)) {
                     item(key = ADD_KEY) { AddTile(iconSize) { mode.adding = true } }
                 }
@@ -253,9 +265,10 @@ private fun SheetContent(
 }
 
 /**
- * The folder's apps, then [after]. A tap launches an app and a hold shows its menu, or lifts the
- * app out of the folder; while [editing], an x on each takes it out instead, a tap on the app
- * itself does nothing, and a hold rearranges the folder rather than lifting anything out of it.
+ * The folder's apps, then [after]. A tap launches an app; a hold shows its menu, moving within the
+ * sheet rearranges the folder, and leaving [sheetBounds] lifts the app out. While [editing], an x
+ * on each takes it out instead, a tap on the app itself does nothing, and a hold rearranges the
+ * folder without opening a menu or lifting anything out of it.
  */
 @Composable
 private fun FolderGrid(
@@ -265,14 +278,35 @@ private fun FolderGrid(
     actions: FolderActions,
     drag: DragSession?,
     editing: Boolean,
+    sheetBounds: () -> Rect?,
     after: LazyGridScope.() -> Unit,
 ) {
     val order = rememberFolderOrder(folder.folder)
     val grid = rememberLazyGridState()
     val folderId = folder.folderId
     val rearranging =
-        if (editing && folderId != null) {
-            Modifier.rearranges(order, grid) { actions.reorder(folderId, it) }
+        if (folderId != null) {
+            Modifier.rearranges(
+                order = order,
+                grid = grid,
+                sheetBounds = sheetBounds,
+                onHold =
+                    if (editing) {
+                        null
+                    } else {
+                        { app, cell -> actions.hold(folderId, app, cell) }
+                    },
+                onMoveInSheet = actions.dismissMenu,
+                onLiftOut =
+                    if (editing || drag == null) {
+                        null
+                    } else {
+                        { app, finger, pointer, grab ->
+                            drag.liftFromFolder(app.ref, folder, finger, pointer, grab)
+                        }
+                    },
+                onDropped = { actions.reorder(folderId, it) },
+            )
         } else {
             Modifier
         }
@@ -285,7 +319,6 @@ private fun FolderGrid(
                 folder,
                 iconSize,
                 actions,
-                drag,
                 editing,
                 placed.slotted(app, order),
             )
@@ -301,16 +334,16 @@ private fun FolderTile(
     folder: HomeItem,
     iconSize: Dp,
     actions: FolderActions,
-    drag: DragSession?,
     editing: Boolean,
     modifier: Modifier,
 ) {
     Box(modifier) {
-        FolderApp(
+        AppTile(
             app,
             iconSize,
+            labelled = true,
             onClick = { if (!editing) actions.launch(app) },
-            drag = if (editing) null else drag?.handlersForFolder(app, folder),
+            Modifier.padding(vertical = TILE_PADDING).testTag(FOLDER_ITEM_TAG),
         )
         val folderId = folder.folderId
         if (editing && folderId != null) {
@@ -436,15 +469,4 @@ private fun FolderName(name: String, modifier: Modifier, onRename: (String) -> U
     LaunchedEffect(Unit) { focus.requestFocus() }
     // Closing the folder mid-edit (a tap outside, back) keeps the name too.
     DisposableEffect(Unit) { onDispose { if (editing) commit() } }
-}
-
-@Composable
-private fun FolderApp(app: AppEntry, iconSize: Dp, onClick: () -> Unit, drag: DragHandlers?) {
-    AppTile(
-        app,
-        iconSize,
-        labelled = true,
-        onClick,
-        Modifier.liftable(app.key, drag).padding(vertical = TILE_PADDING).testTag(FOLDER_ITEM_TAG),
-    )
 }

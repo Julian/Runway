@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.input.pointer.PointerId
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -17,15 +18,15 @@ import org.junit.jupiter.api.Test
 
 class DragSessionTest {
     private val drag = mutableStateOf<DragState?>(null)
+    private var startedNew: DragSource? = null
     private val session =
         DragSession(
             stateOf = drag,
             settlingOf = mutableStateOf<Settling?>(null),
             settleTargetOf = mutableStateOf<Point?>(null),
             onHold = { _, _, _, _ -> },
-            onHoldInFolder = { _, _, _ -> },
             onStart = { _, _, _, _, _ -> },
-            onStartNew = { _, _, _ -> },
+            onStartNew = { new, _, _ -> startedNew = new },
             onMove = {},
             onEnd = {},
             onCancel = {},
@@ -100,5 +101,23 @@ class DragSessionTest {
 
         session.cancel()
         assertNull(session.finger)
+    }
+
+    @Test
+    fun `liftFromFolder claims the finger and marks the home folder it leaves, or copies from a drawer folder`() {
+        val app = AppRef("pkg/Act", 0L)
+        val homeFolder = HomeItem(1, ItemKind.FOLDER, 0, 0, 1, 1, "Work", null, folderId = 42L)
+        session.liftFromFolder(app, homeFolder, PointerId(9L), Point(10f, 20f), Point(5f, 5f))
+        assertEquals(PointerId(9L), session.finger)
+        assertEquals(app, startedNew?.newApp)
+        assertEquals(42L, startedNew?.fromFolder)
+
+        session.cancel()
+        val drawerFolder =
+            HomeItem(0, ItemKind.FOLDER, 0, 0, 1, 1, "Work", null, folderId = 42L, inDrawer = true)
+        session.liftFromFolder(app, drawerFolder, PointerId(10L), Point(10f, 20f), Point(5f, 5f))
+        assertEquals(PointerId(10L), session.finger)
+        assertEquals(app, startedNew?.newApp)
+        assertNull(startedNew?.fromFolder)
     }
 }

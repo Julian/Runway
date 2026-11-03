@@ -266,7 +266,6 @@ class LauncherActivity : ComponentActivity() {
                 onSettled = viewModel.dragging::settled,
                 onBinPositioned = viewModel.dragging.areas::binPositioned,
                 onHold = viewModel.hold,
-                onHoldInFolder = viewModel.itemMenu::holdInFolder,
                 onStart = viewModel::startDrag,
                 onStartNew = viewModel::startNewDrag,
                 onMove = viewModel.dragging::dragTo,

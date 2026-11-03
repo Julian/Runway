@@ -368,6 +368,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     graph.workspace.reorderFolder(folderId, apps.map { it.ref })
                 }
             },
+            hold = { folderId, app, cell -> itemMenu.holdInFolder(app, folderId, cell) },
+            dismissMenu = itemMenu::dismiss,
         )
 
     init {

@@ -3,13 +3,16 @@ package com.grayvines.runway.ui.folder
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,11 +20,23 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.drag.Bounds
+import com.grayvines.runway.ui.drag.Point
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** How much bigger the tile a finger has hold of is drawn, so it reads as picked up. */
@@ -61,7 +76,10 @@ internal class FolderOrder {
     private var written = false
 
     /** How much of the carry is still drawn: 1 under the finger, 0 once the tile has landed. */
-    private var landing by mutableStateOf(1f)
+    private var landing by mutableFloatStateOf(1f)
+
+    /** The folder's own order, as last received from the store. */
+    private var own: List<AppEntry> = emptyList()
 
     /** Which hold this is, so a settle that began with the last one does not end this one. */
     private var gesture = 0
@@ -71,8 +89,9 @@ internal class FolderOrder {
      * still on its way to the store.
      */
     fun follow(apps: List<AppEntry>) {
-        if (held != null) return
         if (written && apps.keys() != shown.keys()) return
+        own = apps
+        if (held != null) return
         written = false
         shown = apps
     }
@@ -110,8 +129,13 @@ internal class FolderOrder {
     /** How much bigger the held tile is drawn, back to its own size as it lands. */
     fun heldScale(): Float = 1f + (HELD_SCALE - 1f) * landing
 
-    /** The finger is up: the order shown is the folder's own from now on, once the write lands. */
-    fun dropped(): List<AppEntry> {
+    /**
+     * The finger is up: the order shown is the folder's own from now on, once the write lands, if
+     * the carry left the apps in a new order; null if nothing changed places.
+     */
+    fun dropped(): List<AppEntry>? {
+        if (shown.keys() == own.keys()) return null
+        own = shown
         written = true
         return shown
     }
@@ -134,6 +158,7 @@ internal class FolderOrder {
         held = null
         landing = 1f
         written = false
+        shown = own
     }
 
     private fun List<AppEntry>.keys() = map { it.key }
@@ -151,37 +176,176 @@ internal fun rememberFolderOrder(apps: List<AppEntry>): FolderOrder {
 }
 
 /**
- * Lets a finger rearrange the folder's apps within this grid: a hold picks one up, moving carries
- * it, and the release reports the order with [onDropped]. The gesture belongs to the grid, not to
- * the tiles: a tile carries the finger's offset in a layer of its own, which would take that same
+ * Lets a finger rearrange the folder's apps within this grid, or lift one out of the sheet: a hold
+ * reports [onHold] (or picks the tile up at once when there is no menu), moving past touch slop
+ * within [sheetBounds] calls [onMoveInSheet] and carries the tile across slots, a release inside
+ * the sheet reports a changed order with [onDropped], and leaving [sheetBounds] restores the
+ * folder's order and hands the drag to [onLiftOut]. The gesture belongs to the grid, not to the
+ * tiles: a tile carries the finger's offset in a layer of its own, which would take that same
  * offset back off the finger were the two on one node.
  */
 @Composable
 internal fun Modifier.rearranges(
     order: FolderOrder,
     grid: LazyGridState,
+    sheetBounds: () -> Rect? = { null },
+    onHold: ((AppEntry, Bounds) -> Unit)? = null,
+    onMoveInSheet: () -> Unit = {},
+    onLiftOut: ((AppEntry, PointerId, Point, Point) -> Unit)? = null,
     onDropped: (List<AppEntry>) -> Unit,
 ): Modifier {
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // The gesture coroutine outlives recompositions and must always report to the current sheet.
-    val dropped by rememberUpdatedState(onDropped)
-    val scope = rememberCoroutineScope()
-    return pointerInput(Unit) {
-        detectDragGesturesAfterLongPress(
-            onDragStart = { at -> order.take(at, grid) },
-            onDrag = { change, delta ->
-                change.consume()
-                order.carry(delta, grid)
-            },
-            onDragEnd = {
-                if (order.held != null) {
-                    dropped(order.dropped())
-                    scope.launch { order.land() }
-                }
-            },
-            onDragCancel = { order.letGo() },
+    val hooks by
+        rememberUpdatedState(
+            RearrangeHooks(sheetBounds, onHold, onMoveInSheet, onLiftOut, onDropped)
         )
+    val scope = rememberCoroutineScope()
+    return onGloballyPositioned { coords = it }
+        .pointerInput(Unit) {
+            val gesture =
+                FolderGesture(order, grid, viewConfiguration.touchSlop, scope, { coords }) { hooks }
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val held = awaitLongPressOrCancellation(down.id)
+                if (held != null && gesture.held(held.position)) {
+                    try {
+                        trackHeld(down.id, gesture)
+                    } catch (e: CancellationException) {
+                        gesture.cancelled()
+                        throw e
+                    }
+                }
+            }
+        }
+}
+
+/**
+ * Follows [downId] on the initial pass once a long press has claimed the gesture, consuming moves
+ * and the release before the grid's own scroll or the tile's tap handler can take them.
+ */
+private suspend fun AwaitPointerEventScope.trackHeld(downId: PointerId, gesture: FolderGesture) {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull { it.id == downId }
+        if (change == null || !change.pressed) {
+            change?.consume()
+            if (change != null) gesture.ended() else gesture.cancelled()
+            return
+        }
+        val delta = change.positionChangeIgnoreConsumed()
+        change.consume()
+        if (delta != Offset.Zero) gesture.dragged(change, delta)
     }
 }
+
+private class RearrangeHooks(
+    val sheetBounds: () -> Rect?,
+    val onHold: ((AppEntry, Bounds) -> Unit)?,
+    val onMoveInSheet: () -> Unit,
+    val onLiftOut: ((AppEntry, PointerId, Point, Point) -> Unit)?,
+    val onDropped: (List<AppEntry>) -> Unit,
+)
+
+private class FolderGesture(
+    private val order: FolderOrder,
+    private val grid: LazyGridState,
+    private val slop: Float,
+    private val scope: CoroutineScope,
+    private val gridCoords: () -> LayoutCoordinates?,
+    private val hooks: () -> RearrangeHooks,
+) {
+    private var app: AppEntry? = null
+    private var grab = Offset.Zero
+    private var grabInTile = Offset.Zero
+    private var moving = false
+    private var taken = false
+    private var handedOver = false
+
+    fun held(at: Offset): Boolean {
+        val item = grid.itemAt(at, order.shown.indices) ?: return false
+        val target = order.shown[item.index]
+        app = target
+        grab = at
+        grabInTile = at - item.offset.toOffset()
+        moving = false
+        handedOver = false
+        val hold = hooks().onHold
+        if (hold != null) {
+            taken = false
+            val coords = gridCoords()
+            if (coords != null) hold(target, item.boundsInRoot(coords))
+        } else {
+            order.take(at, grid)
+            taken = true
+        }
+        return true
+    }
+
+    fun dragged(change: PointerInputChange, delta: Offset) {
+        val current = app ?: return
+        val firstMove = !moving
+        if (handedOver || !movedPastSlop(change.position)) return
+        if (leavesSheet(current, change.id, change.position)) {
+            if (taken) order.letGo()
+            taken = false
+            handedOver = true
+        } else if (firstMove) {
+            if (!taken) {
+                order.take(grab, grid)
+                taken = true
+            }
+            order.carry(change.position - grab, grid)
+        } else {
+            order.carry(delta, grid)
+        }
+    }
+
+    private fun movedPastSlop(position: Offset): Boolean {
+        if (moving) return true
+        if ((position - grab).getDistance() <= slop) return false
+        moving = true
+        hooks().onMoveInSheet()
+        return true
+    }
+
+    private fun leavesSheet(current: AppEntry, finger: PointerId, position: Offset): Boolean {
+        val liftOut = hooks().onLiftOut ?: return false
+        val root = gridCoords()?.localToRoot(position) ?: return false
+        val sheet = hooks().sheetBounds() ?: return false
+        if (sheet.contains(root)) return false
+        liftOut(current, finger, root.toPoint(), grabInTile.toPoint())
+        return true
+    }
+
+    fun ended() {
+        app = null
+        if (!handedOver && taken) {
+            taken = false
+            order.dropped()?.let(hooks().onDropped)
+            scope.launch { order.land() }
+        }
+    }
+
+    fun cancelled() {
+        app = null
+        if (!handedOver && taken) {
+            taken = false
+            order.letGo()
+        }
+    }
+
+    private fun LazyGridItemInfo.boundsInRoot(coords: LayoutCoordinates): Bounds {
+        val topLeft = coords.localToRoot(offset.toOffset())
+        val bottomRight =
+            coords.localToRoot(
+                Offset((offset.x + size.width).toFloat(), (offset.y + size.height).toFloat())
+            )
+        return Bounds(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y)
+    }
+}
+
+private fun Offset.toPoint() = Point(x, y)
 
 /** Draws this tile as the folder's order has it: the held one over the others, and bigger. */
 internal fun Modifier.slotted(app: AppEntry, order: FolderOrder): Modifier =
