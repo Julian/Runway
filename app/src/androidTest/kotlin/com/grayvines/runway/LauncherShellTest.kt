@@ -121,7 +121,10 @@ class LauncherShellTest : LauncherFixture() {
             compose
                 .onAllNodesWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
-                .any { it.config[SemanticsProperties.ContentDescription] == listOf(target.label) }
+                .any {
+                    it.config[SemanticsProperties.ContentDescription] ==
+                        listOf("Search with ${target.label}")
+                }
         }
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val launched = AtomicReference<Intent?>()
@@ -169,7 +172,10 @@ class LauncherShellTest : LauncherFixture() {
             compose
                 .onAllNodesWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
                 .fetchSemanticsNodes()
-                .any { it.config[SemanticsProperties.ContentDescription] == listOf(picked.label) }
+                .any {
+                    it.config[SemanticsProperties.ContentDescription] ==
+                        listOf("Search with ${picked.label}")
+                }
         }
     }
 
@@ -222,7 +228,7 @@ class LauncherShellTest : LauncherFixture() {
         compose
             .onNodeWithTag(SEARCH_TARGET_ICON_TAG, useUnmergedTree = true)
             .assertIsDisplayed()
-            .assertContentDescriptionEquals(target!!.label)
+            .assertContentDescriptionEquals("Search with ${target!!.label}")
     }
 
     @Test

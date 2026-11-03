@@ -85,36 +85,77 @@ fun bindWidgetRequest(id: Int, provider: ComponentName, user: UserHandle): Inten
         .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, user)
 
 /**
- * The one app widget host of the process, under a fixed host id so the ids it allocates survive
- * restarts and reboots: a stored id is bound and drawable again on the next start with no work of
- * ours. Listening is tied to the launcher activity's visibility.
+ * What the picker needs of the widget host: listing providers, handing out and taking back host
+ * ids, and binding a provider to one.
  */
-class WidgetHost(context: Context) {
-    private val context = context.applicationContext
-    private val manager: AppWidgetManager = AppWidgetManager.getInstance(this.context)
-    private val userManager = this.context.getSystemService(UserManager::class.java)
-    private val host = AppWidgetHost(this.context, HOST_ID)
-
-    /** Providers start sending updates; hosted views draw them. */
-    fun startListening() = host.startListening()
-
-    fun stopListening() = host.stopListening()
-
+interface Widgets {
     /** A fresh id to bind a provider to; deleted again if the binding never happens. */
-    fun allocateId(): Int = host.allocateAppWidgetId()
+    fun allocateId(): Int
 
     /** Forgets an id: the provider is told, and the id can be handed out again. */
-    fun deleteId(id: Int) = host.deleteAppWidgetId(id)
-
-    /** What is bound to [id], or null when nothing is (never bound, or its app is gone). */
-    fun info(id: Int): AppWidgetProviderInfo? = manager.getAppWidgetInfo(id)
+    fun deleteId(id: Int)
 
     /**
      * Binds [provider] to [id] without asking, which the system allows once the user has granted
      * this launcher the right to bind widgets; false means the system's bind prompt is needed.
      */
-    fun bind(id: Int, provider: ComponentName, user: UserHandle): Boolean =
-        manager.bindAppWidgetIdIfAllowed(id, user, provider, null)
+    fun bind(id: Int, provider: WidgetProvider): Boolean
+
+    /**
+     * Every home-screen widget installed, across profiles, by app and then by name, with pictures:
+     * slow, for a picker that is opening, not for the main thread.
+     */
+    fun providers(): List<WidgetProvider>
+}
+
+/**
+ * The one app widget host of the process, under a fixed host id so the ids it allocates survive
+ * restarts and reboots: a stored id is bound and drawable again on the next start with no work of
+ * ours. Listening is tied to the launcher activity's visibility.
+ */
+class WidgetHost(context: Context) : Widgets {
+    private val context = context.applicationContext
+    private val manager: AppWidgetManager = AppWidgetManager.getInstance(this.context)
+    private val userManager = this.context.getSystemService(UserManager::class.java)
+    private val host =
+        object : AppWidgetHost(this.context, HOST_ID) {
+            fun dropViews() = clearViews()
+        }
+    private var activeActivity: Activity? = null
+
+    /** Providers start sending updates; hosted views draw them. */
+    fun startListening(activity: Activity) {
+        activeActivity = activity
+        host.startListening()
+    }
+
+    fun stopListening(activity: Activity) {
+        if (activeActivity === activity) host.stopListening()
+    }
+
+    /**
+     * Drops the host's cached views when [activity] is still the current launcher activity, so a
+     * replaced activity is not kept alive until its widgets are drawn again, while an older
+     * instance finishing after its replacement has started leaves the replacement's views alone.
+     */
+    fun clearViews(activity: Activity) {
+        if (activeActivity === activity) {
+            activeActivity = null
+            host.dropViews()
+        }
+    }
+
+    override fun allocateId(): Int = host.allocateAppWidgetId()
+
+    override fun deleteId(id: Int) = host.deleteAppWidgetId(id)
+
+    /** What is bound to [id], or null when nothing is (never bound, or its app is gone). */
+    fun info(id: Int): AppWidgetProviderInfo? = manager.getAppWidgetInfo(id)
+
+    override fun bind(id: Int, provider: WidgetProvider): Boolean {
+        val info = provider.info ?: return false
+        return manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+    }
 
     /**
      * Binds a fresh id to [provider] (a flattened component name) when it is installed, needs no
@@ -128,7 +169,7 @@ class WidgetHost(context: Context) {
                 .firstOrNull { it.provider == component && !it.needsSetup }
         if (info == null) return null
         val id = allocateId()
-        return if (bind(id, component, info.profile)) {
+        return if (manager.bindAppWidgetIdIfAllowed(id, info.profile, component, null)) {
             id
         } else {
             deleteId(id)
@@ -145,14 +186,12 @@ class WidgetHost(context: Context) {
         host.startAppWidgetConfigureActivityForResult(activity, id, 0, requestCode, null)
 
     /** The view that draws widget [id]; [context] is the activity's, for its theme. */
-    fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView =
-        host.createView(context, id, info)
+    fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView {
+        if (context is Activity) activeActivity = context
+        return host.createView(context, id, info)
+    }
 
-    /**
-     * Every home-screen widget installed, across profiles, by app and then by name, with pictures:
-     * slow, for a picker that is opening, not for the main thread.
-     */
-    fun providers(): List<WidgetProvider> {
+    override fun providers(): List<WidgetProvider> {
         val pm = context.packageManager
         val density = context.resources.displayMetrics.density
         val order = LabelOrder.comparator()
@@ -163,48 +202,53 @@ class WidgetHost(context: Context) {
             .filter {
                 it.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_HIDE_FROM_PICKER == 0
             }
-            .mapNotNull { info -> info.toProvider(pm, density) }
+            .mapNotNull { info -> info.toProvider(context, pm, density) }
             .sortedWith(
                 compareBy<WidgetProvider, String>(order) { it.appLabel }.thenBy(order) { it.label }
             )
     }
 
-    /** Null if the provider's package cannot be read: one broken app must not empty the list. */
-    @Suppress("TooGenericExceptionCaught")
-    private fun AppWidgetProviderInfo.toProvider(pm: PackageManager, density: Float) =
-        try {
-            val app = activityInfo.applicationInfo
-            val flat = provider.flattenToString()
-            WidgetProvider(
-                providerName = flat,
-                key = "${profile.hashCode()}/$flat",
-                label = loadLabel(pm),
-                appLabel = pm.getApplicationLabel(app).toString(),
-                appIcon = pm.getApplicationIcon(app).toPicture((ICON_DP * density).toInt()),
-                preview = loadPreviewImage(context, 0)?.toPicture((PREVIEW_DP * density).toInt()),
-                minWidthDp = minWidth / density,
-                minHeightDp = minHeight / density,
-                targetCellWidth = targetCellWidth,
-                targetCellHeight = targetCellHeight,
-                needsSetup = needsSetup,
-                info = this,
-            )
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.w(TAG, "could not read widget $provider; left out of the list", e)
-            null
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "could not read widget $provider; left out of the list", e)
-            null
-        }
-
     companion object {
         /** Never change: the ids in the database were allocated under it. */
         const val HOST_ID = 0x52574159 // "RWAY"
-        private const val ICON_DP = 48
-        private const val PREVIEW_DP = 240
-        private const val TAG = "Runway"
     }
 }
+
+private const val ICON_DP = 48
+private const val PREVIEW_DP = 240
+private const val TAG = "Runway"
+
+/** Null if the provider's package cannot be read: one broken app must not empty the list. */
+@Suppress("TooGenericExceptionCaught")
+internal fun AppWidgetProviderInfo.toProvider(
+    context: Context,
+    pm: PackageManager,
+    density: Float,
+) =
+    try {
+        val app = activityInfo.applicationInfo
+        val flat = provider.flattenToString()
+        WidgetProvider(
+            providerName = flat,
+            key = "${profile.hashCode()}/$flat",
+            label = loadLabel(pm),
+            appLabel = pm.getApplicationLabel(app).toString(),
+            appIcon = pm.getApplicationIcon(app).toPicture((ICON_DP * density).toInt()),
+            preview = loadPreviewImage(context, 0)?.toPicture((PREVIEW_DP * density).toInt()),
+            minWidthDp = minWidth / density,
+            minHeightDp = minHeight / density,
+            targetCellWidth = targetCellWidth,
+            targetCellHeight = targetCellHeight,
+            needsSetup = needsSetup,
+            info = this,
+        )
+    } catch (e: PackageManager.NameNotFoundException) {
+        Log.w(TAG, "could not read widget $provider; left out of the list", e)
+        null
+    } catch (e: RuntimeException) {
+        Log.w(TAG, "could not read widget $provider; left out of the list", e)
+        null
+    }
 
 /** The drawable as a bitmap no wider or taller than [maxPx], keeping its shape. */
 internal fun Drawable.toPicture(maxPx: Int): ImageBitmap? {

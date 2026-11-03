@@ -16,11 +16,7 @@ import kotlinx.coroutines.flow.map
  * placed in the drawer; its apps stay out of the drawer's alphabetical grid.
  */
 fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<DrawerPlacement>> =
-    dao.observeItems(Container.DRAWER)
-        .map { items ->
-            items.mapNotNull { item -> item.folderId?.let { DrawerPlacement(item.id, it) } }
-        }
-        .distinctUntilChanged()
+    observeSnapshot().map { it.drawer }.distinctUntilChanged()
 
 /**
  * A new drawer folder holding [app], which leaves any other drawer folder it was in and is no

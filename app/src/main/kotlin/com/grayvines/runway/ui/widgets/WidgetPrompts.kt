@@ -1,7 +1,6 @@
 package com.grayvines.runway.ui.widgets
 
-import android.content.ComponentName
-import android.os.UserHandle
+import com.grayvines.runway.system.widgets.WidgetProvider
 
 /**
  * The system's part in adding a widget, which only an activity can ask for: the one-time leave to
@@ -12,7 +11,7 @@ interface WidgetPrompts {
      * Asks the user to let Runway bind widgets, with [id] and [provider] as the first; true once
      * they have, after which [id] is bound.
      */
-    suspend fun requestBind(id: Int, provider: ComponentName, profile: UserHandle): Boolean
+    suspend fun requestBind(id: Int, provider: WidgetProvider): Boolean
 
     /**
      * Runs the setup screen of the widget bound to [id]; true if it finished rather than cancelled.

@@ -138,7 +138,7 @@ private fun PlacedItem.toHomeItem(
                 ?: "",
         app = app,
         folder = folder?.held(apps, byEntry).orEmpty(),
-        folderId = folder?.id,
+        folderId = folderId,
         inDrawer = folder?.inDrawer == true,
         appWidgetId = appWidgetId,
         provider = provider,

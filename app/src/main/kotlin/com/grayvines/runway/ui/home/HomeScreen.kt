@@ -143,6 +143,9 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().pulledBack(lift).padding(insets),
             )
             ShadeHint({ drawer.motion.given.value }, insets)
+            // Composed from bottom to top, which is also the BackHandler order (the last composed
+            // runs first): menus and the widget picker close before the resize frame, a folder
+            // closes before the drawer it opened over, and the drawer before the activity's own.
             DrawerOverlay(
                 state = state,
                 drawer = drawer,

@@ -51,6 +51,10 @@ class WidgetResizeHost(
     var anchor by mutableStateOf<Rect?>(null)
         private set
 
+    /** Where the frame's Remove and Edit chips sit (root px), so tapping one never dismisses. */
+    var chips by mutableStateOf<Rect?>(null)
+        internal set
+
     /**
      * The cells the framed widget has while a handle is pulled, and after, until the layout shows
      * the result: the cell draws these rather than its stored footprint.
@@ -101,6 +105,7 @@ class WidgetResizeHost(
         if (shown != itemId) {
             shown = itemId
             anchor = null
+            chips = null
             outline = null
             pulling = false
             clearPreview()
@@ -110,6 +115,7 @@ class WidgetResizeHost(
     fun dismiss() {
         shown = null
         anchor = null
+        chips = null
         outline = null
         pulling = false
         clearPreview()
@@ -170,7 +176,9 @@ fun Modifier.dismissesResize(host: () -> WidgetResizeHost): Modifier =
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val h = host()
             val frame = h.anchor?.inflate(reach)
-            if (h.shown != null && frame?.contains(down.position) != true) h.dismiss()
+            val inFrame =
+                frame?.contains(down.position) == true || h.chips?.contains(down.position) == true
+            if (h.shown != null && !inFrame) h.dismiss()
         }
     }
 

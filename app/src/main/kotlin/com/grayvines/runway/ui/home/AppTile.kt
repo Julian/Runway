@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -39,7 +40,8 @@ internal const val LIFT_HOLD_MS = 550L
 /**
  * An icon over its label, the way everything in a grid is drawn: on the home screen, in the drawer
  * and in an open folder. [content] fills the top of the column; the label, when [labelled], sits
- * under it in one line.
+ * under it in one line. The icon in [content] already describes the tile by [label], so the visible
+ * text is silent to TalkBack rather than read a second time.
  */
 @Composable
 fun AppTile(
@@ -58,7 +60,8 @@ fun AppTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                modifier =
+                    Modifier.fillMaxWidth().padding(horizontal = 2.dp).clearAndSetSemantics {},
             )
         }
     }

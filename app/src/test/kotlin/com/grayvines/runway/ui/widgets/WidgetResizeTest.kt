@@ -1,5 +1,8 @@
 package com.grayvines.runway.ui.widgets
 
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.LayoutEngine
@@ -153,5 +156,27 @@ class WidgetResizeTest {
         assertEquals(0, cellsPulled(39f, 100f, from = 1))
         // A jump straight past the band is not held back.
         assertEquals(3, cellsPulled(255f, 100f, from = 1))
+    }
+
+    @Test
+    fun `chipOffset keeps frame chips inside the window when the widget sits on a screen edge`() {
+        val room = IntSize(400, 800)
+        // Flush with the top-right corner: Remove (place 0) clamps to the right and top edges,
+        // and Edit (place 1) stays one step to its left.
+        val topRight = Rect(200f, 0f, 400f, 100f)
+        assertEquals(IntOffset(372, 0), chipOffset(topRight, room, size = 28, step = 36, place = 0))
+        assertEquals(IntOffset(336, 0), chipOffset(topRight, room, size = 28, step = 36, place = 1))
+
+        // Flush with the left edge and narrow: Edit (place 1) never crosses x = 0, and Remove
+        // (place 0) stays one step to its right rather than overlapping it.
+        val topLeft = Rect(0f, 20f, 30f, 100f)
+        assertEquals(
+            IntOffset(0, 6),
+            chipOffset(topLeft, room, size = 28, step = 36, place = 1, count = 2),
+        )
+        assertEquals(
+            IntOffset(36, 6),
+            chipOffset(topLeft, room, size = 28, step = 36, place = 0, count = 2),
+        )
     }
 }

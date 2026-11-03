@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.SizeF
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
@@ -41,6 +42,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,7 +108,7 @@ fun WidgetCell(
             .testTag(WIDGET_TAG)
             .pointerInput(framed) { if (framed) detectTaps { dismissFrame.value() } }
             // Invisible while carried: removing the view would end its own gesture.
-            .graphicsLayer { alpha = if (lifted) 0f else 1f }
+            .hiddenWhen(lifted)
             .onGloballyPositioned {
                 coords = it
                 framedBy?.positioned(item.id, it.boundsInRoot())
@@ -118,7 +120,7 @@ fun WidgetCell(
             .dragAfterLongPress(item.id, { coords }, { handlers })
     if (id == null || info == null) {
         frame = null
-        Placeholder(item.label, cellModifier)
+        Placeholder(item.label, lifted, cellModifier)
         return
     }
     val label = remember(info) { info.loadLabel(context.packageManager) }
@@ -130,6 +132,12 @@ fun WidgetCell(
             },
             update = { f ->
                 f.muted = framed
+                f.importantForAccessibility =
+                    if (lifted) {
+                        View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                    } else {
+                        View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                    }
                 if (size != f.reportedSize) {
                     f.reportedSize = size
                     f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
@@ -144,9 +152,10 @@ fun WidgetCell(
  * Stand-in for a widget nothing is bound to: a dim rounded card over its cells with the app's name.
  */
 @Composable
-private fun Placeholder(label: String, modifier: Modifier = Modifier) {
+private fun Placeholder(label: String, lifted: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier
+            .semantics(mergeDescendants = true) {}
             .background(
                 Color.White.copy(alpha = PLACEHOLDER_ALPHA),
                 RoundedCornerShape(PLACEHOLDER_CORNER),
@@ -161,9 +170,15 @@ private fun Placeholder(label: String, modifier: Modifier = Modifier) {
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { if (lifted) hideFromAccessibility() },
         )
     }
 }
+
+private fun Modifier.hiddenWhen(lifted: Boolean): Modifier = graphicsLayer {
+    alpha = if (lifted) 0f else 1f
+}
+    .semantics { if (lifted) hideFromAccessibility() }
 
 /**
  * The hold is the launcher's from then on: the widget must not take the release as a tap. A move
@@ -182,7 +197,7 @@ private fun rememberWidgetHandlers(
                 DragHandlers(
                     onHold = { bounds ->
                         frame()?.claim()
-                        it.onHold(bounds)
+                        it.onHold?.invoke(bounds)
                     },
                     onStart = { pointer, grab ->
                         session?.carry(frame()?.picture())

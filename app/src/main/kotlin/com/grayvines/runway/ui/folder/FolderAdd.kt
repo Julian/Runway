@@ -79,7 +79,7 @@ internal fun AddTile(iconSize: Dp, onClick: () -> Unit) {
         ) {
             Icon(
                 Icons.Outlined.Add,
-                contentDescription = null,
+                contentDescription = "Add",
                 tint = Color.White,
                 modifier = Modifier.fillMaxSize(PLUS_SHARE),
             )

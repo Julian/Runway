@@ -11,6 +11,7 @@ import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 
 /** An app identity as stored: flattened component name plus profile serial. */
@@ -60,23 +61,64 @@ fun PlacedItem.appRef(): AppRef? {
 /** A drawer folder's placement in the drawer: its placement [id] and the [folderId] it holds. */
 data class DrawerPlacement(val id: Long, val folderId: Long)
 
+/** The whole placed layout at one instant: home and dock pages, folders, and drawer folders. */
+data class WorkspaceSnapshot(
+    val home: ContainerContent,
+    val dock: ContainerContent,
+    val folders: List<FolderContent>,
+    val drawer: List<DrawerPlacement>,
+)
+
 class WorkspaceRepository(private val db: RunwayDatabase) {
     internal val dao = db.workspaceDao()
 
-    fun observe(container: Container): Flow<ContainerContent> =
-        combine(dao.observePages(container), dao.observeItems(container)) { _, _ ->
+    /**
+     * All four parts of the placed layout read together in one transaction whenever any of their
+     * tables changes, so a write that touches more than one table (a fold, an unfold, a drawer
+     * folder created or deleted) is seen all at once, never half-way through.
+     */
+    fun observeSnapshot(): Flow<WorkspaceSnapshot> =
+        combine(
+                dao.observeAllPages(),
+                dao.observeAllItems(),
+                dao.observeFolders(),
+                dao.observeFolderApps(),
+            ) { _, _, _, _ ->
                 read {
-                    val pages = dao.pages(container)
-                    val byPage =
-                        dao.items()
-                            .filter { it.container == container }
-                            .mapNotNull { it.toPlacedItem() }
-                            .groupBy { it.pageIndex }
-                    ContainerContent(
-                        pages.map { PageContent(it.index, byPage[it.index].orEmpty()) }
+                    val pages = dao.allPages()
+                    val items = dao.items()
+                    val folders = dao.folders()
+                    val byFolder = dao.folderApps().groupBy { it.folderId }
+                    val drawer =
+                        items
+                            .filter { it.container == Container.DRAWER }
+                            .mapNotNull { item ->
+                                item.folderId?.let { DrawerPlacement(item.id, it) }
+                            }
+                    val inDrawer = drawer.mapTo(HashSet()) { it.folderId }
+                    WorkspaceSnapshot(
+                        home = containerContent(Container.HOME, pages, items),
+                        dock = containerContent(Container.DOCK, pages, items),
+                        folders =
+                            folders.map { folder ->
+                                val held = byFolder[folder.id].orEmpty()
+                                FolderContent(
+                                    folder.id,
+                                    folder.name,
+                                    held.map { it.ref },
+                                    inDrawer = folder.id in inDrawer,
+                                    handSorted = held.any { it.position != null },
+                                )
+                            },
+                        drawer = drawer,
                     )
                 }
             }
+            .distinctUntilChanged()
+
+    fun observe(container: Container): Flow<ContainerContent> =
+        observeSnapshot()
+            .map { if (container == Container.DOCK) it.dock else it.home }
             .distinctUntilChanged()
 
     /**
@@ -286,6 +328,23 @@ internal fun ItemEntity.footprint(): Footprint? {
     val cellX = x ?: return null
     val cellY = y ?: return null
     return Footprint(cellX, cellY, spanX, spanY)
+}
+
+internal fun containerContent(
+    container: Container,
+    pages: List<PageEntity>,
+    items: List<ItemEntity>,
+): ContainerContent {
+    val byPage =
+        items
+            .filter { it.container == container }
+            .mapNotNull { it.toPlacedItem() }
+            .groupBy { it.pageIndex }
+    return ContainerContent(
+        pages
+            .filter { it.container == container }
+            .map { PageContent(it.index, byPage[it.index].orEmpty()) }
+    )
 }
 
 internal fun ItemEntity.toPlacedItem(): PlacedItem? {

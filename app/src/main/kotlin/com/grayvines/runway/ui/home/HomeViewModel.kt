@@ -9,19 +9,16 @@ import androidx.lifecycle.viewModelScope
 import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ContainerContent
-import com.grayvines.runway.data.DrawerPlacement
 import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.WorkspaceRepository
+import com.grayvines.runway.data.WorkspaceSnapshot
 import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.data.moveOutOf
 import com.grayvines.runway.data.observeBadgeMutes
-import com.grayvines.runway.data.observeDrawerPlacements
-import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.placeFolder
 import com.grayvines.runway.data.pruneEmptyFolders
@@ -132,6 +129,8 @@ data class HomeState(
     val drawerApps: List<AppEntry> = emptyList(),
     /** The folders atop the drawer, by name. */
     val drawerFolders: List<HomeItem> = emptyList(),
+    /** Every folder by id, with all its stored app refs, available or not. */
+    val folders: Map<Long, FolderContent> = emptyMap(),
     /** Active notification counts per package and profile. */
     val badgeCounts: Map<PackageKey, Int> = emptyMap(),
     /** Apps whose notification badges are muted everywhere. */
@@ -273,7 +272,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     /** The widget picker, adding to the page on screen. */
     val widgetPicker: WidgetPickerHost =
         WidgetPickerHost(
-            graph,
+            graph.workspace,
+            graph.widgets,
             viewModelScope,
             lookup,
             shownPage = { dragging.areas.areas.homePage },
@@ -305,34 +305,35 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     val state: StateFlow<HomeState> =
         combine(
                 graph.settings.settings,
-                graph.workspace.observe(Container.HOME),
-                graph.workspace.observe(Container.DOCK),
+                graph.workspace.observeSnapshot(),
                 graph.appRepository.apps,
-                graph.workspace.observeFolders(),
                 searchTarget,
-                graph.workspace.observeDrawerPlacements(),
                 graph.workspace.observeHiddenApps(),
                 graph.badges.counts,
                 graph.workspace.observeBadgeMutes(),
             ) { flows ->
                 @Suppress("UNCHECKED_CAST") val settings = flows[0] as Settings
-                @Suppress("UNCHECKED_CAST") val home = flows[1] as ContainerContent
-                @Suppress("UNCHECKED_CAST") val dock = flows[2] as ContainerContent
-                @Suppress("UNCHECKED_CAST") val apps = flows[3] as List<AppEntry>
-                @Suppress("UNCHECKED_CAST") val folders = flows[4] as List<FolderContent>
-                val target = flows[5] as SearchTarget?
-                @Suppress("UNCHECKED_CAST") val drawer = flows[6] as List<DrawerPlacement>
-                @Suppress("UNCHECKED_CAST") val hidden = flows[7] as Set<AppRef>
-                @Suppress("UNCHECKED_CAST") val badgeCounts = flows[8] as Map<PackageKey, Int>
-                @Suppress("UNCHECKED_CAST") val badgeMutes = flows[9] as Set<AppRef>
+                val snapshot = flows[1] as WorkspaceSnapshot
+                @Suppress("UNCHECKED_CAST") val apps = flows[2] as List<AppEntry>
+                val target = flows[3] as SearchTarget?
+                @Suppress("UNCHECKED_CAST") val hidden = flows[4] as Set<AppRef>
+                @Suppress("UNCHECKED_CAST") val badgeCounts = flows[5] as Map<PackageKey, Int>
+                @Suppress("UNCHECKED_CAST") val badgeMutes = flows[6] as Set<AppRef>
                 val byRef = apps.associateBy { it.ref }
-                val byFolder = folders.associateBy { it.id }
+                val byFolder = snapshot.folders.associateBy { it.id }
                 HomeState(
                     settings = settings,
                     homePages =
-                        home.toHomePages(byRef, byFolder, settings.columns, settings.pageRows),
-                    dockPages = dock.toHomePages(byRef, byFolder, settings.dockSlots, rows = 1),
-                    drawerFolders = drawer.toDrawerFolders(byRef, byFolder),
+                        snapshot.home.toHomePages(
+                            byRef,
+                            byFolder,
+                            settings.columns,
+                            settings.pageRows,
+                        ),
+                    dockPages =
+                        snapshot.dock.toHomePages(byRef, byFolder, settings.dockSlots, rows = 1),
+                    drawerFolders = snapshot.drawer.toDrawerFolders(byRef, byFolder),
+                    folders = byFolder,
                     searchTarget = target,
                     apps = apps,
                     drawerApps = apps.filter { it.ref !in hidden },
@@ -600,28 +601,53 @@ internal fun HomeState.stillHas(menu: ItemMenuState): Boolean {
 }
 
 /**
- * True once the drawn layout shows [move] applied: the item, or the new app, is in its cell; for a
- * fold, the app is in the folder there, or the placement it came from is gone; for a removal, the
- * placement is gone.
+ * True once the layout shows [move] applied, drawn or in [HomePage.occupied]: the item, or the new
+ * app, is in its cell; for a fold, the app is in the folder there, or the placement it came from is
+ * gone; for a removal, the placement is gone.
  */
 internal fun HomeState.reflects(move: PendingMove): Boolean {
     val newApp = move.newApp
     if (move.removed || move.foldInto != null && newApp == null) {
-        return allItems().none { it.id == move.itemId }
+        return allItems().none { it.id == move.itemId } &&
+            (homePages + dockPages).none { p -> p.occupied.any { it.id == move.itemId } }
     }
     return pages(move.container).any { p ->
         p.index == move.page &&
-            p.items.any { it.x == move.x && it.y == move.y && it.isMoverOf(move) }
+            (p.items.any { it.x == move.x && it.y == move.y && it.isMoverOf(move, folders) } ||
+                p.occupied.any {
+                    it.footprint.x == move.x &&
+                        it.footprint.y == move.y &&
+                        it.isMoverOf(move, folders)
+                })
     }
 }
 
-private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
+private fun HomeItem.isMoverOf(move: PendingMove, folders: Map<Long, FolderContent>): Boolean {
     val newApp = move.newApp
+    val outOf = move.fromFolder
     return when {
         move.newFolder != null -> folderId == move.newFolder
         move.newWidget != null -> kind == ItemKind.WIDGET && provider == move.newWidget.providerName
-        newApp != null && move.foldInto != null -> folder.any { it.ref == newApp }
-        newApp != null -> app?.ref == newApp
+        newApp != null && move.foldInto != null ->
+            containsApp(newApp, folders) && (outOf == folderId || folders.hasLeft(outOf, newApp))
+        newApp != null -> app?.ref == newApp && folders.hasLeft(outOf, newApp)
+        else -> id == move.itemId && folders.hasLeft(outOf, app?.ref)
+    }
+}
+
+private fun Placed.isMoverOf(move: PendingMove, folders: Map<Long, FolderContent>): Boolean {
+    val newApp = move.newApp
+    return when {
+        move.newFolder != null -> identity == folderIdentity(move.newFolder)
+        move.newWidget != null -> false
+        newApp != null && move.foldInto != null -> false
+        newApp != null -> identity == newApp.identity && folders.hasLeft(move.fromFolder, newApp)
         else -> id == move.itemId
     }
 }
+
+private fun HomeItem.containsApp(ref: AppRef, folders: Map<Long, FolderContent>): Boolean =
+    folder.any { it.ref == ref } || folders[folderId]?.apps?.contains(ref) == true
+
+private fun Map<Long, FolderContent>.hasLeft(folderId: Long?, app: AppRef?): Boolean =
+    folderId == null || this[folderId]?.apps?.contains(app) != true

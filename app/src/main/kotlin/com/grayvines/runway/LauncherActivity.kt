@@ -1,10 +1,8 @@
 package com.grayvines.runway
 
 import android.content.ActivityNotFoundException
-import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
-import android.os.UserHandle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -24,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.grayvines.runway.data.settings.Settings
+import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.system.widgets.bindWidgetRequest
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DropAreaTracker
@@ -93,16 +92,18 @@ class LauncherActivity : ComponentActivity() {
     /** The dialogs a widget may need before it is added; each answers when the user has. */
     private val widgetPrompts =
         object : WidgetPrompts {
-            override suspend fun requestBind(
-                id: Int,
-                provider: ComponentName,
-                profile: UserHandle,
-            ): Boolean = prompting.withLock {
-                val answer = CompletableDeferred<Boolean>()
-                pendingBind = answer
-                bindRequest.launch(bindWidgetRequest(id, provider, profile))
-                answer.await()
-            }
+            override suspend fun requestBind(id: Int, provider: WidgetProvider): Boolean =
+                prompting.withLock {
+                    val info = provider.info
+                    if (info == null) {
+                        false
+                    } else {
+                        val answer = CompletableDeferred<Boolean>()
+                        pendingBind = answer
+                        bindRequest.launch(bindWidgetRequest(id, info.provider, info.profile))
+                        answer.await()
+                    }
+                }
 
             override suspend fun configure(id: Int): Boolean = prompting.withLock {
                 val answer = CompletableDeferred<Boolean>()
@@ -164,6 +165,7 @@ class LauncherActivity : ComponentActivity() {
         if (viewModel.widgetResize.prompts === widgetPrompts) viewModel.widgetResize.prompts = null
         pendingBind?.complete(false)
         pendingSetup?.complete(false)
+        appGraph.widgets.clearViews(this)
         super.onDestroy()
     }
 
@@ -180,12 +182,12 @@ class LauncherActivity : ComponentActivity() {
     /** Widgets update only while the launcher is on screen. */
     override fun onStart() {
         super.onStart()
-        appGraph.widgets.startListening()
+        appGraph.widgets.startListening(this)
         appGraph.badges.refresh()
     }
 
     override fun onStop() {
-        appGraph.widgets.stopListening()
+        appGraph.widgets.stopListening(this)
         super.onStop()
     }
 

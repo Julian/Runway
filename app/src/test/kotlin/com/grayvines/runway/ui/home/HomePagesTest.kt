@@ -7,10 +7,14 @@ import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.PageContent
 import com.grayvines.runway.data.PlacedItem
+import com.grayvines.runway.data.appRef
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.drag.PendingMove
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class HomePagesTest {
@@ -110,5 +114,38 @@ class HomePagesTest {
             ),
             page.occupied,
         )
+    }
+
+    @Test
+    fun `reflects recognises moves of unavailable apps and folds into folders`() {
+        val unavailable = app(1, x = 2, y = 0)
+        val folderItem =
+            PlacedItem(3, ItemKind.FOLDER, Container.HOME, 0, x = 1, y = 0, folderId = 7)
+        val outOfGridFolder =
+            PlacedItem(4, ItemKind.FOLDER, Container.HOME, 0, x = 3, y = 0, folderId = 8)
+        val foldedApp = AppRef("pkg9/.Main", 0)
+        val folders =
+            mapOf(
+                7L to FolderContent(7, "Tools", listOf(foldedApp)),
+                9L to FolderContent(9, "Source", listOf(foldedApp)),
+            )
+        val content =
+            ContainerContent(
+                listOf(PageContent(0, listOf(unavailable, folderItem, outOfGridFolder)))
+            )
+        val pages = content.toHomePages(apps = emptyMap(), folders = folders, columns = 3, rows = 4)
+        val state = HomeState(homePages = pages, folders = folders)
+        val base = PendingMove(1, Container.HOME, 0, x = 2, y = 0, emptyMap())
+
+        assertTrue(state.reflects(base))
+        assertTrue(state.reflects(base.copy(itemId = 0, newApp = unavailable.appRef())))
+        assertTrue(state.reflects(base.copy(itemId = 0, x = 3, newFolder = 8)))
+        assertFalse(state.reflects(base.copy(x = 0)))
+        assertFalse(state.reflects(base.copy(removed = true)))
+        assertTrue(state.reflects(base.copy(itemId = 99, removed = true)))
+        val fold = base.copy(itemId = 0, x = 1, foldInto = 3, newApp = foldedApp)
+        assertTrue(state.reflects(fold))
+        // Not reflected while the app has not left its source folder yet.
+        assertFalse(state.reflects(fold.copy(fromFolder = 9)))
     }
 }

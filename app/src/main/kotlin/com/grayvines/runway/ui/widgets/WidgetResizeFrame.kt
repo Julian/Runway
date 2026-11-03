@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,14 +31,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.appGraph
 import com.grayvines.runway.model.Footprint
@@ -60,6 +64,7 @@ private val CHIP_GAP = 8.dp
 private const val FILL_ALPHA = 0.06f
 private const val OUTLINE_ALPHA = 0.9f
 private val CHIP = Color(0xFF202124)
+private val REMOVE_CHIP = Color(0xFFD93025)
 
 /**
  * How long a resize is shown as pulled after the handle is let go, if the layout never shows it.
@@ -124,9 +129,15 @@ private fun Frame(
     onEdit: (() -> Unit)?,
     onRemove: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().testTag(WIDGET_RESIZE_TAG)) {
+    var room by remember { mutableStateOf(IntSize.Zero) }
+    val count = if (onEdit != null) 2 else 1
+    val density = LocalDensity.current
+    val chipSize = with(density) { CHIP_SIZE.roundToPx() }
+    val chipStep = with(density) { (CHIP_SIZE + CHIP_GAP).roundToPx() }
+    Box(Modifier.fillMaxSize().onSizeChanged { room = it }.testTag(WIDGET_RESIZE_TAG)) {
         Canvas(Modifier.fillMaxSize()) {
             val outline = pull.outline()
+            pull.chips = chipsRect(outline, room, chipSize, chipStep, count)
             val corner = CornerRadius(CORNER.toPx())
             drawRoundRect(
                 Color.White.copy(alpha = FILL_ALPHA),
@@ -143,8 +154,28 @@ private fun Frame(
             )
         }
         limits.edges.forEach { edge -> Handle(edge, pull) }
-        Chip(pull::outline, place = 0, Icons.Outlined.Clear, "Remove", onRemove)
-        onEdit?.let { Chip(pull::outline, place = 1, Icons.Outlined.Edit, "Edit", it) }
+        Chip(
+            pull::outline,
+            { room },
+            place = 0,
+            count = count,
+            Icons.Outlined.Clear,
+            "Remove",
+            REMOVE_CHIP,
+            onRemove,
+        )
+        onEdit?.let {
+            Chip(
+                pull::outline,
+                { room },
+                place = 1,
+                count = count,
+                Icons.Outlined.Edit,
+                "Edit",
+                CHIP,
+                it,
+            )
+        }
     }
 }
 
@@ -190,29 +221,30 @@ private fun Handle(edge: Edge, pull: Pull) {
     }
 }
 
-/** A round button on the outline's top edge, [place] chips left of its top-right corner. */
+/**
+ * A round button on the outline's top edge, [place] chips left of its top-right corner, kept inside
+ * [room] when the widget sits flush with a screen edge.
+ */
+@Suppress("LongParameterList") // one chip's inputs, passed from Frame
 @Composable
 private fun Chip(
     outline: () -> Rect,
+    room: () -> IntSize,
     place: Int,
+    count: Int,
     icon: ImageVector,
     label: String,
+    color: Color,
     onClick: () -> Unit,
 ) {
     val density = LocalDensity.current
     val size = with(density) { CHIP_SIZE.roundToPx() }
     val step = with(density) { (CHIP_SIZE + CHIP_GAP).roundToPx() }
     Box(
-        Modifier.offset {
-                val r = outline()
-                IntOffset(
-                    (r.right - size / 2).toInt() - place * step,
-                    (r.top - size / 2).toInt(),
-                )
-            }
+        Modifier.offset { chipOffset(outline(), room(), size, step, place, count) }
             .size(CHIP_SIZE)
-            .background(CHIP, CircleShape)
-            .clickable(onClick = onClick)
+            .background(color, CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
@@ -223,6 +255,37 @@ private fun Chip(
             modifier = Modifier.size(CHIP_ICON),
         )
     }
+}
+
+internal fun chipOffset(
+    outline: Rect,
+    room: IntSize,
+    size: Int,
+    step: Int,
+    place: Int,
+    count: Int = place + 1,
+): IntOffset {
+    val cornerX = (outline.right - size / 2).toInt()
+    val rawY = (outline.top - size / 2).toInt()
+    if (room.width <= 0 || room.height <= 0) {
+        return IntOffset(cornerX - place * step, rawY)
+    }
+    val maxCornerX = (room.width - size).coerceAtLeast(0)
+    val minCornerX = ((count - 1) * step).coerceAtMost(maxCornerX)
+    val x = cornerX.coerceIn(minCornerX, maxCornerX) - place * step
+    val y = rawY.coerceIn(0, (room.height - size).coerceAtLeast(0))
+    return IntOffset(x, y)
+}
+
+internal fun chipsRect(outline: Rect, room: IntSize, size: Int, step: Int, count: Int): Rect {
+    val right = chipOffset(outline, room, size, step, place = 0, count = count)
+    val left = chipOffset(outline, room, size, step, place = count - 1, count = count)
+    return Rect(
+        left.x.toFloat(),
+        right.y.toFloat(),
+        (right.x + size).toFloat(),
+        (right.y + size).toFloat(),
+    )
 }
 
 /**
@@ -245,6 +308,12 @@ private class Pull(
     /** Where the widget's cell is (root px); state, so the frame follows the cell as it grows. */
     var anchor by mutableStateOf(Rect.Zero)
 
+    var chips: Rect?
+        get() = host.chips
+        set(value) {
+            host.chips = value
+        }
+
     private var edge: Edge? = null
 
     /**
@@ -252,7 +321,7 @@ private class Pull(
      * pull, kept within what the widget can take ([reach]), so the outline never shows room it
      * cannot have.
      */
-    private var px by mutableStateOf(0f)
+    private var px by mutableFloatStateOf(0f)
 
     /** The finger's whole pull, px, unclamped: what presses against the search bar. */
     private var pulled = 0f

@@ -33,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.ui.home.DragHandlers
@@ -82,8 +85,11 @@ fun WidgetPicker(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
+                    onClickLabel = "Close widgets",
+                    role = Role.Button,
                     onClick = onDismiss,
                 )
+                .semantics { contentDescription = "Close widgets" }
         )
         Surface(
             modifier =

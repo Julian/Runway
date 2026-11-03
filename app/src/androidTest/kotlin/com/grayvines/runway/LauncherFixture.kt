@@ -2,7 +2,6 @@ package com.grayvines.runway
 
 import android.content.ComponentName
 import android.content.Intent
-import android.os.Process
 import android.os.SystemClock
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
@@ -71,7 +70,6 @@ import com.grayvines.runway.ui.home.DOCK_TAG
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.FLIP_SCROLL_MS
 import com.grayvines.runway.ui.home.ICON_INSET
-import com.grayvines.runway.ui.home.SEARCH_TARGET_ICON_TAG
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
@@ -401,10 +399,9 @@ open class LauncherFixture {
         allowWidgetBinding(true)
         val id = graph.widgets.allocateId().also { boundIds += it }
         if (bound) {
-            assertTrue(
-                "could not bind $provider",
-                graph.widgets.bind(id, provider, Process.myUserHandle()),
-            )
+            val found =
+                graph.widgets.providers().first { it.providerName == provider.flattenToString() }
+            assertTrue("could not bind $provider", graph.widgets.bind(id, found))
         }
         return id
     }
@@ -1014,8 +1011,7 @@ open class LauncherFixture {
      * The app's icon on the home pages or in the dock, or the overlay's copy of it while it is
      * being dragged: two nodes then, so a drag's questions go to [cellIcon] or the overlay. Icons
      * live inside clickable cells, whose semantics merge, so the unmerged tree is searched. Not the
-     * search bar's glass, which is described by the search app's name, and not the drawer's, an
-     * open folder's or the item menu's copies, which have lookups of their own.
+     * drawer's, an open folder's or the item menu's copies, which have lookups of their own.
      */
     protected fun icon(label: String) =
         compose.onNode(hasContentDescription(label) and onTheHomeScreen(), useUnmergedTree = true)
@@ -1028,8 +1024,7 @@ open class LauncherFixture {
         )
 
     private fun onTheHomeScreen() =
-        !hasTestTag(SEARCH_TARGET_ICON_TAG) and
-            !hasAnyAncestor(hasTestTag(DRAWER_TAG)) and
+        !hasAnyAncestor(hasTestTag(DRAWER_TAG)) and
             !hasAnyAncestor(hasTestTag(FOLDER_TAG)) and
             !hasAnyAncestor(hasTestTag(ITEM_MENU_TAG))
 }

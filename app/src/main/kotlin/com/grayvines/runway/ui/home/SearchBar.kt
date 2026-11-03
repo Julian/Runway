@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.search.SearchTarget
@@ -48,8 +49,8 @@ private const val EDGE_OUTLINE_ALPHA = 0.9f
 /**
  * A transparent bar: a magnifying glass, the word "Search", and a menu on the far side that opens
  * the home menu. A tap on the bar hands off to the search app; a long press opens its front page;
- * the glass is described by that app's name, so what a tap does is said out loud and can be
- * checked.
+ * the glass describes that handoff ("Search with …"), so what a tap does is said out loud without
+ * colliding with the search app's own icon description.
  *
  * The bar's row is out of the grid, so a widget carried or resized against it stops with nothing to
  * show why: while [pressedBy] (root px) reaches into the row, the row is outlined as the edge the
@@ -69,6 +70,7 @@ fun SearchBar(
     var bounds by remember { mutableStateOf<Rect?>(null) }
     // Recomputed per move while something is carried; only a change of answer recomposes.
     val pressed by remember { derivedStateOf { bounds?.let { pressedBy()?.overlaps(it) } == true } }
+    val searchWith = target?.let { "Search with ${it.label}" }
     Box(
         modifier =
             modifier
@@ -81,11 +83,11 @@ fun SearchBar(
     ) {
         if (pressed) Box(Modifier.matchParentSize().testTag(SEARCH_BAR_EDGE_TAG))
         SearchRow(
-            glassDescription = target?.label,
+            glassDescription = searchWith,
             modifier =
                 Modifier.clip(CircleShape)
                     .combinedClickable(
-                        onClickLabel = target?.let { "Search with ${it.label}" } ?: "Search",
+                        onClickLabel = searchWith ?: "Search",
                         role = Role.Button,
                         onLongClickLabel = target?.let { "Open ${it.label}" },
                         onLongClick = onLongClick,
@@ -97,7 +99,12 @@ fun SearchBar(
             Text(
                 text = "Search",
                 style = ink.style,
-                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                modifier =
+                    Modifier.padding(start = 12.dp)
+                        .weight(1f)
+                        .then(
+                            if (searchWith != null) Modifier.clearAndSetSemantics {} else Modifier
+                        ),
             )
             val dots = rememberRootBounds()
             IconButton(

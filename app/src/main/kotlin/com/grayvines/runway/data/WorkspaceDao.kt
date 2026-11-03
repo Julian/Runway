@@ -10,12 +10,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface WorkspaceDao {
     @Query("SELECT * FROM pages WHERE container = :container ORDER BY page_index")
-    fun observePages(container: Container): Flow<List<PageEntity>>
-
-    @Query("SELECT * FROM items WHERE container = :container")
-    fun observeItems(container: Container): Flow<List<ItemEntity>>
-
-    @Query("SELECT * FROM pages WHERE container = :container ORDER BY page_index")
     suspend fun pages(container: Container): List<PageEntity>
 
     @Query("SELECT DISTINCT page_index FROM items WHERE container = :container")
@@ -123,7 +117,12 @@ interface WorkspaceDao {
     @Query("SELECT * FROM folder_apps $FOLDER_APP_ORDER")
     suspend fun folderApps(): List<FolderAppEntity>
 
+    @Query("SELECT * FROM items") fun observeAllItems(): Flow<List<ItemEntity>>
+
     @Query("SELECT * FROM items") suspend fun items(): List<ItemEntity>
+
+    @Query("SELECT * FROM pages ORDER BY container, page_index")
+    fun observeAllPages(): Flow<List<PageEntity>>
 
     @Query("SELECT * FROM pages ORDER BY container, page_index")
     suspend fun allPages(): List<PageEntity>

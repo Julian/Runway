@@ -274,8 +274,11 @@ class WorkspaceRepositoryTest {
 
         val placed = repo.observe(Container.HOME).first().pages.single().items.single { it.x == 0 }
         assertEquals(ItemKind.FOLDER to folderId, placed.kind to placed.folderId)
-        assertTrue(repo.observeFolders().first().single().inDrawer)
-        assertEquals(listOf(folderId), repo.observeDrawerPlacements().first().map { it.folderId })
+        val snapshot = repo.observeSnapshot().first()
+        assertEquals(repo.observe(Container.HOME).first(), snapshot.home)
+        assertEquals(repo.observe(Container.DOCK).first(), snapshot.dock)
+        assertTrue(snapshot.folders.single().inDrawer)
+        assertEquals(listOf(folderId), snapshot.drawer.map { it.folderId })
     }
 
     @Test

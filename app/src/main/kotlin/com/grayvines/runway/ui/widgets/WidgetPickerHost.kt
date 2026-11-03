@@ -1,10 +1,11 @@
 package com.grayvines.runway.ui.widgets
 
-import com.grayvines.runway.AppGraph
+import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.system.widgets.WidgetProvider
+import com.grayvines.runway.system.widgets.Widgets
 import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.WorkspaceLookup
@@ -24,7 +25,8 @@ import kotlinx.coroutines.withContext
  * was dropped ([place]). What cannot be done is said in a [notice].
  */
 class WidgetPickerHost(
-    private val graph: AppGraph,
+    private val workspace: WorkspaceRepository,
+    private val widgets: Widgets,
     private val scope: CoroutineScope,
     private val lookup: WorkspaceLookup,
     /** The home page on screen, where a tapped widget goes. */
@@ -61,7 +63,7 @@ class WidgetPickerHost(
         _providers.value = null
         scope.launch {
             attempt("list the widgets") {
-                _providers.value = withContext(Dispatchers.Default) { graph.widgets.providers() }
+                _providers.value = withContext(Dispatchers.Default) { widgets.providers() }
             }
         }
     }
@@ -139,19 +141,15 @@ class WidgetPickerHost(
      * screen can be cancelled. Only a refused bind is worth a notice; a cancelled setup was theirs.
      */
     private suspend fun bound(provider: WidgetProvider): Int? {
-        val host = graph.widgets
-        val info = provider.info ?: return null
-        val id = host.allocateId()
-        val allowed =
-            host.bind(id, info.provider, info.profile) ||
-                prompts?.requestBind(id, info.provider, info.profile) == true
+        val id = widgets.allocateId()
+        val allowed = widgets.bind(id, provider) || prompts?.requestBind(id, provider) == true
         if (!allowed) {
-            host.deleteId(id)
+            widgets.deleteId(id)
             _notices.tryEmit("Runway was not allowed to add widgets")
             return null
         }
         if (provider.needsSetup && prompts?.configure(id) != true) {
-            host.deleteId(id)
+            widgets.deleteId(id)
             return null
         }
         return id
@@ -168,7 +166,7 @@ class WidgetPickerHost(
         var stored: Long? = null
         attempt("store the widget") {
             stored =
-                graph.workspace.addWidget(
+                workspace.addWidget(
                     id,
                     provider.providerName,
                     page,
@@ -180,7 +178,7 @@ class WidgetPickerHost(
                 )
         }
         val itemId = stored
-        if (itemId == null) graph.widgets.deleteId(id) else onPlaced(itemId)
+        if (itemId == null) widgets.deleteId(id) else onPlaced(itemId)
         return itemId != null
     }
 }

@@ -168,7 +168,7 @@ class DragSession(
      */
     fun handlersForNewWidget(provider: WidgetProvider, span: WidgetSpan, grab: Point) =
         handlers(
-            onHold = {},
+            onHold = null,
             onStart = { pointer, _ ->
                 carry(provider.preview)
                 onStartNew(freshWidget(provider.withoutPictures(), span), pointer, grab)
@@ -180,7 +180,7 @@ class DragSession(
      * during one changes nothing, and must not take the drag away from the finger carrying it.
      */
     private fun handlers(
-        onHold: (cell: Bounds) -> Unit,
+        onHold: ((cell: Bounds) -> Unit)?,
         onStart: (pointer: Point, grab: Point) -> Unit,
     ) = DragHandlers(onHold, onStart, onFinger = { if (state == null) finger = it })
 }

@@ -54,6 +54,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -68,6 +72,7 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
+import com.grayvines.runway.ui.home.rememberRootBounds
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -194,8 +199,11 @@ private fun SheetScrim(progress: () -> Float, onClick: () -> Unit) {
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                onClickLabel = "Close folder",
+                role = Role.Button,
                 onClick = onClick,
             )
+            .semantics { contentDescription = "Close folder" }
     )
 }
 
@@ -342,15 +350,30 @@ private fun FolderTile(
     editing: Boolean,
     modifier: Modifier,
 ) {
+    val folderId = folder.folderId
+    val bounds = rememberRootBounds()
+    val holdable =
+        if (!editing && folderId != null) {
+            Modifier.semantics {
+                onLongClick {
+                    actions.hold(folderId, app, bounds.current())
+                    true
+                }
+            }
+        } else {
+            Modifier
+        }
     Box(modifier) {
         AppTile(
             app,
             iconSize,
             labelled = true,
             onClick = { if (!editing) actions.launch(app) },
-            Modifier.padding(vertical = TILE_PADDING).testTag(FOLDER_ITEM_TAG),
+            bounds.modifier
+                .then(holdable)
+                .padding(vertical = TILE_PADDING)
+                .testTag(FOLDER_ITEM_TAG),
         )
-        val folderId = folder.folderId
         if (editing && folderId != null) {
             RemoveChip(
                 app.label,
@@ -432,7 +455,10 @@ private fun FolderName(name: String, modifier: Modifier, onRename: (String) -> U
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = tagged.clickable { editing = true },
+            modifier =
+                tagged.clickable(role = Role.Button, onClickLabel = "Rename folder") {
+                    editing = true
+                },
         )
         return
     }

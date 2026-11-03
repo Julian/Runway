@@ -26,6 +26,7 @@ const val FOLDER_REMOVE_TAG = "folder-remove"
 
 /** Lighter than the sheet, which is the widget frame's chip colour: a chip must stand off it. */
 private val CHIP = Color(0xFF5F6368)
+private val REMOVE_CHIP = Color(0xFFD93025)
 
 /** Smaller than an app's x: the pencil is the way in, not one of the folder's own things. */
 private val TOGGLE_SIZE = 22.dp
@@ -82,7 +83,7 @@ internal fun RemoveChip(label: String, onRemove: () -> Unit, modifier: Modifier 
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(REMOVE_SIZE).background(CHIP, CircleShape),
+            Modifier.size(REMOVE_SIZE).background(REMOVE_CHIP, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

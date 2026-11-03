@@ -55,7 +55,7 @@ fun ShadeHint(given: () -> Float, insets: PaddingValues) {
         ) {
             Icon(
                 Icons.Outlined.Notifications,
-                contentDescription = "Notifications",
+                contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(BELL),
             )

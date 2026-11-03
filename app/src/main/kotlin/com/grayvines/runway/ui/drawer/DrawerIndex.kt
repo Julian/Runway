@@ -18,8 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
@@ -107,8 +110,13 @@ fun DrawerIndex(entries: List<IndexEntry>, onJump: (position: Int) -> Unit, modi
                 style = MaterialTheme.typography.labelMedium,
                 color = Color.White.copy(alpha = if (bright) 1f else LETTER_ALPHA),
                 modifier =
-                    Modifier.padding(vertical = LETTER_PADDING).semantics {
+                    Modifier.padding(vertical = LETTER_PADDING).clearAndSetSemantics {
                         contentDescription = "Jump to ${entry.letter}"
+                        role = Role.Button
+                        onClick {
+                            jump.value(entry.position)
+                            true
+                        }
                     },
             )
         }

@@ -35,6 +35,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -66,7 +68,7 @@ const val FOLD_HINT_TAG = "fold-hint"
  * from the root, not by the cell, and the root follows that finger.
  */
 class DragHandlers(
-    val onHold: (cell: Bounds) -> Unit,
+    val onHold: ((cell: Bounds) -> Unit)? = null,
     val onStart: (pointer: Point, grab: Point) -> Unit,
     val onFinger: (PointerId) -> Unit = {},
 )
@@ -100,6 +102,7 @@ fun ItemCell(
         modifier =
             modifier
                 .fillMaxSize()
+                .semantics { if (lifted) hideFromAccessibility() }
                 .clickableWithBounds(
                     interactions,
                     dragKey = item.id,
@@ -143,7 +146,7 @@ internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
     when {
         item.app != null -> AppIcon(item.app, modifier)
         item.kind == ItemKind.FOLDER -> FolderIcon(item.folder, item.label, modifier)
-        else -> Placeholder(item.kind)
+        else -> Placeholder(item.kind, item.label)
     }
 }
 
@@ -233,8 +236,13 @@ internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Bo
 }
 
 @Composable
-private fun Placeholder(kind: ItemKind) {
-    Text(kind.name, color = Color.White, style = MaterialTheme.typography.labelSmall)
+private fun Placeholder(kind: ItemKind, label: String) {
+    Text(
+        kind.name,
+        color = Color.White,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.semantics { contentDescription = label.ifEmpty { kind.name } },
+    )
 }
 
 /**
@@ -245,18 +253,33 @@ internal fun Modifier.dragAfterLongPress(
     key: Any,
     coords: () -> LayoutCoordinates?,
     handlers: () -> DragHandlers?,
-): Modifier =
-    if (handlers() == null) {
-        this
-    } else {
-        pointerInput(key) {
-            val hold = HoldThenDrag(viewConfiguration.touchSlop, coords, handlers)
-            detectDragGesturesAfterLongPress(
-                onDragStart = hold::held,
-                onDrag = { change, _ -> hold.moved(change.id, change.position) },
-            )
+): Modifier {
+    val current = handlers() ?: return this
+    val longClickable =
+        if (current.onHold != null) {
+            Modifier.semantics {
+                onLongClick {
+                    val c = coords()
+                    val onHold = handlers()?.onHold
+                    if (c != null && onHold != null) {
+                        onHold(c.boundsInRoot().toBounds())
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        } else {
+            Modifier
         }
+    return then(longClickable).pointerInput(key) {
+        val hold = HoldThenDrag(viewConfiguration.touchSlop, coords, handlers)
+        detectDragGesturesAfterLongPress(
+            onDragStart = hold::held,
+            onDrag = { change, _ -> hold.moved(change.id, change.position) },
+        )
     }
+}
 
 /** One long press: held, then possibly dragged once the finger has moved past [slop]. */
 private class HoldThenDrag(
@@ -270,7 +293,7 @@ private class HoldThenDrag(
     fun held(local: Offset) {
         grab = local
         dragging = false
-        coords()?.let { handlers()?.onHold(it.boundsInRoot().toBounds()) }
+        coords()?.let { handlers()?.onHold?.invoke(it.boundsInRoot().toBounds()) }
     }
 
     fun moved(finger: PointerId, local: Offset) {
