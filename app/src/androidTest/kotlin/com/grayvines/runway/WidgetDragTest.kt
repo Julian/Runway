@@ -9,8 +9,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.DragMotion
 import com.grayvines.runway.ui.home.SEARCH_BAR_EDGE_TAG
@@ -145,7 +145,7 @@ class WidgetDragTest : LauncherFixture() {
         pushed.forEach { label ->
             waitUntil { homeCellOf(label).let { it != null && it != 0 to 1 && it != 1 to 1 } }
         }
-        assertEquals(emptyList<ItemEntity>(), folders())
+        assertEquals(emptyList<PlacedItem>(), folders())
     }
 
     @Test
@@ -235,14 +235,14 @@ class WidgetDragTest : LauncherFixture() {
     private fun widgetCentre() =
         compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
 
-    private fun widget(): ItemEntity = runBlocking {
+    private fun widget(): PlacedItem = runBlocking {
         listOf(Container.HOME)
             .flatMap { graph.workspace.observe(it).first().pages }
             .flatMap { it.items }
             .single { it.kind == ItemKind.WIDGET }
     }
 
-    private fun folders(): List<ItemEntity> = runBlocking {
+    private fun folders(): List<PlacedItem> = runBlocking {
         graph.workspace
             .observe(Container.HOME)
             .first()

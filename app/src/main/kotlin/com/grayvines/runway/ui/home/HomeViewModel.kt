@@ -10,9 +10,9 @@ import com.grayvines.runway.AppGraph
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ContainerContent
+import com.grayvines.runway.data.DrawerPlacement
 import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.FolderContent
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.addToDrawerFolder
@@ -190,7 +190,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** The frame around a widget: its handles and its Remove. */
     val widgetResize =
-        WidgetResizeHost(graph, viewModelScope, mayShow = { dragging.drag.value == null })
+        WidgetResizeHost(
+            graph,
+            viewModelScope,
+            mayShow = { dragging.drag.value == null },
+            awaitReflected = { id, to ->
+                withTimeoutOrNull(REFLECT_TIMEOUT_MS) {
+                    state.first { it.item(id)?.footprint == to }
+                }
+            },
+        )
 
     private val lookup =
         object : WorkspaceLookup {
@@ -312,7 +321,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 @Suppress("UNCHECKED_CAST") val apps = flows[3] as List<AppEntry>
                 @Suppress("UNCHECKED_CAST") val folders = flows[4] as List<FolderContent>
                 val target = flows[5] as SearchTarget?
-                @Suppress("UNCHECKED_CAST") val drawer = flows[6] as List<ItemEntity>
+                @Suppress("UNCHECKED_CAST") val drawer = flows[6] as List<DrawerPlacement>
                 @Suppress("UNCHECKED_CAST") val hidden = flows[7] as Set<AppRef>
                 @Suppress("UNCHECKED_CAST") val badgeCounts = flows[8] as Map<PackageKey, Int>
                 @Suppress("UNCHECKED_CAST") val badgeMutes = flows[9] as Set<AppRef>
@@ -343,7 +352,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 if (open != null && s.loaded && s.item(open.itemId) == null) closeFolder()
                 val menu = itemMenu.state.value
                 if (menu != null && s.loaded && !s.stillHas(menu)) itemMenu.dismiss()
-                val framed = widgetResize.shown.value
+                val framed = widgetResize.shown
                 if (framed != null && s.loaded && s.item(framed) == null) widgetResize.dismiss()
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeState())

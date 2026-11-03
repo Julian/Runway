@@ -15,8 +15,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.menu.HOME_MENU_TAG
 import com.grayvines.runway.ui.widgets.WIDGET_LIST_TAG
@@ -87,7 +87,7 @@ class WidgetPickerTest : LauncherFixture() {
         allowWidgetBinding(true)
         openPicker() // the first page is full by default
         expectToast("No room on this page") { fixtureChoice().performClick() }
-        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+        assertEquals(emptyList<PlacedItem>(), placedWidgets())
     }
 
     @Test
@@ -101,7 +101,7 @@ class WidgetPickerTest : LauncherFixture() {
             "the system's bind prompt came up for a widget with nowhere to go",
             device.wait(Until.findObject(BIND_ALLOW), PRESS_SETTLE_MS * 4),
         )
-        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+        assertEquals(emptyList<PlacedItem>(), placedWidgets())
     }
 
     @Test
@@ -143,7 +143,7 @@ class WidgetPickerTest : LauncherFixture() {
         // it; what matters is checked instead: nothing was added.
         waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
         SystemClock.sleep(WRITE_GRACE_MS)
-        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+        assertEquals(emptyList<PlacedItem>(), placedWidgets())
     }
 
     @Test
@@ -171,7 +171,7 @@ class WidgetPickerTest : LauncherFixture() {
         cancel.click()
         waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
         SystemClock.sleep(WRITE_GRACE_MS)
-        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+        assertEquals(emptyList<PlacedItem>(), placedWidgets())
     }
 
     @Test
@@ -224,7 +224,7 @@ class WidgetPickerTest : LauncherFixture() {
         dragOn(grid.dockSlot(1))
         release()
         awaitGone(DRAG_OVERLAY_TAG)
-        assertEquals(emptyList<ItemEntity>(), placedWidgets())
+        assertEquals(emptyList<PlacedItem>(), placedWidgets())
     }
 
     @Test
@@ -271,13 +271,13 @@ class WidgetPickerTest : LauncherFixture() {
     private fun choice(label: String) =
         compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(WIDGET_PICKER_TAG)))
 
-    private fun placedWidgets(): List<ItemEntity> = runBlocking {
+    private fun placedWidgets(): List<PlacedItem> = runBlocking {
         graph.workspace.observe(Container.HOME).first().pages.first().items.filter {
             it.kind == ItemKind.WIDGET
         }
     }
 
-    private fun awaitPlacedWidget(): ItemEntity {
+    private fun awaitPlacedWidget(): PlacedItem {
         waitUntil(LONG_TIMEOUT_MS) { placedWidgets().isNotEmpty() }
         return placedWidgets().single()
     }

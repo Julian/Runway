@@ -286,7 +286,7 @@ class DrawerTest : LauncherFixture() {
         awaitDrawerClosed()
         release()
         waitUntil(TIMEOUT_MS) { homeCellOf(label) in occupants.keys }
-        val cell = homeCellOf(label)!!.let { it.first!! to it.second!! }
+        val cell = homeCellOf(label)!!
         val pushed = occupants.getValue(cell)
         assertTrue("$pushed still at $cell", homeCellOf(pushed) != cell)
         assertNotNull("$pushed left the page", homeCellOf(pushed))

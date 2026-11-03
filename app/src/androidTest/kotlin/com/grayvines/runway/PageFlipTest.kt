@@ -236,7 +236,7 @@ class PageFlipTest : LauncherFixture() {
         // Page 0's marker is a neighbour, not the dragged icon: its cell goes when the page does.
         val pages = listOf(labelAtHomeCell(1, 0), onPageOne, onPageTwo)
         // Read before the drag: the dwell runs in real time from the moment the finger arrives.
-        val cells = pages.map { label -> placementOf(label)!!.let { it.x!! to it.y!! } }
+        val cells = pages.map { label -> placementOf(label)!!.let { it.x to it.y } }
         holdDrag(from = firstHomeApp, to = grid.rightEdge(row = settings.pageRows - 1))
         // Which page is settled, sampled in real time until the last page shows. Fetching a node
         // blocks while the pager animates, so a sample is (started, finished, page): -1 while

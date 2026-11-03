@@ -4,9 +4,9 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ContainerContent
 import com.grayvines.runway.data.FolderContent
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.PageContent
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
@@ -15,13 +15,13 @@ import org.junit.jupiter.api.Test
 
 class HomePagesTest {
     private fun app(id: Long, x: Int, y: Int) =
-        ItemEntity(
-            id,
-            ItemKind.APP,
-            Container.HOME,
-            0,
-            x,
-            y,
+        PlacedItem(
+            id = id,
+            kind = ItemKind.APP,
+            container = Container.HOME,
+            pageIndex = 0,
+            x = x,
+            y = y,
             component = "pkg$id/.Main",
             profile = 0,
         )
@@ -42,7 +42,7 @@ class HomePagesTest {
 
     @Test
     fun `a folder item carries its name and whichever of its apps are available`() {
-        val folder = ItemEntity(3, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
+        val folder = PlacedItem(3, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
         val content = ContainerContent(listOf(PageContent(0, listOf(folder))))
         val folders =
             mapOf(
@@ -69,7 +69,7 @@ class HomePagesTest {
     @Test
     fun `a widget is drawn over its span, named by its app or package, and cannot be folded into`() {
         val widget =
-            ItemEntity(
+            PlacedItem(
                 4,
                 ItemKind.WIDGET,
                 Container.HOME,
@@ -95,16 +95,9 @@ class HomePagesTest {
     }
 
     @Test
-    fun `an item without a cell is neither drawn nor an occupant`() {
-        val loose = ItemEntity(3, ItemKind.FOLDER, Container.DRAWER)
-        val pages = ContainerContent(listOf(PageContent(0, listOf(loose)))).toHomePages(emptyMap())
-        assertEquals(emptyList<Placed>(), pages.single().occupied)
-    }
-
-    @Test
     fun `an item outside the grid dimensions is not drawn and not foldable, but still occupies its cell`() {
-        val inside = ItemEntity(1, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
-        val outside = ItemEntity(2, ItemKind.FOLDER, Container.HOME, 0, x = 3, y = 0, folderId = 8)
+        val inside = PlacedItem(1, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
+        val outside = PlacedItem(2, ItemKind.FOLDER, Container.HOME, 0, x = 3, y = 0, folderId = 8)
         val page =
             ContainerContent(listOf(PageContent(0, listOf(inside, outside))))
                 .toHomePages(emptyMap(), columns = 3, rows = 4)

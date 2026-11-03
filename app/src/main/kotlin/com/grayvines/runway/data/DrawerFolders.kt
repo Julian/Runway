@@ -2,6 +2,8 @@ package com.grayvines.runway.data
 
 import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /*
  * Drawer folders: folders placed in the drawer. Made from an app's menu and filled from the folder's
@@ -13,8 +15,12 @@ import kotlinx.coroutines.flow.Flow
  * The drawer's placements: one per drawer folder, with no cell. A drawer folder is simply a folder
  * placed in the drawer; its apps stay out of the drawer's alphabetical grid.
  */
-fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<ItemEntity>> =
+fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<DrawerPlacement>> =
     dao.observeItems(Container.DRAWER)
+        .map { items ->
+            items.mapNotNull { item -> item.folderId?.let { DrawerPlacement(item.id, it) } }
+        }
+        .distinctUntilChanged()
 
 /**
  * A new drawer folder holding [app], which leaves any other drawer folder it was in and is no

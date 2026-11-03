@@ -112,6 +112,39 @@ class RunwayDatabaseMigrationTest {
     }
 
     @Test
+    fun from3To4FillsPageGapsAndCreatesMissingPagesForPlacedItems() = runBlocking {
+        val db = helper.createDatabase(3)
+        try {
+            // Home has page 2 only (gap at 0..1), and an item on page 3 with no page row at all;
+            // a drawer row has no page_index and stays that way.
+            db.execSQL("INSERT INTO pages (container, page_index) VALUES ('HOME', 2)")
+            db.execSQL(
+                "INSERT INTO items (id, kind, container, page_index, x, y, span_x, span_y) " +
+                    "VALUES (1, 'APP', 'HOME', 3, 0, 0, 1, 1)"
+            )
+            db.execSQL("INSERT INTO folders (id, name) VALUES (10, 'drawer')")
+            db.execSQL(
+                "INSERT INTO items (id, kind, container, span_x, span_y, folder_id) " +
+                    "VALUES (2, 'FOLDER', 'DRAWER', 1, 1, 10)"
+            )
+        } finally {
+            db.close()
+        }
+        val migrated = helper.runMigrationsAndValidate(4, Migrations.all)
+        try {
+            assertEquals(
+                listOf(0L, 1L, 2L, 3L),
+                migrated.ids(
+                    "SELECT page_index FROM pages WHERE container = 'HOME' ORDER BY page_index"
+                ),
+            )
+            assertEquals(listOf(1L, 2L), migrated.ids("SELECT id FROM items ORDER BY id"))
+        } finally {
+            migrated.close()
+        }
+    }
+
+    @Test
     fun anOlderBuildOverANewerDatabaseOpensEmptyRatherThanNotAtAll() = runBlocking {
         val db = helper.createDatabase(RunwayDatabase.VERSION)
         try {

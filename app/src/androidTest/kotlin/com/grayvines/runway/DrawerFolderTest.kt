@@ -265,7 +265,7 @@ class DrawerFolderTest : LauncherFixture() {
     fun addingAnAppFromAnotherDrawerFolderMovesIt_andTheFolderItLeftEmptyGoes() {
         makeDrawerFolder(first)
         val firstFolder = runBlocking {
-            graph.workspace.observeDrawerPlacements().first().single().folderId!!
+            graph.workspace.observeDrawerPlacements().first().single().folderId
         }
         runBlocking { graph.workspace.renameFolder(firstFolder, FIRST_FOLDER) }
         hold(drawerApp(second))
@@ -295,12 +295,12 @@ class DrawerFolderTest : LauncherFixture() {
             graph.workspace.placeFolder(
                 folderId,
                 Container.HOME,
-                home.pageIndex!!,
-                home.x!!,
-                home.y!!,
+                home.pageIndex,
+                home.x,
+                home.y,
             )
         }
-        waitUntil { folderAt(home.x!!, home.y!!) == listOf(first) }
+        waitUntil { folderAt(home.x, home.y) == listOf(first) }
         tap(compose.onNodeWithContentDescription(NEW_FOLDER_NAME, useUnmergedTree = true))
         waitUntil { compose.onAllNodesWithTag(FOLDER_EDIT_TAG).fetchSemanticsNodes().isNotEmpty() }
         editFolder()
@@ -312,7 +312,7 @@ class DrawerFolderTest : LauncherFixture() {
     fun thePencilPutsAnXOnEachApp_andAnXPutsThatAppBackInTheGridAtOnce() {
         makeDrawerFolder(first)
         runBlocking {
-            val folderId = graph.workspace.observeDrawerPlacements().first().single().folderId!!
+            val folderId = graph.workspace.observeDrawerPlacements().first().single().folderId
             graph.workspace.addToDrawerFolder(folderId, apps[1].ref)
         }
         tap(compose.onNodeWithTag(DRAWER_FOLDER_TAG))
@@ -426,7 +426,7 @@ class DrawerFolderTest : LauncherFixture() {
         assertEquals(ItemKind.FOLDER to folderId, placed.kind to placed.folderId)
         assertEquals(listOf(listOf(first)), drawerFolders()) // still in the drawer too
         // One folder in two places: renamed here, it is renamed in the drawer.
-        runBlocking { graph.workspace.renameFolder(folderId!!, "Tools") }
+        runBlocking { graph.workspace.renameFolder(folderId, "Tools") }
         waitUntil {
             compose
                 .onAllNodesWithContentDescription("Tools", useUnmergedTree = true)

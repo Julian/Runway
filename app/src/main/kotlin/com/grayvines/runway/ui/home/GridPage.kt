@@ -48,7 +48,7 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.widgets.WidgetCell
-import com.grayvines.runway.ui.widgets.WidgetResizeSession
+import com.grayvines.runway.ui.widgets.WidgetResizeHost
 
 /**
  * Pages of [GridPage]s swiped horizontally; disabled while a drag is active so a finger carrying an
@@ -68,7 +68,7 @@ internal fun PagedGrid(
     landing: (page: Int) -> Footprint?,
     modifier: Modifier = Modifier,
     onHoldEmpty: ((Point) -> Unit)? = null,
-    resize: WidgetResizeSession? = null,
+    resize: WidgetResizeHost? = null,
 ) {
     HorizontalPager(
         state = pagerState,
@@ -113,7 +113,7 @@ internal fun GridPage(
     handlersFor: (HomeItem) -> DragHandlers?,
     onHoldEmpty: ((Point) -> Unit)?,
     modifier: Modifier = Modifier,
-    resize: WidgetResizeSession? = null,
+    resize: WidgetResizeHost? = null,
     /** The cells the carried item would take on this page if let go now; outlined while it is. */
     landing: () -> Footprint? = { null },
 ) {
@@ -357,7 +357,7 @@ private class CellDrag(
 private fun rememberCellDrag(
     item: HomeItem,
     drag: DragSession?,
-    resize: WidgetResizeSession?,
+    resize: WidgetResizeHost?,
 ): CellDrag =
     remember(item, drag, resize) {
         CellDrag(

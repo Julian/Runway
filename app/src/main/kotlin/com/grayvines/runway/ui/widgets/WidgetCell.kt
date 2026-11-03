@@ -83,7 +83,7 @@ fun WidgetCell(
     session: DragSession? = null,
     lifted: Boolean = false,
     settlingHere: DragSession? = null,
-    framedBy: WidgetResizeSession? = null,
+    framedBy: WidgetResizeHost? = null,
 ) {
     val context = LocalContext.current
     val host = context.appGraph.widgets
@@ -99,7 +99,7 @@ fun WidgetCell(
     LaunchedEffect(framedBy, framed) {
         if (framed) coords?.let { framedBy.positioned(item.id, it.boundsInRoot()) }
     }
-    val dismissFrame = rememberUpdatedState { framedBy?.onDismiss?.invoke() }
+    val dismissFrame = rememberUpdatedState { framedBy?.dismiss() }
     val cellModifier =
         modifier
             .fillMaxSize()

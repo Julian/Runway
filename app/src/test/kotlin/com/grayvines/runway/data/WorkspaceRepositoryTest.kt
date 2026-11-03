@@ -39,7 +39,7 @@ class WorkspaceRepositoryTest {
         val home = repo.observe(Container.HOME).first().pages
         assertEquals(listOf(0, 1), home.map { it.index })
         assertEquals(14, home[0].items.size)
-        val last = home[0].items.maxBy { (it.y ?: 0) * 7 + (it.x ?: 0) }
+        val last = home[0].items.maxBy { it.y * 7 + it.x }
         assertEquals(6 to 1, last.x to last.y)
         assertEquals(1, home[1].items.size)
         assertTrue(
@@ -448,13 +448,14 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    fun `addPage appends an empty page and is idempotent`() = runTest {
+    fun `addPage appends empty pages contiguously and is idempotent`() = runTest {
         repo.autoFill(apps(3), columns = 3, pageRows = 1, dockSlots = 1)
-        repo.addPage(Container.HOME, 1)
-        repo.addPage(Container.HOME, 1)
+        repo.addPage(Container.HOME, 2)
+        repo.addPage(Container.HOME, 2)
         val pages = repo.observe(Container.HOME).first().pages
-        assertEquals(listOf(0, 1), pages.map { it.index })
+        assertEquals(listOf(0, 1, 2), pages.map { it.index })
         assertTrue(pages[1].items.isEmpty())
+        assertTrue(pages[2].items.isEmpty())
     }
 
     @Test
@@ -508,7 +509,7 @@ class WorkspaceRepositoryTest {
         val item = repo.observe(Container.HOME).first().pages.single().items.single()
         assertEquals(id, item.id)
         assertEquals(ItemKind.WIDGET, item.kind)
-        assertEquals(Footprint(1, 2, 3, 2), Footprint(item.x!!, item.y!!, item.spanX, item.spanY))
+        assertEquals(Footprint(1, 2, 3, 2), item.footprint)
         assertEquals(7, item.appWidgetId)
         assertEquals("pkg/.Widget", item.provider)
     }
@@ -578,10 +579,7 @@ class WorkspaceRepositoryTest {
             val byId =
                 repo.observe(Container.HOME).first().pages.single().items.associateBy { it.id }
             val resized = byId.getValue(widgetId)
-            assertEquals(
-                Footprint(0, 0, 3, 1),
-                Footprint(resized.x!!, resized.y!!, resized.spanX, resized.spanY),
-            )
+            assertEquals(Footprint(0, 0, 3, 1), resized.footprint)
             val moved = byId.getValue(neighbour.id)
             assertEquals(3 to 0, moved.x to moved.y)
         }
@@ -627,8 +625,8 @@ class WorkspaceRepositoryTest {
                 apps(3)[2],
                 Container.HOME,
                 0,
-                neighbour.x!!,
-                neighbour.y!!,
+                neighbour.x,
+                neighbour.y,
                 displaced = mapOf(neighbour.id to Footprint(2, 0)),
             )
         )

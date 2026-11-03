@@ -42,7 +42,6 @@ import com.grayvines.runway.ui.settings.SettingsActivity
 import com.grayvines.runway.ui.theme.RunwayTheme
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
 import com.grayvines.runway.ui.widgets.WidgetPrompts
-import com.grayvines.runway.ui.widgets.rememberWidgetResizeSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
@@ -135,40 +134,24 @@ class LauncherActivity : ComponentActivity() {
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
                 Notices(viewModel.widgetPicker.notices)
                 val state = remember(base, pending) { base.applying(pending) }
-                // The live settings, not this composition's: page-shown callbacks are kept by
-                // effects that outlive it, and a changed grid must reach them.
-                val reports = remember {
-                    AreaReports(viewModel.dragging.areas) { viewModel.state.value.settings }
-                }
                 HomeScreen(
                     state = state,
                     goHome = viewModel.goHome,
-                    flipHomePage = viewModel.dragging.flipHomePage,
-                    flipDockPage = viewModel.dragging.flipDockPage,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
                     onSearchLongClick = viewModel::openSearchTarget,
                     onSwipePastFirstPage = viewModel.swipedPastFirstPage,
                     itemMenu = viewModel.itemMenuSession(),
                     widgetPicker = viewModel.widgetPickerSession(),
-                    widgetResize = rememberWidgetResizeSession(viewModel.widgetResize),
+                    widgetResize = viewModel.widgetResize,
                     homeMenu = homeMenuSession(),
                     openFolder = openFolder,
                     folderActions = viewModel.folderActions,
                     drawerOpen = drawerOpen,
                     drawerActions = drawerActions,
-                    startsOnWidget = { p ->
-                        viewModel.state.value
-                            .applying(viewModel.dragging.pending.value)
-                            .hasWidgetAt(viewModel.dragging.areas.areas, p)
-                    },
                     drawerQuery = drawerQuery(),
                     onLaunchApp = viewModel::launch,
                     drag = rememberDragSession(),
-                    onHomePagePositioned = reports::homePagePositioned,
-                    onHomePageShown = reports::homePageShown,
-                    onDockPagePositioned = reports::dockPagePositioned,
-                    onDockPageShown = reports::dockPageShown,
                 )
             }
         }
@@ -258,6 +241,11 @@ class LauncherActivity : ComponentActivity() {
         val active by remember { derivedStateOf { drag.value != null || settling.value != null } }
         val picture = remember { mutableStateOf<ImageBitmap?>(null) }
         if (!active) picture.value = null
+        // The live settings, not this composition's: page-shown callbacks are kept by effects that
+        // outlive it, and a changed grid must reach them.
+        val reports = remember {
+            AreaReports(viewModel.dragging.areas) { viewModel.state.value.settings }
+        }
         return remember {
             DragSession(
                 stateOf = drag,
@@ -267,6 +255,17 @@ class LauncherActivity : ComponentActivity() {
                 onSettleTargetPositioned = { targetFor.value = settling.value to it },
                 onSettled = viewModel.dragging::settled,
                 onBinPositioned = viewModel.dragging.areas::binPositioned,
+                onHomePagePositioned = reports::homePagePositioned,
+                onHomePageShown = reports::homePageShown,
+                onDockPagePositioned = reports::dockPagePositioned,
+                onDockPageShown = reports::dockPageShown,
+                flipHomePage = viewModel.dragging.flipHomePage,
+                flipDockPage = viewModel.dragging.flipDockPage,
+                startsOnWidget = { p ->
+                    viewModel.state.value
+                        .applying(viewModel.dragging.pending.value)
+                        .hasWidgetAt(viewModel.dragging.areas.areas, p)
+                },
                 onHold = viewModel.hold,
                 onStart = viewModel::startDrag,
                 onStartNew = viewModel::startNewDrag,

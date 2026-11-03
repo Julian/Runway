@@ -74,7 +74,13 @@ data class PageEntity(val container: Container, @ColumnInfo(name = "page_index")
                 parentColumns = ["id"],
                 childColumns = ["folder_id"],
                 onDelete = ForeignKey.CASCADE,
-            )
+            ),
+            ForeignKey(
+                entity = PageEntity::class,
+                parentColumns = ["container", "page_index"],
+                childColumns = ["container", "page_index"],
+                onDelete = ForeignKey.CASCADE,
+            ),
         ],
 )
 data class ItemEntity(

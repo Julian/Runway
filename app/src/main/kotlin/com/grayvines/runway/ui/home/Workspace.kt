@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
-import com.grayvines.runway.ui.widgets.WidgetResizeSession
+import com.grayvines.runway.ui.widgets.WidgetResizeHost
 
 const val WORKSPACE_TAG = "workspace"
 
@@ -30,13 +30,12 @@ fun Workspace(
     labels: Boolean,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
-    onPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
     /** How far or fast a swipe past the first page must go to count. */
     swipeSensitivity: DrawerSwipe,
     onSwipePastFirstPage: () -> Unit,
     modifier: Modifier = Modifier,
-    resize: WidgetResizeSession? = null,
+    resize: WidgetResizeHost? = null,
 ) {
     Box(
         modifier
@@ -52,7 +51,7 @@ fun Workspace(
             onLaunch = onLaunch,
             drag = drag,
             handlersFor = { page, item -> drag?.handlersFor(item, page) },
-            onPagePositioned = onPagePositioned,
+            onPagePositioned = { page, bounds -> drag?.onHomePagePositioned?.invoke(page, bounds) },
             landing = { page -> drag?.plannedHomeFootprint(page) },
             modifier = Modifier.testTag(WORKSPACE_TAG),
             onHoldEmpty = onHoldEmpty,

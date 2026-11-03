@@ -17,8 +17,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.ui.home.SEARCH_BAR_EDGE_TAG
 import com.grayvines.runway.ui.menu.ITEM_MENU_TAG
 import com.grayvines.runway.ui.widgets.REFLECT_TIMEOUT_MS
@@ -375,7 +375,7 @@ class WidgetResizeTest : LauncherFixture() {
         waitUntil { widget().let { it.spanX to it.spanY } == span }
     }
 
-    private fun widgets(): List<ItemEntity> = runBlocking {
+    private fun widgets(): List<PlacedItem> = runBlocking {
         graph.workspace
             .observe(Container.HOME)
             .first()
@@ -386,7 +386,7 @@ class WidgetResizeTest : LauncherFixture() {
             }
     }
 
-    private fun widget(): ItemEntity = widgets().first()
+    private fun widget(): PlacedItem = widgets().first()
 
     private companion object {
         /** The fixture widget's maxResizeWidth. */

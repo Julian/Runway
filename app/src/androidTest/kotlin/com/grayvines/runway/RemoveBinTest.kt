@@ -99,7 +99,7 @@ class RemoveBinTest : LauncherFixture() {
         waitUntil(TIMEOUT_MS) { graph.widgets.info(widgetId) == null }
         // Gone, it has nowhere to be framed.
         compose.onAllNodesWithTag(WIDGET_RESIZE_TAG).assertCountEquals(0)
-        assertNull(compose.activity.viewModel.widgetResize.shown.value)
+        assertNull(compose.activity.viewModel.widgetResize.shown)
     }
 
     @Test

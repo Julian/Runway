@@ -2,9 +2,10 @@ package com.grayvines.runway.ui.home
 
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.ContainerContent
+import com.grayvines.runway.data.DrawerPlacement
 import com.grayvines.runway.data.FolderContent
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.data.appRef
 import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
@@ -42,7 +43,7 @@ internal fun ContainerContent.toHomePages(
         HomePage(
             index = page.index,
             items = items,
-            occupied = page.items.mapNotNull { it.placed(drawn = it.id in drawn) },
+            occupied = page.items.map { it.placed(drawn = it.id in drawn) },
         )
     }
 }
@@ -61,25 +62,22 @@ internal fun HomeState.hasWidgetAt(areas: DropAreas, p: Point): Boolean {
  * [drawn] apps and folders take a dropped app in; one whose profile is off or that lies outside the
  * grid is a cell to keep clear of.
  */
-private fun ItemEntity.placed(drawn: Boolean): Placed? {
-    val cellX = x ?: return null
-    val cellY = y ?: return null
-    return Placed(
+private fun PlacedItem.placed(drawn: Boolean): Placed =
+    Placed(
         id,
-        Footprint(cellX, cellY, spanX, spanY),
+        footprint,
         foldable = (kind == ItemKind.FOLDER || kind == ItemKind.APP) && drawn,
         identity = appRef()?.identity ?: folderId?.let(::folderIdentity),
     )
-}
 
 /** The drawer's folders as tiles, by name; a placement whose folder is gone is nothing. */
-internal fun List<ItemEntity>.toDrawerFolders(
+internal fun List<DrawerPlacement>.toDrawerFolders(
     apps: Map<AppRef, AppEntry>,
     folders: Map<Long, FolderContent>,
 ): List<HomeItem> {
     val byLabel = LabelOrder.comparator()
     val byEntry = LabelOrder.entryComparator()
-    return mapNotNull { item -> item.folderId?.let { folders[it] }?.tile(item.id, apps, byEntry) }
+    return mapNotNull { item -> folders[item.folderId]?.tile(item.id, apps, byEntry) }
         .sortedWith(compareBy(byLabel) { it.label })
 }
 
@@ -115,23 +113,21 @@ private fun FolderContent.held(
     return if (handSorted) entries else entries.sortedWith(byEntry)
 }
 
-/** Null when the item has no cell or its app is absent; those are not drawn. */
-private fun ItemEntity.toHomeItem(
+/** Null when the item's app is absent; those are not drawn. */
+private fun PlacedItem.toHomeItem(
     apps: Map<AppRef, AppEntry>,
     appLabels: Map<String, String>,
     folders: Map<Long, FolderContent>,
     byEntry: Comparator<AppEntry>,
 ): HomeItem? {
-    val cellX = x ?: return null
-    val cellY = y ?: return null
     val app = appRef()?.let(apps::get)
     if (kind == ItemKind.APP && app == null) return null
     val folder = folderId?.let { folders[it] }
     return HomeItem(
         id = id,
         kind = kind,
-        x = cellX,
-        y = cellY,
+        x = x,
+        y = y,
         spanX = spanX,
         spanY = spanY,
         label =

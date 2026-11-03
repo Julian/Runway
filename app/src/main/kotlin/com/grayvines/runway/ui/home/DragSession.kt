@@ -22,6 +22,8 @@ import com.grayvines.runway.ui.drag.DropPlan
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 import com.grayvines.runway.ui.widgets.WidgetSpan
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * The UI's view of dragging: what is lifted, where things would land, and how to report input.
@@ -39,6 +41,16 @@ class DragSession(
     val onSettled: (itemId: Long) -> Unit = {},
     /** Where the bin is (root px), whenever it is laid out. */
     val onBinPositioned: (Bounds) -> Unit = {},
+    val onHomePagePositioned: (page: Int, Bounds) -> Unit = { _, _ -> },
+    val onHomePageShown: (page: Int, settled: Boolean) -> Unit = { _, _ -> },
+    val onDockPagePositioned: (page: Int, Bounds) -> Unit = { _, _ -> },
+    val onDockPageShown: (page: Int, settled: Boolean) -> Unit = { _, _ -> },
+    val flipHomePage: Flow<Int> = emptyFlow(),
+    val flipDockPage: Flow<Int> = emptyFlow(),
+    /**
+     * Whether a finger landing at this root point is on a widget, whose vertical drags are its own.
+     */
+    val startsOnWidget: (Point) -> Boolean = { false },
     private val onHold: (HomeItem, Container, Int, Bounds) -> Unit,
     private val onStart: (HomeItem, Container, Int, Point, Point) -> Unit,
     private val onStartNew: (DragSource, Point, Point) -> Unit,

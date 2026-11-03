@@ -56,8 +56,8 @@ import com.grayvines.runway.ui.menu.ItemMenuSession
 import com.grayvines.runway.ui.shade.ShadeHint
 import com.grayvines.runway.ui.widgets.WidgetPicker
 import com.grayvines.runway.ui.widgets.WidgetPickerSession
+import com.grayvines.runway.ui.widgets.WidgetResizeHost
 import com.grayvines.runway.ui.widgets.WidgetResizeOverlay
-import com.grayvines.runway.ui.widgets.WidgetResizeSession
 import com.grayvines.runway.ui.widgets.dismissingResize
 import kotlinx.coroutines.flow.Flow
 
@@ -76,8 +76,6 @@ private val DRAG_CORNER = 28.dp
 fun HomeScreen(
     state: HomeState,
     goHome: Flow<Unit>,
-    flipHomePage: Flow<Int>,
-    flipDockPage: Flow<Int>,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     onSearch: () -> Unit,
     onSearchLongClick: () -> Unit,
@@ -87,21 +85,13 @@ fun HomeScreen(
     itemMenu: ItemMenuSession,
     homeMenu: HomeMenuSession,
     widgetPicker: WidgetPickerSession,
-    widgetResize: WidgetResizeSession,
+    widgetResize: WidgetResizeHost,
     openFolder: OpenFolder?,
     folderActions: FolderActions,
     drawerOpen: Boolean,
     drawerActions: DrawerActions,
-    /**
-     * Whether a finger landing at this root point is on a widget, whose vertical drags are its own.
-     */
-    startsOnWidget: (Point) -> Boolean,
     drawerQuery: DrawerQuery,
     onLaunchApp: (AppEntry) -> Unit,
-    onHomePagePositioned: (page: Int, Bounds) -> Unit,
-    onHomePageShown: (page: Int, settled: Boolean) -> Unit,
-    onDockPagePositioned: (page: Int, Bounds) -> Unit,
-    onDockPageShown: (page: Int, settled: Boolean) -> Unit,
 ) {
     if (!state.loaded) return
     val settings = state.settings
@@ -111,13 +101,13 @@ fun HomeScreen(
         }
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
-    PagerCommands(homePager, goHome, flipHomePage, homeMenu.showPage)
-    PageFlips(dockPager, flipDockPage)
-    PagesShown(homePager, dockPager, onHomePageShown, onDockPageShown)
+    PagerCommands(homePager, goHome, drag.flipHomePage, homeMenu.showPage)
+    PageFlips(dockPager, drag.flipDockPage)
+    PagesShown(homePager, dockPager, drag.onHomePageShown, drag.onDockPageShown)
     WallpaperParallax(homePager, settings.wallpaperParallax)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
-    val drawer = rememberDrawer(drawerOpen, drawerActions, startsOnWidget)
+    val drawer = rememberDrawer(drawerOpen, drawerActions, drag.startsOnWidget)
     CompositionLocalProvider(
         LocalBadges provides badges,
         LocalViewConfiguration provides rememberLiftConfiguration(),
@@ -147,8 +137,6 @@ fun HomeScreen(
                 onMenu = homeMenu.onOpen,
                 drag = drag,
                 drawer = drawer,
-                onHomePagePositioned = onHomePagePositioned,
-                onDockPagePositioned = onDockPagePositioned,
                 onHoldEmpty = { p -> homeMenu.onOpen(Bounds(p.x, p.y, p.x, p.y)) },
                 resize = widgetResize,
                 onPagesPositioned = { pagesArea = it },
@@ -284,10 +272,8 @@ private fun HomeColumn(
     onSwipePastFirstPage: () -> Unit,
     onMenu: (Bounds) -> Unit,
     drag: DragSession,
-    onHomePagePositioned: (page: Int, Bounds) -> Unit,
-    onDockPagePositioned: (page: Int, Bounds) -> Unit,
     onHoldEmpty: (Point) -> Unit,
-    resize: WidgetResizeSession,
+    resize: WidgetResizeHost,
     drawer: DrawerControls,
     /** The pages' bounds (root px), whenever they are laid out. */
     onPagesPositioned: (Rect) -> Unit,
@@ -319,7 +305,6 @@ private fun HomeColumn(
             labels = settings.homeLabels,
             onLaunch = onLaunch,
             drag = drag,
-            onPagePositioned = onHomePagePositioned,
             onHoldEmpty = onHoldEmpty,
             swipeSensitivity = settings.drawerSwipe,
             onSwipePastFirstPage = onSwipePastFirstPage,
@@ -339,7 +324,6 @@ private fun HomeColumn(
             labels = settings.dockLabels,
             onLaunch = onLaunch,
             drag = drag,
-            onPagePositioned = onDockPagePositioned,
         )
     }
 }
@@ -351,7 +335,7 @@ private fun HomeColumn(
 @Composable
 private fun Modifier.rootGestures(
     drag: DragSession,
-    resize: WidgetResizeSession,
+    resize: WidgetResizeHost,
     drawer: DrawerControls,
 ): Modifier {
     val current = rememberUpdatedState(drag)

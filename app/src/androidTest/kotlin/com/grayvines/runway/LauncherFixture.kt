@@ -35,8 +35,8 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.Container
-import com.grayvines.runway.data.ItemEntity
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeBadgeMutes
@@ -870,7 +870,7 @@ open class LauncherFixture {
     }
 
     /** Every placement of [label], across home and dock. */
-    protected fun placementsOf(label: String): List<ItemEntity> = runBlocking {
+    protected fun placementsOf(label: String): List<PlacedItem> = runBlocking {
         val ref = apps.first { it.label == label }.ref
         listOf(Container.HOME, Container.DOCK)
             .flatMap { graph.workspace.observe(it).first().pages }
@@ -930,7 +930,7 @@ open class LauncherFixture {
     }
 
     /** The placement of [label], by component and profile, so a work-profile twin is its own. */
-    protected fun placementOf(label: String): ItemEntity? = placementsOf(label).firstOrNull()
+    protected fun placementOf(label: String): PlacedItem? = placementsOf(label).firstOrNull()
 
     protected fun dockPageCount() = runBlocking {
         graph.workspace.observe(Container.DOCK).first().pages.size
@@ -965,7 +965,7 @@ open class LauncherFixture {
     }
 
     /** The label of the app placed as [item]. */
-    protected fun labelOf(item: ItemEntity): String =
+    protected fun labelOf(item: PlacedItem): String =
         apps.first { it.ref.component == item.component }.label
 
     /** The open folder's app labels, read off the sheet in the order its tiles are laid out. */
@@ -993,7 +993,7 @@ open class LauncherFixture {
     protected fun dockFolderAt(slot: Int): List<String>? =
         folderLabels(Container.DOCK) { it.x == slot }
 
-    private fun folderLabels(container: Container, at: (ItemEntity) -> Boolean) = runBlocking {
+    private fun folderLabels(container: Container, at: (PlacedItem) -> Boolean) = runBlocking {
         val folder =
             graph.workspace.observe(container).first().pages.first().items.firstOrNull {
                 it.kind == ItemKind.FOLDER && at(it)
@@ -1007,7 +1007,7 @@ open class LauncherFixture {
         }
     }
 
-    protected fun homeCellOf(label: String): Pair<Int?, Int?>? =
+    protected fun homeCellOf(label: String): Pair<Int, Int>? =
         placementOf(label)?.takeIf { it.container == Container.HOME }?.let { it.x to it.y }
 
     /**

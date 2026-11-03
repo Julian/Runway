@@ -31,7 +31,6 @@ fun Dock(
     labels: Boolean,
     onLaunch: (HomeItem, cell: Bounds) -> Unit,
     drag: DragSession?,
-    onPagePositioned: (page: Int, Bounds) -> Unit,
 ) {
     // The grab is measured within the slot; the overlay's box is a cell centred on the same icon,
     // so the grab within it is nearer the middle by half the difference in width.
@@ -48,7 +47,7 @@ fun Dock(
             handlersFor = { page, item ->
                 drag?.handlersFor(item, page, Container.DOCK)?.grabbedShiftedBy(grabShift)
             },
-            onPagePositioned = onPagePositioned,
+            onPagePositioned = { page, bounds -> drag?.onDockPagePositioned?.invoke(page, bounds) },
             landing = { page -> drag?.plannedDockFootprint(page) },
             modifier = Modifier.testTag(DOCK_TAG),
         )

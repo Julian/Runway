@@ -27,7 +27,38 @@ fun folderIdentity(folderId: Long) = "folder:$folderId"
 /** Pages of one container with their items, as the UI consumes them. */
 data class ContainerContent(val pages: List<PageContent>)
 
-data class PageContent(val index: Int, val items: List<ItemEntity>)
+data class PageContent(val index: Int, val items: List<PlacedItem>)
+
+/** One placement on a home or dock page, with its cell coordinates guaranteed non-null. */
+data class PlacedItem(
+    val id: Long,
+    val kind: ItemKind,
+    val container: Container,
+    val pageIndex: Int,
+    val x: Int,
+    val y: Int,
+    val spanX: Int = 1,
+    val spanY: Int = 1,
+    val component: String? = null,
+    val profile: Long? = null,
+    val shortcutId: String? = null,
+    val folderId: Long? = null,
+    val appWidgetId: Int? = null,
+    val provider: String? = null,
+    val labelOverride: String? = null,
+) {
+    val footprint: Footprint
+        get() = Footprint(x, y, spanX, spanY)
+}
+
+fun PlacedItem.appRef(): AppRef? {
+    val comp = component ?: return null
+    val prof = profile ?: return null
+    return AppRef(comp, prof)
+}
+
+/** A drawer folder's placement in the drawer: its placement [id] and the [folderId] it holds. */
+data class DrawerPlacement(val id: Long, val folderId: Long)
 
 class WorkspaceRepository(private val db: RunwayDatabase) {
     internal val dao = db.workspaceDao()
@@ -37,7 +68,10 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
                 read {
                     val pages = dao.pages(container)
                     val byPage =
-                        dao.items().filter { it.container == container }.groupBy { it.pageIndex }
+                        dao.items()
+                            .filter { it.container == container }
+                            .mapNotNull { it.toPlacedItem() }
+                            .groupBy { it.pageIndex }
                     ContainerContent(
                         pages.map { PageContent(it.index, byPage[it.index].orEmpty()) }
                     )
@@ -45,9 +79,14 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
             }
             .distinctUntilChanged()
 
-    /** Adds a page at [index] if it does not exist yet. */
+    /**
+     * Adds a page at [index] if it does not exist yet, along with any preceding pages from `0` so
+     * page indices stay contiguous.
+     */
     suspend fun addPage(container: Container, index: Int) = write {
-        dao.insertPage(PageEntity(container, index))
+        for (i in 0..index) {
+            dao.insertPage(PageEntity(container, i))
+        }
     }
 
     /**
@@ -162,8 +201,8 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * Takes one placement off its page and returns what it was; a page left empty at the end goes
      * with it, and so does a folder that this was the last placement of.
      */
-    suspend fun removeItem(id: Long): ItemEntity? = write {
-        val removed = dao.item(id)
+    suspend fun removeItem(id: Long): PlacedItem? = write {
+        val removed = dao.item(id)?.toPlacedItem()
         dao.deleteItem(id)
         dao.deleteUnplacedFolders()
         dao.dropTrailingEmptyPages()
@@ -247,4 +286,27 @@ internal fun ItemEntity.footprint(): Footprint? {
     val cellX = x ?: return null
     val cellY = y ?: return null
     return Footprint(cellX, cellY, spanX, spanY)
+}
+
+internal fun ItemEntity.toPlacedItem(): PlacedItem? {
+    val page = pageIndex ?: return null
+    val cellX = x ?: return null
+    val cellY = y ?: return null
+    return PlacedItem(
+        id = id,
+        kind = kind,
+        container = container,
+        pageIndex = page,
+        x = cellX,
+        y = cellY,
+        spanX = spanX,
+        spanY = spanY,
+        component = component,
+        profile = profile,
+        shortcutId = shortcutId,
+        folderId = folderId,
+        appWidgetId = appWidgetId,
+        provider = provider,
+        labelOverride = labelOverride,
+    )
 }

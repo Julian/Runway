@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +46,6 @@ import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.widgets.isReconfigurable
 import com.grayvines.runway.ui.home.HomeItem
-import kotlinx.coroutines.delay
 
 const val WIDGET_RESIZE_TAG = "widget-resize"
 
@@ -78,7 +76,7 @@ internal const val REFLECT_TIMEOUT_MS = 3_000L
 @Composable
 fun WidgetResizeFrame(
     item: HomeItem,
-    session: WidgetResizeSession,
+    host: WidgetResizeHost,
     cell: DpSize,
     grid: GridSize,
     others: List<Placed>,
@@ -92,24 +90,23 @@ fun WidgetResizeFrame(
     val limits = remember(info, cell, grid) { info.limits(cell, grid, density) }
     val cellPx = with(density) { Size(cell.width.toPx(), cell.height.toPx()) }
     val pull =
-        remember(session, item.id, limits, grid, cellPx) {
-            Pull(session, item.id, limits, grid, cellPx)
+        remember(host, item.id, limits, grid, cellPx) {
+            Pull(host, item.id, limits, grid, cellPx)
         }
     pull.others = others
-    pull.footprint = session.previewFor(item.id) ?: item.footprint
-    BackHandler(onBack = session.onDismiss)
-    Reflected(item, session)
+    pull.footprint = host.previewFor(item.id) ?: item.footprint
+    BackHandler(onBack = host::dismiss)
     // No pointer input of its own: a sibling that took touches would keep every one of them from
     // the pages beneath, hit or not. Touches outside are watched from the root ([dismissesResize]).
     Box(Modifier.fillMaxSize()) {
-        val anchor = session.anchorFor(item.id)
+        val anchor = host.anchor
         if (anchor != null) {
             pull.anchor = anchor
             Frame(
                 pull,
                 limits,
-                onEdit = { session.onEdit(item) }.takeIf { info?.isReconfigurable == true },
-                onRemove = { session.onRemove(item) },
+                onEdit = { host.reconfigure(item) }.takeIf { info?.isReconfigurable == true },
+                onRemove = { host.remove(item) },
             )
         }
     }
@@ -229,30 +226,11 @@ private fun Chip(
 }
 
 /**
- * Keeps the preview only until the layout shows the saved size, or for a while after the handle is
- * let go if it never does (the write failed: the widget goes back to its stored cells). While a
- * finger is on a handle the preview is the pull's, however long it rests.
- */
-@Composable
-private fun Reflected(item: HomeItem, session: WidgetResizeSession) {
-    val preview = session.previewFor(item.id)
-    val pulling = session.pulling
-    LaunchedEffect(preview, item.footprint, pulling) {
-        if (preview != null && preview == item.footprint) {
-            session.clearPreview()
-        } else if (preview != null && !pulling) {
-            delay(REFLECT_TIMEOUT_MS)
-            if (session.previewFor(item.id) == preview) session.clearPreview()
-        }
-    }
-}
-
-/**
  * The handles' pull on one widget: from a finger's first move on a handle to its lift, the widget
  * snaps cell by cell while the outline's pulled edge follows the finger within the widget's limits.
  */
 private class Pull(
-    private val session: WidgetResizeSession,
+    private val host: WidgetResizeHost,
     private val itemId: Long,
     private val limits: ResizeLimits,
     private val grid: GridSize,
@@ -286,7 +264,7 @@ private class Pull(
     private var cells = 0
 
     fun start(edge: Edge) {
-        session.pulling = true
+        host.pulling = true
         this.edge = edge
         px = 0f
         pulled = 0f
@@ -312,20 +290,24 @@ private class Pull(
         px = pulled.coerceIn(within.start, within.endInclusive)
         cells = cellsPulled(px, cell, cells)
         val to = resized(origin, e, cells, limits, grid, others)
-        session.preview = itemId to to
-        session.displaced = LayoutEngine.displaceFor(grid, others, to).orEmpty()
-        session.outline = outline(pulled)
+        host.preview = to
+        host.displaced = LayoutEngine.displaceFor(grid, others, to).orEmpty()
+        host.outline = outline(pulled)
     }
 
     fun end() {
-        session.pulling = false
-        session.outline = null
-        val to = session.previewFor(itemId)
-        val displaced = session.displaced
+        host.pulling = false
+        host.outline = null
+        val to = host.preview
+        val displaced = host.displaced
         edge = null
         px = 0f
         pulled = 0f
-        if (to != null && to != origin) session.onResize(itemId, to, displaced)
+        if (to != null && to != origin) {
+            host.resize(itemId, to, displaced)
+        } else {
+            host.clearPreview()
+        }
     }
 
     /** The outline as drawn: the widget's cell with the pulled edge as far as it can go. */
