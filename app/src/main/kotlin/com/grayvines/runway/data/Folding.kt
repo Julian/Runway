@@ -3,6 +3,7 @@ package com.grayvines.runway.data
 import com.grayvines.runway.model.Footprint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * A folder and the apps in it, in order; [inDrawer] when one of its placements is the drawer.
@@ -28,22 +29,29 @@ internal const val NEW_FOLDER_NAME = "Folder"
 
 fun WorkspaceRepository.observeFolders(): Flow<List<FolderContent>> =
     combine(dao.observeFolders(), dao.observeFolderApps(), dao.observeItems(Container.DRAWER)) {
-        folders,
-        apps,
-        drawer ->
-        val byFolder = apps.groupBy { it.folderId }
-        val inDrawer = drawer.mapNotNullTo(HashSet()) { it.folderId }
-        folders.map { folder ->
-            val held = byFolder[folder.id].orEmpty()
-            FolderContent(
-                folder.id,
-                folder.name,
-                held.map { it.ref },
-                inDrawer = folder.id in inDrawer,
-                handSorted = held.any { it.position != null },
-            )
+            _,
+            _,
+            _ ->
+            read {
+                val folders = dao.folders()
+                val byFolder = dao.folderApps().groupBy { it.folderId }
+                val inDrawer =
+                    dao.items()
+                        .filter { it.container == Container.DRAWER }
+                        .mapNotNullTo(HashSet()) { it.folderId }
+                folders.map { folder ->
+                    val held = byFolder[folder.id].orEmpty()
+                    FolderContent(
+                        folder.id,
+                        folder.name,
+                        held.map { it.ref },
+                        inDrawer = folder.id in inDrawer,
+                        handSorted = held.any { it.position != null },
+                    )
+                }
+            }
         }
-    }
+        .distinctUntilChanged()
 
 /**
  * Drops [dropped] onto the placement [targetId]. An app there becomes a folder of the two; a folder

@@ -2,6 +2,7 @@ package com.grayvines.runway.ui.home
 
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
+import com.grayvines.runway.data.folderIdentity
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.ui.drag.PendingMove
@@ -15,6 +16,9 @@ fun HomeState.applying(move: PendingMove?): HomeState {
     val (home, dock) = move.applyTo(homePages, dockPages)
     return copy(homePages = home, dockPages = dock)
 }
+
+/** This state with each of [moves] applied in order. */
+fun HomeState.applying(moves: List<PendingMove>): HomeState = moves.fold(this, HomeState::applying)
 
 /**
  * Home and dock pages with [move] applied. Idempotent: applying to already-moved data is a no-op. A
@@ -49,14 +53,30 @@ private fun PendingMove.relocate(pages: List<HomePage>): Pair<HomeItem?, Placed?
             ?: relocated?.let {
                 Placed(it.id, it.footprint, it.kind != ItemKind.WIDGET, it.identity)
             }
+            ?: freshPlaced()
     val relocatedPlaced = movedPlaced?.let {
         it.copy(footprint = Footprint(x, y, it.footprint.width, it.footprint.height))
     }
     return relocated to relocatedPlaced
 }
 
+private fun PendingMove.freshPlaced(): Placed? =
+    when {
+        newWidget != null -> Placed(0L, Footprint(x, y, spanX, spanY), foldable = false)
+        newApp != null -> Placed(0L, Footprint(x, y), identity = newApp.identity)
+        newFolder != null -> Placed(0L, Footprint(x, y), identity = folderIdentity(newFolder))
+        else -> null
+    }
+
 private fun HomePage.without(itemId: Long): HomePage =
-    copy(items = items.filter { it.id != itemId }, occupied = occupied.filter { it.id != itemId })
+    if (itemId == 0L) {
+        this
+    } else {
+        copy(
+            items = items.filter { it.id != itemId },
+            occupied = occupied.filter { it.id != itemId },
+        )
+    }
 
 private fun HomePage.receiving(
     move: PendingMove,

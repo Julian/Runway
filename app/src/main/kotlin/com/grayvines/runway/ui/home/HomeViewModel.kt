@@ -200,9 +200,11 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             override val dockSlots: Int
                 get() = state.value.settings.dockSlots
 
-            override fun homeItems(page: Int) = state.value.homePages.placed(page)
+            override fun homeItems(page: Int) = currentState().homePages.placed(page)
 
-            override fun dockItems(page: Int) = state.value.dockPages.placed(page)
+            override fun dockItems(page: Int) = currentState().dockPages.placed(page)
+
+            private fun currentState() = state.value.applying(dragging.pending.value)
 
             private fun List<HomePage>.placed(page: Int) =
                 firstOrNull { it.index == page }?.occupied ?: emptyList()
@@ -267,7 +269,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             lookup,
             shownPage = { dragging.areas.areas.homePage },
             mayOpen = { dragging.drag.value == null },
-            onPlaced = { widgetResize.show(it) },
+            onPlaced = { id ->
+                viewModelScope.launch {
+                    withTimeoutOrNull(REFLECT_TIMEOUT_MS) { state.first { it.item(id) != null } }
+                    widgetResize.show(id)
+                }
+            },
         )
 
     /**
@@ -309,13 +316,14 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 @Suppress("UNCHECKED_CAST") val hidden = flows[7] as Set<AppRef>
                 @Suppress("UNCHECKED_CAST") val badgeCounts = flows[8] as Map<PackageKey, Int>
                 @Suppress("UNCHECKED_CAST") val badgeMutes = flows[9] as Set<AppRef>
-                val byKey = apps.associateBy { it.key }
+                val byRef = apps.associateBy { it.ref }
                 val byFolder = folders.associateBy { it.id }
                 HomeState(
                     settings = settings,
-                    homePages = home.toHomePages(byKey, byFolder),
-                    dockPages = dock.toHomePages(byKey, byFolder),
-                    drawerFolders = drawer.toDrawerFolders(byKey, byFolder),
+                    homePages =
+                        home.toHomePages(byRef, byFolder, settings.columns, settings.pageRows),
+                    dockPages = dock.toHomePages(byRef, byFolder, settings.dockSlots, rows = 1),
+                    drawerFolders = drawer.toDrawerFolders(byRef, byFolder),
                     searchTarget = target,
                     apps = apps,
                     drawerApps = apps.filter { it.ref !in hidden },
@@ -572,12 +580,12 @@ internal suspend fun WorkspaceRepository.apply(move: PendingMove): Boolean =
  * for anything else, drawer folder tiles included.
  */
 internal fun HomeState.stillHas(menu: ItemMenuState): Boolean {
-    val key = menu.item.app?.key
+    val ref = menu.item.app?.ref
     return when {
         menu.folderId != null ->
-            allItems().any { f -> f.folderId == menu.folderId && f.folder.any { it.key == key } }
+            allItems().any { f -> f.folderId == menu.folderId && f.folder.any { it.ref == ref } }
         menu.container == Container.DRAWER && menu.item.folderId == null ->
-            apps.any { it.key == key }
+            apps.any { it.ref == ref }
         else -> allItems().any { it.id == menu.item.id }
     }
 }
@@ -602,9 +610,7 @@ private fun HomeItem.isMoverOf(move: PendingMove): Boolean {
     val newApp = move.newApp
     return when {
         move.newFolder != null -> folderId == move.newFolder
-        // The key is the profile and the provider; a placement stores the provider alone.
-        move.newWidget != null ->
-            kind == ItemKind.WIDGET && provider == move.newWidget.substringAfter('/')
+        move.newWidget != null -> kind == ItemKind.WIDGET && provider == move.newWidget.providerName
         newApp != null && move.foldInto != null -> folder.any { it.ref == newApp }
         newApp != null -> app?.ref == newApp
         else -> id == move.itemId

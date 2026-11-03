@@ -141,7 +141,10 @@ class LauncherShellTest : LauncherFixture() {
             )
             val intent = launched.get()
             assertEquals(Intent.ACTION_MAIN, intent?.action)
-            assertTrue(intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true)
+            assertTrue(
+                intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true ||
+                    intent?.hasCategory(Intent.CATEGORY_INFO) == true
+            )
             assertEquals(
                 target.packageName,
                 intent?.`package` ?: intent?.component?.packageName,

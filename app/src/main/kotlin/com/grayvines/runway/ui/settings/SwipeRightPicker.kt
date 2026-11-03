@@ -98,7 +98,7 @@ private fun AppChoiceDialog(
         text = {
             LazyColumn {
                 item { ChoiceRow(NOTHING, icon = null) { onChoose(null) } }
-                items(apps, key = { it.key }) { app ->
+                items(apps, key = { it.ref }) { app ->
                     ChoiceRow(app.label, app.bitmap) { onChoose(app) }
                 }
             }

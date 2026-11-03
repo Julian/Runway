@@ -52,6 +52,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -134,7 +135,11 @@ fun FolderSheet(
     // Whatever had the keyboard (the drawer's search field) gives it up as the sheet opens: what
     // is typed now is for the folder, not for a field hidden behind it.
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(Unit) { focusManager.clearFocus() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
     var room by remember { mutableStateOf(IntSize.Zero) }
     // Above the keyboard while something is typed (the name, or a search for apps to add),
     // centred otherwise.
@@ -311,9 +316,9 @@ private fun FolderGrid(
             Modifier
         }
     LazyVerticalGrid(columns = GridCells.Fixed(columns), state = grid, modifier = rearranging) {
-        items(order.shown, key = { it.key }) { app ->
+        items(order.shown, key = { it.ref }) { app ->
             // The held tile goes where the finger does; the rest spring to their new slots.
-            val placed = if (order.held == app.key) Modifier else Modifier.animateItem()
+            val placed = if (order.held == app.ref) Modifier else Modifier.animateItem()
             FolderTile(
                 app,
                 folder,

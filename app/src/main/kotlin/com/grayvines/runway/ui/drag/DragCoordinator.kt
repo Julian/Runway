@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** A just-dropped item and where (root px, cell top-left) its settle animation starts. */
@@ -51,10 +52,10 @@ class DragCoordinator(
     /** The drag in progress, if any. */
     val drag: StateFlow<DragState?> = controller.state
 
-    private val _pending = MutableStateFlow<PendingMove?>(null)
+    private val _pending = MutableStateFlow<List<PendingMove>>(emptyList())
 
-    /** A committed drop the database has not reflected yet. */
-    val pending: StateFlow<PendingMove?> = _pending
+    /** Committed drops the database has not reflected yet, in the order they were let go. */
+    val pending: StateFlow<List<PendingMove>> = _pending
 
     private val _settling = MutableStateFlow<Settling?>(null)
 
@@ -246,14 +247,14 @@ class DragCoordinator(
                     spanX = state.source.spanX,
                     spanY = state.source.spanY,
                 )
-        _pending.value = pendingMove
+        _pending.update { it + pendingMove }
         scope.launch {
             try {
                 if (workspace.move(pendingMove)) workspace.awaitReflected(pendingMove)
             } finally {
-                if (_pending.value == pendingMove) _pending.value = null
+                _pending.update { it - pendingMove }
             }
-            if (drag.value == null) workspace.pruneEmptyPages()
+            if (drag.value == null && _pending.value.isEmpty()) workspace.pruneEmptyPages()
         }
     }
 

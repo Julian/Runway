@@ -39,11 +39,11 @@ class DragCoordinatorTest {
         val move = workspace.moves.single()
         assertEquals(true, move.removed)
         assertEquals(Point(100f, 155f), move.from) // where it was let go
-        assertEquals(move, c.pending.value) // shown gone until the database says so
+        assertEquals(listOf(move), c.pending.value) // shown gone until the database says so
         assertNull(c.settling.value)
         workspace.reflected.complete(Unit)
         runCurrent()
-        assertNull(c.pending.value)
+        assertEquals(emptyList<PendingMove>(), c.pending.value)
         assertEquals(1, workspace.prunes)
     }
 
@@ -112,15 +112,15 @@ class DragCoordinatorTest {
         // (200,100).
         val expected = PendingMove(1, Container.HOME, 0, 2, 1, emptyMap(), from = Point(200f, 100f))
         assertEquals(listOf(expected), workspace.moves)
-        assertEquals(expected, c.pending.value)
+        assertEquals(listOf(expected), c.pending.value)
         assertNull(c.drag.value)
         workspace.reflected.complete(Unit)
         runCurrent()
-        assertNull(c.pending.value)
+        assertEquals(emptyList<PendingMove>(), c.pending.value)
     }
 
     @Test
-    fun `a second drop while the first is still being reflected keeps the new pending move`() =
+    fun `a second drop while the first is still being reflected keeps both pending moves until each is reflected`() =
         runTest {
             val workspace = FakeWorkspace()
             val c = DragCoordinator(backgroundScope, lookup, workspace)
@@ -131,7 +131,7 @@ class DragCoordinatorTest {
             c.endDrag()
             runCurrent()
             val firstMove = workspace.moves.single()
-            assertEquals(firstMove, c.pending.value)
+            assertEquals(listOf(firstMove), c.pending.value)
 
             workspace.reflected = CompletableDeferred()
             c.startDrag(
@@ -143,15 +143,17 @@ class DragCoordinatorTest {
             c.endDrag()
             runCurrent()
             val secondMove = workspace.moves.last()
-            assertEquals(secondMove, c.pending.value)
+            assertEquals(listOf(firstMove, secondMove), c.pending.value)
 
-            firstReflected.complete(Unit) // the first write lands late: must not clear the second
+            firstReflected.complete(Unit) // the first write lands: only it clears
             runCurrent()
-            assertEquals(secondMove, c.pending.value)
+            assertEquals(listOf(secondMove), c.pending.value)
+            assertEquals(0, workspace.prunes) // still a drop in flight
 
             workspace.reflected.complete(Unit)
             runCurrent()
-            assertNull(c.pending.value)
+            assertEquals(emptyList<PendingMove>(), c.pending.value)
+            assertEquals(1, workspace.prunes)
         }
 
     @Test
@@ -213,7 +215,7 @@ class DragCoordinatorTest {
         c.endDrag()
         workspace.reflected.complete(Unit) // the database is faster than a frame
         runCurrent()
-        assertNull(c.pending.value)
+        assertEquals(emptyList<PendingMove>(), c.pending.value)
         assertEquals(Settling(1, Point(200f, 100f)), c.settling.value)
         c.settled(99) // some other item: ignored
         assertEquals(Settling(1, Point(200f, 100f)), c.settling.value)
@@ -257,7 +259,10 @@ class DragCoordinatorTest {
         c.dragTo(Point(250f, 150f))
         c.endDrag()
         runCurrent()
-        assertNull(c.pending.value) // not stuck on awaitReflected, which never completes here
+        assertEquals(
+            emptyList<PendingMove>(),
+            c.pending.value,
+        ) // not stuck on awaitReflected, which never completes here
     }
 
     @Test
@@ -270,7 +275,7 @@ class DragCoordinatorTest {
         c.endDrag()
         runCurrent()
         assertEquals(emptyList<PendingMove>(), workspace.moves)
-        assertNull(c.pending.value)
+        assertEquals(emptyList<PendingMove>(), c.pending.value)
         assertEquals(Settling(1, Point(100f, 250f)), c.settling.value) // slides home from here
     }
 
@@ -653,7 +658,7 @@ class DragCoordinatorTest {
         assertNull(c.settling.value) // nothing to settle into or back to
         workspace.reflected.complete(Unit)
         runCurrent()
-        assertNull(c.pending.value)
+        assertEquals(emptyList<PendingMove>(), c.pending.value)
         assertEquals(1, workspace.prunes)
     }
 }

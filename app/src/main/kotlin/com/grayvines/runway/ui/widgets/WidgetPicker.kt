@@ -177,10 +177,9 @@ private fun Choice(widget: WidgetProvider, drag: DragHandlers?, onClick: () -> U
         Spacer(Modifier.width(16.dp))
         Column {
             Text(widget.label, style = MaterialTheme.typography.bodyLarge)
-            val info = widget.info
-            if (info.targetCellWidth > 0 && info.targetCellHeight > 0) {
+            if (widget.targetCellWidth > 0 && widget.targetCellHeight > 0) {
                 Text(
-                    "${info.targetCellWidth} × ${info.targetCellHeight}",
+                    "${widget.targetCellWidth} × ${widget.targetCellHeight}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.7f),
                 )

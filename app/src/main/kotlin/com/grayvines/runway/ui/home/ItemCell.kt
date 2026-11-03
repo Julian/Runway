@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -19,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,7 +33,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -86,7 +83,6 @@ fun ItemCell(
     lifted: Boolean = false,
     receiving: Boolean = false,
 ) {
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val pressScale by
@@ -104,11 +100,12 @@ fun ItemCell(
         modifier =
             modifier
                 .fillMaxSize()
-                .onGloballyPositioned { coords = it }
-                .clickable(interactionSource = interactions, indication = null) {
-                    onClick(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
-                }
-                .liftable(item.id, drag),
+                .clickableWithBounds(
+                    interactions,
+                    dragKey = item.id,
+                    drag = drag,
+                    onClick = onClick,
+                ),
     ) {
         // Invisible while being dragged: removing the cell would cancel its own gesture.
         Box(
@@ -163,7 +160,7 @@ internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier =
                     .padding(fraction = FOLDER_TILE_INSET)
         ) {
             apps.take(FOLDER_PREVIEW_COUNT).forEach { app ->
-                key(app.key) {
+                key(app.ref) {
                     // Part of the tile, which the folder's name describes: not an icon in its
                     // own right.
                     AppIcon(app, Modifier.fillMaxSize().padding(2.dp), described = false)

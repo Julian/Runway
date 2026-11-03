@@ -100,4 +100,22 @@ class HomePagesTest {
         val pages = ContainerContent(listOf(PageContent(0, listOf(loose)))).toHomePages(emptyMap())
         assertEquals(emptyList<Placed>(), pages.single().occupied)
     }
+
+    @Test
+    fun `an item outside the grid dimensions is not drawn and not foldable, but still occupies its cell`() {
+        val inside = ItemEntity(1, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
+        val outside = ItemEntity(2, ItemKind.FOLDER, Container.HOME, 0, x = 3, y = 0, folderId = 8)
+        val page =
+            ContainerContent(listOf(PageContent(0, listOf(inside, outside))))
+                .toHomePages(emptyMap(), columns = 3, rows = 4)
+                .single()
+        assertEquals(listOf(1L), page.items.map { it.id })
+        assertEquals(
+            listOf(
+                Placed(1, Footprint(2, 0), foldable = true, identity = "folder:7"),
+                Placed(2, Footprint(3, 0), foldable = false, identity = "folder:8"),
+            ),
+            page.occupied,
+        )
+    }
 }

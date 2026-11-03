@@ -1,5 +1,6 @@
 package com.grayvines.runway.system.apps
 
+import com.grayvines.runway.data.AppRef
 import java.text.Collator
 import java.text.Normalizer
 
@@ -34,4 +35,13 @@ object LabelOrder {
         val collator = Collator.getInstance().apply { strength = Collator.SECONDARY }
         return compareBy<String> { initial(it) != NON_LETTER }.thenComparator(collator::compare)
     }
+
+    /**
+     * Orders items by [comparator] on their [label], then by profile serial (so the personal
+     * profile precedes a work-profile twin of the same name), then by component name.
+     */
+    fun <T> entryComparator(label: (T) -> String, ref: (T) -> AppRef): Comparator<T> =
+        compareBy(comparator(), label).thenBy { ref(it).profile }.thenBy { ref(it).component }
+
+    fun entryComparator(): Comparator<AppEntry> = entryComparator(AppEntry::label, AppEntry::ref)
 }

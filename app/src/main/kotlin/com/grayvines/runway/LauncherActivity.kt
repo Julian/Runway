@@ -158,7 +158,9 @@ class LauncherActivity : ComponentActivity() {
                     drawerOpen = drawerOpen,
                     drawerActions = drawerActions,
                     startsOnWidget = { p ->
-                        viewModel.state.value.hasWidgetAt(viewModel.dragging.areas.areas, p)
+                        viewModel.state.value
+                            .applying(viewModel.dragging.pending.value)
+                            .hasWidgetAt(viewModel.dragging.areas.areas, p)
                     },
                     drawerQuery = drawerQuery(),
                     onLaunchApp = viewModel::launch,

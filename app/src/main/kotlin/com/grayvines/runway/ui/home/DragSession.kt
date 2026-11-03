@@ -159,7 +159,7 @@ class DragSession(
             onHold = {},
             onStart = { pointer, _ ->
                 carry(provider.preview)
-                onStartNew(freshWidget(provider.key, span), pointer, grab)
+                onStartNew(freshWidget(provider.withoutPictures(), span), pointer, grab)
             },
         )
 
@@ -180,7 +180,7 @@ internal fun AppEntry.asItem() = HomeItem(0, ItemKind.APP, 0, 0, 1, 1, label, th
 internal fun AppEntry.fresh() = fresh(newApp = ref)
 
 /** A drag of a widget with no cell yet, out of the picker. */
-internal fun freshWidget(key: String, span: WidgetSpan) =
+internal fun freshWidget(provider: WidgetProvider, span: WidgetSpan) =
     DragSource(
         0,
         ItemKind.WIDGET,
@@ -190,7 +190,7 @@ internal fun freshWidget(key: String, span: WidgetSpan) =
         0,
         spanX = span.width,
         spanY = span.height,
-        newWidget = key,
+        newWidget = provider,
     )
 
 /** A drag of something with no cell yet; its kind follows what is set. */

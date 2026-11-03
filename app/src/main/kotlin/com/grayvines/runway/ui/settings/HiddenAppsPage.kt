@@ -52,7 +52,7 @@ internal fun HiddenAppsPage(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
-        items(apps, key = { it.key }) { app ->
+        items(apps, key = { it.ref }) { app ->
             val isHidden = app.ref in hidden
             Row(
                 Modifier.fillMaxWidth()

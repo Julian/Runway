@@ -2,7 +2,6 @@ package com.grayvines.runway.ui.drawer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -30,7 +29,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,11 +43,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -65,8 +61,8 @@ import com.grayvines.runway.ui.home.DragHandlers
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.FolderIcon
 import com.grayvines.runway.ui.home.HomeItem
+import com.grayvines.runway.ui.home.clickableWithBounds
 import com.grayvines.runway.ui.home.liftable
-import com.grayvines.runway.ui.home.toBounds
 import kotlinx.coroutines.launch
 
 const val DRAWER_TAG = "drawer"
@@ -141,8 +137,8 @@ fun AppDrawer(
             if (searching) {
                 searchableApps.matching(query.text)
             } else {
-                val folded = folders.flatMapTo(HashSet()) { f -> f.folder.map { it.key } }
-                apps.filter { it.key !in folded }
+                val folded = folders.flatMapTo(HashSet()) { f -> f.folder.map { it.ref } }
+                apps.filter { it.ref !in folded }
             }
         }
     BoxWithConstraints(
@@ -222,7 +218,7 @@ private fun DrawerGrid(
                     drag = drag?.handlersForDrawerFolder(folder),
                 )
             }
-            items(apps, key = { it.key }) { app ->
+            items(apps, key = { it.ref }) { app ->
                 DrawerApp(
                     app,
                     iconSize,
@@ -309,8 +305,14 @@ private fun PaddingValues.aboveKeyboard(keyboard: Dp, indexed: Boolean): Padding
 private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, modifier: Modifier) {
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     LaunchedEffect(open, keyboard) {
-        if (open && keyboard) focus.requestFocus() else if (!open) focusManager.clearFocus()
+        if (open && keyboard) {
+            focus.requestFocus()
+        } else if (!open) {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        }
     }
     SearchRowField(
         text = query.text,
@@ -332,13 +334,10 @@ private fun DrawerFolder(
     onOpen: (Bounds) -> Unit,
     drag: DragHandlers?,
 ) {
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     AppTile(
         folder.label,
         labelled = labels,
-        Modifier.onGloballyPositioned { coords = it }
-            .clickable { onOpen(coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)) }
-            .liftable("folder:${folder.id}", drag)
+        Modifier.clickableWithBounds(dragKey = "folder:${folder.id}", drag = drag, onClick = onOpen)
             .padding(vertical = 8.dp)
             .testTag(DRAWER_FOLDER_TAG),
     ) {
@@ -372,7 +371,7 @@ private fun DrawerApp(
         iconSize,
         labels,
         onClick,
-        Modifier.liftable(app.key, drag)
+        Modifier.liftable(app.ref, drag)
             .then(lit)
             .padding(vertical = 8.dp)
             .testTag(DRAWER_ITEM_TAG),

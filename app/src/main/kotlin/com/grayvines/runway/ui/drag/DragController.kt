@@ -8,6 +8,7 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.model.overlaps
+import com.grayvines.runway.system.widgets.WidgetProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -33,10 +34,10 @@ data class DragSource(
     /** A drawer folder lifted out of the drawer: the drop places it again, in a cell. */
     val newFolder: Long? = null,
     /**
-     * A widget lifted out of the picker, by the provider's key: the drop binds one and places it,
-     * [spanX] × [spanY] cells big.
+     * A widget lifted out of the picker: the drop binds one and places it, [spanX] × [spanY] cells
+     * big.
      */
-    val newWidget: String? = null,
+    val newWidget: WidgetProvider? = null,
     /** What this is a placement of, as [Placed.identity]; a page holding one refuses another. */
     val identity: String? = null,
 )

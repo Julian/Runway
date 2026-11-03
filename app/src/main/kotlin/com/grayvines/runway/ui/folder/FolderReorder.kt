@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
@@ -58,8 +59,8 @@ internal class FolderOrder {
     var shown by mutableStateOf<List<AppEntry>>(emptyList())
         private set
 
-    /** The key of the app a finger has hold of; null when none. */
-    var held by mutableStateOf<String?>(null)
+    /** The app a finger has hold of; null when none. */
+    var held by mutableStateOf<AppRef?>(null)
         private set
 
     /** Where the finger was when it took hold, in the grid's pixels. */
@@ -89,7 +90,7 @@ internal class FolderOrder {
      * still on its way to the store.
      */
     fun follow(apps: List<AppEntry>) {
-        if (written && apps.keys() != shown.keys()) return
+        if (written && apps.refs() != shown.refs()) return
         own = apps
         if (held != null) return
         written = false
@@ -105,7 +106,7 @@ internal class FolderOrder {
         carried = Offset.Zero
         landing = 1f
         gesture++
-        held = shown[item.index].key
+        held = shown[item.index].ref
     }
 
     /**
@@ -113,9 +114,9 @@ internal class FolderOrder {
      * slot and the apps between shuffle up or down to make room.
      */
     fun carry(delta: Offset, grid: LazyGridState) {
-        val key = held ?: return
+        val ref = held ?: return
         carried += delta
-        val from = shown.indexOfFirst { it.key == key }
+        val from = shown.indexOfFirst { it.ref == ref }
         val over = grid.itemAt(grabbed + carried, shown.indices)
         if (from >= 0 && over != null && over.index != from) {
             shown = shown.toMutableList().apply { add(over.index, removeAt(from)) }
@@ -134,7 +135,7 @@ internal class FolderOrder {
      * the carry left the apps in a new order; null if nothing changed places.
      */
     fun dropped(): List<AppEntry>? {
-        if (shown.keys() == own.keys()) return null
+        if (shown.refs() == own.refs()) return null
         own = shown
         written = true
         return shown
@@ -161,7 +162,7 @@ internal class FolderOrder {
         shown = own
     }
 
-    private fun List<AppEntry>.keys() = map { it.key }
+    private fun List<AppEntry>.refs() = map { it.ref }
 }
 
 /**
@@ -349,9 +350,9 @@ private fun Offset.toPoint() = Point(x, y)
 
 /** Draws this tile as the folder's order has it: the held one over the others, and bigger. */
 internal fun Modifier.slotted(app: AppEntry, order: FolderOrder): Modifier =
-    zIndex(if (order.held == app.key) 1f else 0f).graphicsLayer {
+    zIndex(if (order.held == app.ref) 1f else 0f).graphicsLayer {
         // Read as the frame is drawn, not as it is composed: a carry costs no recomposition.
-        if (order.held == app.key) {
+        if (order.held == app.ref) {
             val carried = order.carriedFromSlot()
             translationX = carried.x
             translationY = carried.y

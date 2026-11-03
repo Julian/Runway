@@ -11,6 +11,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -47,6 +49,50 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.widgets.WidgetCell
 import com.grayvines.runway.ui.widgets.WidgetResizeSession
+
+/**
+ * Pages of [GridPage]s swiped horizontally; disabled while a drag is active so a finger carrying an
+ * icon does not also scroll the pager and snap back when lifted.
+ */
+@Composable
+internal fun PagedGrid(
+    pages: List<HomePage>,
+    pagerState: PagerState,
+    cell: DpSize,
+    iconSize: Dp,
+    labels: Boolean,
+    onLaunch: (HomeItem, cell: Bounds) -> Unit,
+    drag: DragSession?,
+    handlersFor: (page: Int, HomeItem) -> DragHandlers?,
+    onPagePositioned: (page: Int, Bounds) -> Unit,
+    landing: (page: Int) -> Footprint?,
+    modifier: Modifier = Modifier,
+    onHoldEmpty: ((Point) -> Unit)? = null,
+    resize: WidgetResizeSession? = null,
+) {
+    HorizontalPager(
+        state = pagerState,
+        userScrollEnabled = drag?.active != true,
+        modifier = modifier.fillMaxSize(),
+    ) { page ->
+        GridPage(
+            items = pages[page].items,
+            cell = cell,
+            iconSize = iconSize,
+            labels = labels,
+            onLaunch = onLaunch,
+            drag = drag,
+            handlersFor = { item -> handlersFor(page, item) },
+            onHoldEmpty = onHoldEmpty,
+            resize = resize,
+            landing = { landing(page) },
+            modifier =
+                Modifier.onGloballyPositioned { coords ->
+                    onPagePositioned(page, coords.boundsInRoot().toBounds())
+                },
+        )
+    }
+}
 
 /**
  * One page of cells: every item at its footprint, sized by its span. While a drag plans

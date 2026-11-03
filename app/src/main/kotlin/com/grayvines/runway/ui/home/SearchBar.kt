@@ -25,7 +25,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -100,12 +99,10 @@ fun SearchBar(
                 style = ink.style,
                 modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
-            var dots by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            val dots = rememberRootBounds()
             IconButton(
-                onClick = {
-                    onMenu(dots?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f))
-                },
-                modifier = Modifier.onGloballyPositioned { dots = it }.testTag(SEARCH_MENU_TAG),
+                onClick = { onMenu(dots.current()) },
+                modifier = dots.modifier.testTag(SEARCH_MENU_TAG),
             ) {
                 Icon(
                     Icons.Outlined.MoreVert,

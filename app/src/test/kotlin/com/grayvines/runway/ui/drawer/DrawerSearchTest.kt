@@ -1,5 +1,7 @@
 package com.grayvines.runway.ui.drawer
 
+import com.grayvines.runway.data.AppRef
+import com.grayvines.runway.system.apps.LabelOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -40,5 +42,17 @@ class DrawerSearchTest {
     @Test
     fun `a label or word that starts with it comes before one that merely contains it`() {
         assertEquals(listOf("Google Maps", "Maps Go", "Lego"), search("go"))
+    }
+
+    @Test
+    fun `work-profile twins sort after the personal profile so Go picks the personal app`() {
+        val work = "Files" to AppRef("pkg.files/.Main", profile = 10L)
+        val personal = "Files" to AppRef("pkg.files/.Main", profile = 0L)
+        val otherPkg = "Files" to AppRef("pkg.other/.Main", profile = 0L)
+        val sorted =
+            listOf(otherPkg, work, personal)
+                .sortedWith(LabelOrder.entryComparator({ it.first }, { it.second }))
+        assertEquals(listOf(personal, otherPkg, work), sorted)
+        assertEquals(personal, sorted.matching("files") { it.first }.first())
     }
 }

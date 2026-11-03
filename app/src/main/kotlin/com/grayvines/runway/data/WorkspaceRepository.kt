@@ -10,11 +10,12 @@ import com.grayvines.runway.model.Placed
 import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.Serializable
 
 /** An app identity as stored: flattened component name plus profile serial. */
 @Serializable
-data class AppRef(val component: String, val profile: Long) {
+data class AppRef(val component: String, val profile: Long) : java.io.Serializable {
     /** What a placement of this app is a placement of; see [Placed.identity]. */
     val identity: String
         get() = "app:$profile/$component"
@@ -32,10 +33,17 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     internal val dao = db.workspaceDao()
 
     fun observe(container: Container): Flow<ContainerContent> =
-        combine(dao.observePages(container), dao.observeItems(container)) { pages, items ->
-            val byPage = items.groupBy { it.pageIndex }
-            ContainerContent(pages.map { PageContent(it.index, byPage[it.index].orEmpty()) })
-        }
+        combine(dao.observePages(container), dao.observeItems(container)) { _, _ ->
+                read {
+                    val pages = dao.pages(container)
+                    val byPage =
+                        dao.items().filter { it.container == container }.groupBy { it.pageIndex }
+                    ContainerContent(
+                        pages.map { PageContent(it.index, byPage[it.index].orEmpty()) }
+                    )
+                }
+            }
+            .distinctUntilChanged()
 
     /** Adds a page at [index] if it does not exist yet. */
     suspend fun addPage(container: Container, index: Int) = write {

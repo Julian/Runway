@@ -4,6 +4,7 @@ import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.menu.ItemMenuState
@@ -202,12 +203,50 @@ class PendingMoveTest {
         assertFalse(stateWith(folder.copy(folderId = 8L)).reflects(placeFolder))
 
         val placeWidget =
-            PendingMove(0, Container.HOME, 0, 2, 0, emptyMap(), newWidget = "0/pkg/.Widget")
+            PendingMove(
+                0,
+                Container.HOME,
+                0,
+                2,
+                0,
+                emptyMap(),
+                newWidget = WidgetProvider("pkg/.Widget", key = "0/pkg/.Widget"),
+            )
         assertFalse(state.reflects(placeWidget))
         val widget =
             HomeItem(6, ItemKind.WIDGET, 2, 0, 2, 1, "Widget", null, provider = "pkg/.Widget")
         assertTrue(stateWith(widget).reflects(placeWidget))
         assertFalse(stateWith(widget.copy(provider = "pkg/.Other")).reflects(placeWidget))
+    }
+
+    @Test
+    fun `applying a list of pending moves folds them in order`() {
+        val first = PendingMove(1, Container.HOME, 0, 2, 0, emptyMap())
+        val second = PendingMove(2, Container.HOME, 0, 0, 0, emptyMap())
+        val applied = state.applying(listOf(first, second))
+        assertEquals(
+            setOf(Triple(0, 1L, 2 to 0), Triple(0, 2L, 0 to 0)),
+            cells(applied.homePages),
+        )
+    }
+
+    @Test
+    fun `fresh pending drops reserve their target footprint in occupied`() {
+        val widgetMove =
+            PendingMove(
+                itemId = 0,
+                container = Container.HOME,
+                page = 0,
+                x = 2,
+                y = 1,
+                spanX = 2,
+                spanY = 2,
+                displaced = emptyMap(),
+                newWidget = WidgetProvider("pkg/.Widget", key = "0/pkg/.Widget"),
+            )
+        val applied = state.applying(widgetMove)
+        val occupied = applied.homePages.first { it.index == 0 }.occupied
+        assertTrue(occupied.any { it.footprint == Footprint(2, 1, 2, 2) && !it.foldable })
     }
 
     @Test

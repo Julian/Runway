@@ -104,8 +104,8 @@ internal fun AddApps(
     var query by remember { mutableStateOf("") }
     val candidates =
         remember(apps, inFolder, query) {
-            val inside = inFolder.mapTo(HashSet()) { it.key }
-            apps.filter { it.key !in inside }.matching(query)
+            val inside = inFolder.mapTo(HashSet()) { it.ref }
+            apps.filter { it.ref !in inside }.matching(query)
         }
     val focusManager = LocalFocusManager.current
     Column {
@@ -142,7 +142,7 @@ internal fun AddApps(
                 )
             } else {
                 LazyVerticalGrid(GridCells.Fixed(MAX_COLUMNS), Modifier.fillMaxSize()) {
-                    items(candidates, key = { it.key }) { app ->
+                    items(candidates, key = { it.ref }) { app ->
                         AppTile(
                             app,
                             iconSize,

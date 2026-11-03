@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
+import com.grayvines.runway.ui.drag.Bounds
 
 /** How long a finger must rest on an icon before it lifts; longer than the platform default. */
 internal const val LIFT_HOLD_MS = 550L
@@ -110,6 +112,47 @@ internal fun rememberLiftConfiguration(): ViewConfiguration {
     }
 }
 
+/** Tracks a node's bounds in root pixels so clicks and long presses can report where it sits. */
+internal class RootBounds {
+    var coords by mutableStateOf<LayoutCoordinates?>(null)
+    val modifier = Modifier.onGloballyPositioned { coords = it }
+
+    fun current(): Bounds = coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)
+}
+
+@Composable internal fun rememberRootBounds(): RootBounds = remember { RootBounds() }
+
+/**
+ * A [clickable] that passes the node's root bounds (px) to [onClick], and when [dragKey] and [drag]
+ * are given, also lets a long press on the same node lift it without tracking its coordinates a
+ * second time. When [interactions] is given, the click uses it without a ripple, as an icon tile
+ * does.
+ */
+@Composable
+fun Modifier.clickableWithBounds(
+    interactions: MutableInteractionSource? = null,
+    dragKey: Any? = null,
+    drag: DragHandlers? = null,
+    onClick: (Bounds) -> Unit,
+): Modifier {
+    val bounds = rememberRootBounds()
+    val handlers by rememberUpdatedState(drag)
+    val click = { onClick(bounds.current()) }
+    val clickable =
+        if (interactions != null) {
+            Modifier.clickable(interactionSource = interactions, indication = null, onClick = click)
+        } else {
+            Modifier.clickable(onClick = click)
+        }
+    val liftable =
+        if (dragKey != null) {
+            Modifier.dragAfterLongPress(dragKey, { bounds.coords }, { handlers })
+        } else {
+            Modifier
+        }
+    return then(bounds.modifier).then(clickable).then(liftable)
+}
+
 /**
  * Lets a finger lift what this is on: a long press holds, and moving after that drags, reported to
  * [drag] in root pixels. Nothing happens without handlers.
@@ -117,7 +160,7 @@ internal fun rememberLiftConfiguration(): ViewConfiguration {
 @Composable
 fun Modifier.liftable(key: Any, drag: DragHandlers?): Modifier {
     // The gesture coroutine outlives recompositions: both of these must always be current.
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val bounds = rememberRootBounds()
     val handlers by rememberUpdatedState(drag)
-    return onGloballyPositioned { coords = it }.dragAfterLongPress(key, { coords }, { handlers })
+    return then(bounds.modifier).dragAfterLongPress(key, { bounds.coords }, { handlers })
 }

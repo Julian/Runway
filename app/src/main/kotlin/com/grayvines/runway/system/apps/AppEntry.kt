@@ -22,21 +22,17 @@ class AppEntry(
     /** The icon as drawn everywhere, rasterised once as the list loads, off the main thread. */
     val bitmap: ImageBitmap,
 ) {
-    /** How the app is referred to in the database. */
-    val ref: AppRef
-        get() = AppRef(component.flattenToString(), profileSerial)
-
-    /** Stable identity across processes. */
-    val key: String = "$profileSerial/${component.flattenToString()}"
+    /** How the app is referred to everywhere: component plus profile serial. */
+    val ref: AppRef = AppRef(component.flattenToString(), profileSerial)
 
     override fun equals(other: Any?) =
         other is AppEntry &&
-            other.key == key &&
+            other.ref == ref &&
             other.label == label &&
             (other.bitmap === bitmap ||
                 other.bitmap.asAndroidBitmap().sameAs(bitmap.asAndroidBitmap()))
 
-    override fun hashCode() = key.hashCode() * 31 + label.hashCode()
+    override fun hashCode() = ref.hashCode() * 31 + label.hashCode()
 
-    override fun toString() = "AppEntry($label, $key)"
+    override fun toString() = "AppEntry($label, $ref)"
 }

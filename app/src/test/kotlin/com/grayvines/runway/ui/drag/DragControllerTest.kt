@@ -6,6 +6,7 @@ import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
+import com.grayvines.runway.system.widgets.WidgetProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -289,7 +290,7 @@ class DragControllerTest {
                 0,
                 spanX = 2,
                 spanY = 1,
-                newWidget = "0/pkg/.Widget",
+                newWidget = WidgetProvider("pkg/.Widget", key = "0/pkg/.Widget"),
             )
         controller.start(fromPicker, Point(0f, 0f), Point(0f, 0f))
         controller.move(Point(0f, 0f), DropTarget.HomeCell(0, 0, 1)) // the free row

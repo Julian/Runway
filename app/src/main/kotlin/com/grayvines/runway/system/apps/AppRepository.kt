@@ -126,7 +126,7 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                         .awaitAll()
                 }
                     .filterNotNull()
-                    .sortedWith(compareBy(LabelOrder.comparator()) { it.label })
+                    .sortedWith(LabelOrder.entryComparator())
                 _apps.value = fresh
                 _refreshed.tryEmit(fresh)
             }

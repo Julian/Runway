@@ -61,9 +61,7 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = appGraph
-        hasNotificationAccess = graph.badges.hasAccess()
-        searchTargets = graph.searchTargets.handlers()
-        isDefault = isDefaultHome()
+        refreshStatus()
         val debugActions = debugActions()
         val hiddenApps = graph.workspace.observeHiddenApps()
         setContent {
@@ -117,10 +115,16 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshStatus()
+    }
+
+    private fun refreshStatus() {
         val graph = appGraph
         hasNotificationAccess = graph.badges.hasAccess()
-        searchTargets = graph.searchTargets.handlers()
         isDefault = isDefaultHome()
+        lifecycleScope.launch {
+            searchTargets = withContext(Dispatchers.Default) { graph.searchTargets.handlers() }
+        }
     }
 
     private fun isDefaultHome(): Boolean =

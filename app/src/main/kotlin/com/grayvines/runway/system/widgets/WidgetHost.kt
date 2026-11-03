@@ -23,20 +23,40 @@ import com.grayvines.runway.system.apps.LabelOrder
  * belongs to, a picture of it, and the sizes it asks for, in dp.
  */
 class WidgetProvider(
-    val info: AppWidgetProviderInfo,
-    val label: String,
-    val appLabel: String,
-    val appIcon: ImageBitmap?,
-    val preview: ImageBitmap?,
-    val minWidthDp: Float,
-    val minHeightDp: Float,
+    val providerName: String,
+    val key: String = providerName,
+    val label: String = "",
+    val appLabel: String = "",
+    val appIcon: ImageBitmap? = null,
+    val preview: ImageBitmap? = null,
+    val minWidthDp: Float = 0f,
+    val minHeightDp: Float = 0f,
+    val targetCellWidth: Int = 0,
+    val targetCellHeight: Int = 0,
+    val needsSetup: Boolean = false,
+    internal val info: AppWidgetProviderInfo? = null,
 ) {
-    val key: String
-        get() = "${info.profile.hashCode()}/${info.provider.flattenToString()}"
+    /** This provider without its bitmaps, for carrying through a drag after the picker closes. */
+    fun withoutPictures() =
+        WidgetProvider(
+            providerName = providerName,
+            key = key,
+            label = label,
+            appLabel = appLabel,
+            minWidthDp = minWidthDp,
+            minHeightDp = minHeightDp,
+            targetCellWidth = targetCellWidth,
+            targetCellHeight = targetCellHeight,
+            needsSetup = needsSetup,
+            info = info,
+        )
 
-    /** The widget insists on its configuration activity before it can be shown. */
-    val needsSetup: Boolean
-        get() = info.needsSetup
+    override fun equals(other: Any?) =
+        other is WidgetProvider && other.key == key && other.providerName == providerName
+
+    override fun hashCode() = key.hashCode() * 31 + providerName.hashCode()
+
+    override fun toString() = "WidgetProvider($key)"
 }
 
 /** The widget insists on its configuration activity before it can be shown. */
@@ -154,14 +174,20 @@ class WidgetHost(context: Context) {
     private fun AppWidgetProviderInfo.toProvider(pm: PackageManager, density: Float) =
         try {
             val app = activityInfo.applicationInfo
+            val flat = provider.flattenToString()
             WidgetProvider(
-                info = this,
+                providerName = flat,
+                key = "${profile.hashCode()}/$flat",
                 label = loadLabel(pm),
                 appLabel = pm.getApplicationLabel(app).toString(),
                 appIcon = pm.getApplicationIcon(app).toPicture((ICON_DP * density).toInt()),
                 preview = loadPreviewImage(context, 0)?.toPicture((PREVIEW_DP * density).toInt()),
                 minWidthDp = minWidth / density,
                 minHeightDp = minHeight / density,
+                targetCellWidth = targetCellWidth,
+                targetCellHeight = targetCellHeight,
+                needsSetup = needsSetup,
+                info = this,
             )
         } catch (e: PackageManager.NameNotFoundException) {
             Log.w(TAG, "could not read widget $provider; left out of the list", e)

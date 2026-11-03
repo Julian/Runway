@@ -26,13 +26,15 @@ class BackupService(
         quiet: Set<Long> = emptySet(),
     ): Restored {
         val backup = Backup.fromJson(text)
+        val restored =
+            workspace.restoreLayout(
+                backup.layout,
+                installed,
+                quiet,
+                bindWidget = widgets::restore,
+                deleteWidget = widgets::deleteId,
+            )
         settings.update { backup.settings }
-        return workspace.restoreLayout(
-            backup.layout,
-            installed,
-            quiet,
-            bindWidget = widgets::restore,
-            deleteWidget = widgets::deleteId,
-        )
+        return restored
     }
 }

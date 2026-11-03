@@ -246,6 +246,7 @@ open class LauncherFixture {
      */
     protected fun pressBack() {
         awaitNoKeyboard()
+        compose.waitForIdle()
         device.pressBack()
     }
 
@@ -280,6 +281,7 @@ open class LauncherFixture {
         if (compose.activity.hasWindowFocus()) return
         repeat(FOCUS_ATTEMPTS) { attempt ->
             dismissNotRespondingDialog()
+            device.executeShellCommand("wm dismiss-keyguard")
             try {
                 compose.waitUntil(LONG_TIMEOUT_MS) { compose.activity.hasWindowFocus() }
                 return
@@ -801,7 +803,9 @@ open class LauncherFixture {
     protected fun awaitDropSettled() {
         awaitGone(DRAG_OVERLAY_TAG)
         val dragging = compose.activity.viewModel.dragging
-        waitUntil(TIMEOUT_MS) { dragging.pending.value == null && dragging.settling.value == null }
+        waitUntil(TIMEOUT_MS) {
+            dragging.pending.value.isEmpty() && dragging.settling.value == null
+        }
     }
 
     /** [label] is still in the first home cell once the drop has fully played out. */

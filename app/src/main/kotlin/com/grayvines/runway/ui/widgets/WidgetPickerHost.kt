@@ -68,6 +68,7 @@ class WidgetPickerHost(
 
     fun dismiss() {
         _open.value = false
+        _providers.value = null
     }
 
     /**
@@ -79,16 +80,17 @@ class WidgetPickerHost(
 
     /** [provider] was tapped over a grid whose cells are [cellWidthDp] × [cellHeightDp]. */
     fun pick(provider: WidgetProvider, cellWidthDp: Float, cellHeightDp: Float) {
+        val chosen = provider.withoutPictures()
         dismiss()
-        scope.launch { attempt("add the widget") { add(provider, cellWidthDp, cellHeightDp) } }
+        scope.launch { attempt("add the widget") { add(chosen, cellWidthDp, cellHeightDp) } }
     }
 
     /**
-     * A widget dragged out of the picker was dropped: [move] names its provider key, its cells and
+     * A widget dragged out of the picker was dropped: [move] carries its provider, its cells and
      * the neighbours to move aside. False, and nothing added, when it could not be.
      */
     suspend fun place(move: PendingMove): Boolean {
-        val provider = _providers.value?.firstOrNull { it.key == move.newWidget } ?: return false
+        val provider = move.newWidget ?: return false
         val id = bound(provider) ?: return false
         val at = Footprint(move.x, move.y, move.spanX, move.spanY)
         return store(id, provider, move.page, at, move.displaced)
@@ -121,7 +123,7 @@ class WidgetPickerHost(
 
     private fun spans(provider: WidgetProvider, cellWidthDp: Float, cellHeightDp: Float) =
         spansFor(
-            WidgetSpan(provider.info.targetCellWidth, provider.info.targetCellHeight).takeIf {
+            WidgetSpan(provider.targetCellWidth, provider.targetCellHeight).takeIf {
                 it.width > 0
             },
             provider.minWidthDp,
@@ -138,7 +140,7 @@ class WidgetPickerHost(
      */
     private suspend fun bound(provider: WidgetProvider): Int? {
         val host = graph.widgets
-        val info = provider.info
+        val info = provider.info ?: return null
         val id = host.allocateId()
         val allowed =
             host.bind(id, info.provider, info.profile) ||
@@ -168,7 +170,7 @@ class WidgetPickerHost(
             stored =
                 graph.workspace.addWidget(
                     id,
-                    provider.info.provider.flattenToString(),
+                    provider.providerName,
                     page,
                     at.x,
                     at.y,

@@ -314,8 +314,6 @@ private fun HomeColumn(
         Workspace(
             pages = state.homePages,
             pagerState = homePager,
-            columns = settings.columns,
-            rows = settings.pageRows,
             cell = cell,
             iconSize = iconSize,
             labels = settings.homeLabels,
@@ -335,7 +333,6 @@ private fun HomeColumn(
         Dock(
             pages = state.dockPages,
             pagerState = dockPager,
-            slots = settings.dockSlots,
             slot = dockSlot,
             cell = cell,
             iconSize = iconSize,

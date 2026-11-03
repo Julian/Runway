@@ -91,12 +91,14 @@ fun WidgetCell(
     val info = remember(id, item.label) { id?.let(host::info) }
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var frame by remember { mutableStateOf<WidgetFrame?>(null) }
-    // The frame may arrive after the cell's last layout: it is told where the cell is at once.
-    LaunchedEffect(framedBy) { coords?.let { framedBy?.positioned(item.id, it.boundsInRoot()) } }
     val handlers by rememberWidgetHandlers(drag, session) { frame }
     // Framed, the widget is not live: its view sees no touch, and a tap puts the frame away. The
     // cell's own gestures go on as before, so a hold lifts the framed widget again.
     val framed = framedBy?.frames(item.id) == true
+    // The frame may arrive after the cell's last layout: it is told where the cell is at once.
+    LaunchedEffect(framedBy, framed) {
+        if (framed) coords?.let { framedBy.positioned(item.id, it.boundsInRoot()) }
+    }
     val dismissFrame = rememberUpdatedState { framedBy?.onDismiss?.invoke() }
     val cellModifier =
         modifier
