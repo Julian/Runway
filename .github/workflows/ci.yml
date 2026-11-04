@@ -110,8 +110,9 @@ jobs:
         run: |
           setup_task=":app:${SETUP%DebugAndroidTest}Setup"
           for attempt in 1 2 3; do
-            ./gradlew "$setup_task" && break
+            ./gradlew "$setup_task" -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect && break
             test "$attempt" -lt 3 || exit 1
+            pkill -f qemu-system || true
             rm -rf "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.temp"
           done
       # Gradle boots the emulator headless, runs the tests and discards it.
