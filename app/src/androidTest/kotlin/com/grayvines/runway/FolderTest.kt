@@ -211,8 +211,7 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextInput("Games")
         // Straight out of the folder, without Done: what was typed is what the folder is called.
-        // A tap up top, where the keyboard is not.
-        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
+        tapOutsideFolder()
         awaitFolderClosed()
         waitUntil(TIMEOUT_MS) { folderName() == "Games" }
         awaitFolderLabel("Games")
@@ -234,7 +233,7 @@ class FolderTest : LauncherFixture() {
         makeFolder()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performClick()
         compose.onNodeWithTag(FOLDER_NAME_TAG).performTextClearance()
-        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
+        tapOutsideFolder()
         awaitFolderClosed()
         Thread.sleep(WRITE_GRACE_MS)
         assertEquals("Folder", folderName())
@@ -250,8 +249,7 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithTag(FOLDER_NAME_TAG).performImeAction()
         waitUntil(TIMEOUT_MS) { folderName() == "Tools" }
         compose.onNodeWithTag(FOLDER_NAME_TAG).assertTextEquals("Tools")
-        // Up top, clear of a keyboard that may still be on its way down after Done.
-        compose.onRoot().performTouchInput { click(topCenter + Offset(0f, ABOVE_SHEET_PX)) }
+        tapOutsideFolder()
         awaitFolderClosed()
         awaitFolderLabel("Tools")
     }
@@ -398,10 +396,9 @@ class FolderTest : LauncherFixture() {
             )
             compose.mainClock.advanceTimeBy(SETTLE_MS)
             val rest = compose.onNodeWithTag(FOLDER_TAG).fetchSemanticsNode().boundsInRoot
-            val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
             assertTrue(
-                "should come to rest mid-screen, not at ${rest.center}",
-                (rest.center - screen.center).getDistance() < grid.cellWidth(),
+                "should come to rest over its tile $tile, not at ${rest.center}",
+                rest.contains(tile) && (rest.center - tile).getDistance() < grid.cellWidth(),
             )
             assertTrue(
                 "should have grown: ${early.width} -> ${rest.width}",
@@ -597,11 +594,22 @@ class FolderTest : LauncherFixture() {
         compose.onNodeWithContentDescription(name, useUnmergedTree = true).assertIsDisplayed()
     }
 
+    /** Taps the scrim beside the open folder (clear of both the sheet and any bottom keyboard). */
+    private fun tapOutsideFolder() {
+        val sheet = compose.onNodeWithTag(FOLDER_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            val x =
+                if (right - sheet.right >= sheet.left) {
+                    (sheet.right + right) / 2f
+                } else {
+                    sheet.left / 2f
+                }
+            click(Offset(x, sheet.center.y))
+        }
+    }
+
     private companion object {
         const val SETTLE_MS = 1_000L
-
-        /** Below the status bar, above where the sheet sits over a keyboard. */
-        const val ABOVE_SHEET_PX = 200f
 
         /** Of a cell's width: below it the lifted icon is shrunk for a fold, above it lifted. */
         const val SHRUNK = 0.7f

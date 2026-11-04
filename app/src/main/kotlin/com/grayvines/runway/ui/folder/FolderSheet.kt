@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -51,6 +55,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -64,6 +69,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
@@ -73,6 +79,7 @@ import com.grayvines.runway.ui.home.AppTile
 import com.grayvines.runway.ui.home.DragSession
 import com.grayvines.runway.ui.home.HomeItem
 import com.grayvines.runway.ui.home.rememberRootBounds
+import kotlin.math.roundToInt
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
@@ -84,6 +91,7 @@ private const val MAX_NAME_LENGTH = 40
 private val SURFACE = Color(0xFF202124)
 private val CORNER = 24.dp
 private val CELL = 84.dp
+private val SHEET_MARGIN = 16.dp
 internal const val MAX_COLUMNS = 4
 private const val MIN_COLUMNS = 2
 
@@ -107,14 +115,15 @@ private const val SOLID_AT = 0.35f
 private val SHADOW = 16.dp
 
 /**
- * An open folder: its name over a grid of its apps, sized to what it holds. It grows out of the
- * cell it was tapped in ([from], root px) to the middle of the screen, and shrinks back into it
- * when closed. Tapping an app launches it; a long press shows its menu, moving on within the sheet
- * rearranges the folder, and carrying the finger out of the sheet lifts the app out; tapping the
- * name edits it. The pencil at the top right puts an x on every app, which takes that app out, and
- * in a drawer folder a plus after them, which lists the rest of [apps] to add. A folder emptied by
- * its x's stays open, and goes only once it is closed empty. Back leaves the list, then the
- * editing; a tap anywhere else, or back, closes the folder.
+ * An open folder: its name over a grid of its apps, sized to what it holds. It blooms in place out
+ * of the cell it was tapped in ([from], root px), clamped only to stay inside the screen's margins
+ * and clear of the system bars and keyboard, and shrinks back into [from] when closed. Tapping an
+ * app launches it; a long press shows its menu, moving on within the sheet rearranges the folder,
+ * and carrying the finger out of the sheet lifts the app out; tapping the name edits it. The pencil
+ * at the top right puts an x on every app, which takes that app out, and in a drawer folder a plus
+ * after them, which lists the rest of [apps] to add. A folder emptied by its x's stays open, and
+ * goes only once it is closed empty. Back leaves the list, then the editing; a tap anywhere else,
+ * or back, closes the folder.
  */
 @Composable
 fun FolderSheet(
@@ -146,35 +155,13 @@ fun FolderSheet(
         keyboard?.hide()
     }
     var room by remember { mutableStateOf(IntSize.Zero) }
-    // Above the keyboard while something is typed (the name, or a search for apps to add),
-    // centred otherwise.
-    Box(
-        Modifier.fillMaxSize().imePadding().onSizeChanged { room = it },
-        contentAlignment = Alignment.Center,
-    ) {
+    // Above the keyboard while something is typed (the name, or a search for apps to add), and
+    // centred on the tapped folder cell as far as the screen's margins allow.
+    Box(Modifier.fillMaxSize().imePadding().onSizeChanged { room = it }) {
         // A sibling, not a parent: a clickable parent would merge the sheet's semantics into it.
         SheetScrim({ motion.progress }, onClick = motion.close)
         val columns = columnsFor(folder, listing, mode.editing)
-        var size by remember { mutableStateOf(IntSize.Zero) }
-        var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-        Surface(
-            modifier =
-                Modifier.width(CELL * columns + 32.dp)
-                    .onSizeChanged { size = it }
-                    .growingFrom(from, room, size) { motion.progress }
-                    .onGloballyPositioned { sheetCoords = it }
-                    .graphicsLayer {
-                        val solid = (motion.progress / SOLID_AT).coerceIn(0f, 1f)
-                        alpha = solid
-                        shadowElevation = (SHADOW * solid).toPx()
-                        shape = RoundedCornerShape(CORNER)
-                        clip = true
-                    }
-                    .testTag(FOLDER_TAG),
-            shape = RoundedCornerShape(CORNER),
-            color = SURFACE,
-            contentColor = Color.White,
-        ) {
+        SheetSurface(from, room, columns, { motion.progress }) { sheetBounds, contentModifier ->
             SheetContent(
                 folder,
                 apps,
@@ -183,10 +170,72 @@ fun FolderSheet(
                 actions,
                 drag,
                 mode,
-                sheetBounds = { sheetCoords?.boundsInRoot() },
-                modifier = Modifier.padding(16.dp).graphicsLayer { alpha = motion.progress },
+                sheetBounds = sheetBounds,
+                modifier = contentModifier,
             )
         }
+    }
+}
+
+@Composable
+private fun SheetSurface(
+    from: Bounds,
+    room: IntSize,
+    columns: Int,
+    progress: () -> Float,
+    content: @Composable (sheetBounds: () -> Rect?, contentModifier: Modifier) -> Unit,
+) {
+    val density = LocalDensity.current
+    val marginPx = with(density) { SHEET_MARGIN.roundToPx() }
+    val sysBars = WindowInsets.systemBars
+    val topInsetPx = sysBars.getTop(density)
+    val bottomInsetPx =
+        (sysBars.getBottom(density) - WindowInsets.ime.getBottom(density)).coerceAtLeast(0)
+    var measuredSize by remember { mutableStateOf(IntSize.Zero) }
+    var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val restOffset = {
+        val within =
+            Bounds(
+                left = marginPx.toFloat(),
+                top = (topInsetPx + marginPx).toFloat(),
+                right = (room.width - marginPx).coerceAtLeast(0).toFloat(),
+                bottom = (room.height - bottomInsetPx - marginPx).coerceAtLeast(0).toFloat(),
+            )
+        sheetOffset(from, measuredSize, within)
+    }
+    val maxHeight =
+        if (room.height > 0) {
+            with(density) {
+                (room.height - topInsetPx - bottomInsetPx - marginPx * 2).coerceAtLeast(0).toDp()
+            }
+        } else {
+            Dp.Unspecified
+        }
+    Surface(
+        modifier =
+            Modifier.offset { restOffset() }
+                .width(CELL * columns + 32.dp)
+                .heightIn(max = maxHeight)
+                .onSizeChanged { measuredSize = it }
+                .growingFrom(from, restOffset, progress)
+                .onGloballyPositioned { sheetCoords = it }
+                .graphicsLayer {
+                    val solid =
+                        if (size.width == 0f) 0f else (progress() / SOLID_AT).coerceIn(0f, 1f)
+                    alpha = solid
+                    shadowElevation = (SHADOW * solid).toPx()
+                    shape = RoundedCornerShape(CORNER)
+                    clip = true
+                }
+                .testTag(FOLDER_TAG),
+        shape = RoundedCornerShape(CORNER),
+        color = SURFACE,
+        contentColor = Color.White,
+    ) {
+        content(
+            { sheetCoords?.boundsInRoot() },
+            Modifier.padding(16.dp).graphicsLayer { alpha = progress() },
+        )
     }
 }
 
@@ -375,36 +424,50 @@ private fun FolderTile(
                 .testTag(FOLDER_ITEM_TAG),
         )
         if (editing && folderId != null) {
+            // Centres the chip a little inside the top-right corner of the icon (which sits
+            // TILE_PADDING below the tile's top), so the chip's circle stays within the tile.
             RemoveChip(
                 app.label,
                 onRemove = { actions.remove(folderId, app) },
-                Modifier.align(Alignment.TopCenter).onIconCorner(iconSize),
+                Modifier.align(Alignment.TopCenter)
+                    .offset(
+                        x = iconSize / 2 - CHIP_INSET,
+                        y = TILE_PADDING + CHIP_INSET - REMOVE_TOUCH / 2,
+                    ),
             )
         }
     }
 }
 
 /**
- * Centres the chip a little inside the top-right corner of the icon (which sits [TILE_PADDING]
- * below the tile's top), so the chip's circle stays within the tile and the grid does not clip it.
+ * Where a folder sheet of [size] rests inside [within] (the usable screen area inside margins,
+ * system bars, and the keyboard): centred over the tapped cell [from] as far as [within] allows.
  */
-private fun Modifier.onIconCorner(iconSize: Dp) =
-    offset(x = iconSize / 2 - CHIP_INSET, y = TILE_PADDING + CHIP_INSET - REMOVE_TOUCH / 2)
+internal fun sheetOffset(from: Bounds, size: IntSize, within: Bounds): IntOffset {
+    val minX = within.left.roundToInt()
+    val maxX = (within.right.roundToInt() - size.width).coerceAtLeast(minX)
+    val x = ((from.left + from.right - size.width) / 2f).roundToInt().coerceIn(minX, maxX)
+
+    val minY = within.top.roundToInt()
+    val maxY = (within.bottom.roundToInt() - size.height).coerceAtLeast(minY)
+    val y = ((from.top + from.bottom - size.height) / 2f).roundToInt().coerceIn(minY, maxY)
+    return IntOffset(x, y)
+}
 
 /**
- * At progress 0 the sheet is the size and place of the tapped cell; at 1 it rests where the layout
- * put it, in the middle of the [room]. In between it scales and slides.
+ * At progress 0 the sheet is the size and place of the tapped cell [from]; at 1 it rests at
+ * [restOffset]. In between it scales and slides.
  */
 private fun Modifier.growingFrom(
     from: Bounds,
-    room: IntSize,
-    size: IntSize,
+    restOffset: () -> IntOffset,
     progress: () -> Float,
 ) = graphicsLayer {
-    if (size.width > 0 && size.height > 0 && room.width > 0) {
+    if (size.width > 0f && size.height > 0f) {
         val p = progress()
-        val restX = room.width / 2f
-        val restY = room.height / 2f
+        val rest = restOffset()
+        val restX = rest.x + size.width / 2f
+        val restY = rest.y + size.height / 2f
         val fromX = (from.left + from.right) / 2f
         val fromY = (from.top + from.bottom) / 2f
         scaleX = lerp(from.width / size.width, 1f, p)
