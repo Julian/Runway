@@ -241,7 +241,7 @@ fun registerFailurePrinter(testTask: String, resultsDir: String) =
                         if (skipped) "SKIPPED" else "FAILED",
                         case.getAttribute("classname"),
                         case.getAttribute("name"),
-                        message.lineSequence().first(),
+                        message.lineSequence().take(2).joinToString(" "),
                     )
                 }
         }

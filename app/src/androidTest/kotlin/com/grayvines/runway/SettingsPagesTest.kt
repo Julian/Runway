@@ -17,7 +17,6 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.settings.IconShape
@@ -132,21 +131,18 @@ class SettingsPagesTest {
             )
         }
         compose.onNodeWithText("Home screen").performClick()
-        compose
-            .onNodeWithText("Allow notification access")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+        compose.onNodeWithText("Allow notification access").assertIsDisplayed().performClick()
         assertEquals(1, asked)
 
         granted = true
         compose.onNodeWithText("Allow notification access").assertDoesNotExist()
 
-        compose.onNodeWithText("Parallax").performScrollTo().assertIsOn().performClick()
+        compose.onNodeWithText("Parallax").assertIsOn().performClick()
         assertFalse(settings.wallpaperParallax)
         compose.onNodeWithText("Parallax").assertIsOff()
 
-        compose.onNodeWithText("Squircle").performScrollTo().performClick()
+        compose.onNodeWithText("System").performClick()
+        compose.onNodeWithText("Squircle").performClick()
         assertEquals(IconShape.SQUIRCLE, settings.iconShape)
     }
 

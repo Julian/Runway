@@ -525,12 +525,16 @@ class FolderTest : LauncherFixture() {
 
         val from = folderApp(before[0]).fetchSemanticsNode().boundsInRoot.center
         val across = folderApp(before[2]).fetchSemanticsNode().boundsInRoot.center
+        val sheetTop = compose.onNodeWithTag(FOLDER_TAG).fetchSemanticsNode().boundsInRoot.top
         compose.onRoot().performTouchInput { down(from) }
         compose.mainClock.advanceTimeBy(LIFT_HOLD_MS + FRAME_MS)
         dragOn(to = across)
         assertEquals(listOf(before[1], before[2], before[0]), shownFolderApps())
-        dragOn(to = grid.homeCell(0, 0))
+        compose.onRoot().performTouchInput {
+            moveBy(Offset(0f, sheetTop - across.y - LIFT_NUDGE_PX))
+        }
         awaitFolderClosed()
+        dragOn(to = grid.homeCell(0, 0))
         release()
 
         waitUntil(TIMEOUT_MS) { homeCellOf(before[0]) == 0 to 0 }
