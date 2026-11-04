@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
+import com.grayvines.runway.data.settings.IconShape
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.settings.BackupActions
@@ -139,6 +140,9 @@ class SettingsPagesTest {
         compose.onNodeWithText("Parallax").assertIsOn().performClick()
         assertFalse(settings.wallpaperParallax)
         compose.onNodeWithText("Parallax").assertIsOff()
+
+        compose.onNodeWithText("Squircle").performClick()
+        assertEquals(IconShape.SQUIRCLE, settings.iconShape)
     }
 
     @Test

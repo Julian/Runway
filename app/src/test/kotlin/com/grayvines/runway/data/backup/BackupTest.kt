@@ -4,6 +4,7 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.settings.BadgeStyle
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.data.settings.IconShape
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.data.settings.SwipeAction
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -46,6 +47,7 @@ class BackupTest {
     private val settings =
         Settings(
             columns = 5,
+            iconShape = IconShape.SQUIRCLE,
             badgeStyle = BadgeStyle.DOT,
             drawerSwipe = DrawerSwipe.HIGH,
             drawerColumns = 6,

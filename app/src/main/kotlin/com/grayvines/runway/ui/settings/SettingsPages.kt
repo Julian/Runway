@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.settings.BadgeStyle
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.data.settings.IconShape
 import com.grayvines.runway.data.settings.Settings
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
@@ -47,33 +48,15 @@ internal fun HomeScreenPage(
     onGrantNotificationAccess: () -> Unit,
     onChange: ((Settings) -> Settings) -> Unit,
 ) {
-    Section("Grid")
-    Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { by ->
-        onChange {
-            it.copy(columns = it.columns.stepped(by, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS))
-        }
-    }
-    Stepper("Rows", settings.rows, Settings.MIN_ROWS, Settings.MAX_ROWS) { by ->
-        onChange {
-            it.copy(rows = it.rows.stepped(by, Settings.MIN_ROWS, Settings.MAX_ROWS))
-        }
-    }
-    Stepper(
-        "Dock slots",
-        settings.dockSlots,
-        Settings.MIN_DOCK_SLOTS,
-        Settings.MAX_DOCK_SLOTS,
-    ) { by ->
-        onChange {
-            it.copy(
-                dockSlots =
-                    it.dockSlots.stepped(
-                        by,
-                        Settings.MIN_DOCK_SLOTS,
-                        Settings.MAX_DOCK_SLOTS,
-                    )
-            )
-        }
+    GridSection(settings, onChange)
+
+    Section("Icons")
+    OptionRow(
+        label = "Shape",
+        current = settings.iconShape.label,
+        options = IconShape.entries.map { it.label },
+    ) { picked ->
+        onChange { it.copy(iconShape = IconShape.entries.first { e -> e.label == picked }) }
     }
 
     Section("Labels")
@@ -106,6 +89,38 @@ internal fun HomeScreenPage(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+    }
+}
+
+@Composable
+private fun GridSection(settings: Settings, onChange: ((Settings) -> Settings) -> Unit) {
+    Section("Grid")
+    Stepper("Columns", settings.columns, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS) { by ->
+        onChange {
+            it.copy(columns = it.columns.stepped(by, Settings.MIN_COLUMNS, Settings.MAX_COLUMNS))
+        }
+    }
+    Stepper("Rows", settings.rows, Settings.MIN_ROWS, Settings.MAX_ROWS) { by ->
+        onChange {
+            it.copy(rows = it.rows.stepped(by, Settings.MIN_ROWS, Settings.MAX_ROWS))
+        }
+    }
+    Stepper(
+        "Dock slots",
+        settings.dockSlots,
+        Settings.MIN_DOCK_SLOTS,
+        Settings.MAX_DOCK_SLOTS,
+    ) { by ->
+        onChange {
+            it.copy(
+                dockSlots =
+                    it.dockSlots.stepped(
+                        by,
+                        Settings.MIN_DOCK_SLOTS,
+                        Settings.MAX_DOCK_SLOTS,
+                    )
+            )
+        }
     }
 }
 

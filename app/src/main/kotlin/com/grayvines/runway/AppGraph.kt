@@ -17,7 +17,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** Application-wide singletons. */
@@ -43,6 +45,12 @@ class AppGraph(private val context: Context) {
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
     fun start() {
+        appScope.launch {
+            settings.settings
+                .map { it.iconShape }
+                .distinctUntilChanged()
+                .collect(appRepository::setIconShape)
+        }
         // Every refresh also reconciles the layout, for uninstalls missed while not running.
         appScope.launch {
             appRepository.refreshed

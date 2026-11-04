@@ -41,6 +41,7 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         val homeLabels = booleanPreferencesKey("home_labels")
         val dockLabels = booleanPreferencesKey("dock_labels")
         val drawerLabels = booleanPreferencesKey("drawer_labels")
+        val iconShape = stringPreferencesKey("icon_shape")
         val badgeStyle = stringPreferencesKey("badge_style")
         val searchBarAtTop = booleanPreferencesKey("search_bar_at_top")
         val searchTarget = stringPreferencesKey("search_target")
@@ -64,6 +65,7 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
                 homeLabels = getOrDefault(Keys.homeLabels, defaults.homeLabels),
                 dockLabels = getOrDefault(Keys.dockLabels, defaults.dockLabels),
                 drawerLabels = getOrDefault(Keys.drawerLabels, defaults.drawerLabels),
+                iconShape = enumOrDefault(Keys.iconShape, defaults.iconShape),
                 badgeStyle = enumOrDefault(Keys.badgeStyle, defaults.badgeStyle),
                 searchBarAtTop = getOrDefault(Keys.searchBarAtTop, defaults.searchBarAtTop),
                 searchTarget = this[Keys.searchTarget],
@@ -86,6 +88,7 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         prefs[Keys.homeLabels] = homeLabels
         prefs[Keys.dockLabels] = dockLabels
         prefs[Keys.drawerLabels] = drawerLabels
+        prefs[Keys.iconShape] = iconShape.name
         prefs[Keys.badgeStyle] = badgeStyle.name
         prefs[Keys.searchBarAtTop] = searchBarAtTop
         searchTarget?.let { prefs[Keys.searchTarget] = it } ?: prefs.remove(Keys.searchTarget)

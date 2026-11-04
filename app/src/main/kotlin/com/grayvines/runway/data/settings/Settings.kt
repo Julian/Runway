@@ -23,6 +23,14 @@ enum class BadgeStyle(val label: String) {
     OFF("Off"),
 }
 
+/** The outline every app icon is masked to. */
+enum class IconShape(val label: String) {
+    SYSTEM("System"),
+    CIRCLE("Circle"),
+    SQUIRCLE("Squircle"),
+    ROUNDED_SQUARE("Rounded square"),
+}
+
 /** What a swipe can be set to do. */
 @Serializable
 sealed interface SwipeAction {
@@ -39,6 +47,7 @@ data class Settings(
     val homeLabels: Boolean = false,
     val dockLabels: Boolean = false,
     val drawerLabels: Boolean = true,
+    val iconShape: IconShape = IconShape.SYSTEM,
     val badgeStyle: BadgeStyle = BadgeStyle.COUNT,
     val searchBarAtTop: Boolean = true,
     /** Package that receives the web-search intent; null picks Firefox, else the first handler. */

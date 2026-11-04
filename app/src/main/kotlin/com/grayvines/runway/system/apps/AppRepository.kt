@@ -6,17 +6,23 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.graphics.drawable.toDrawable
 import androidx.core.net.toUri
 import com.grayvines.runway.data.AppRef
+import com.grayvines.runway.data.settings.IconShape
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -36,6 +42,16 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     private val context = context.applicationContext
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
+    private val iconCache = IconCache.bitmapCache(File(this.context.cacheDir, "icons"))
+
+    /**
+     * Null until [setIconShape] delivers the persisted shape from settings, so cold start does not
+     * render every icon once under [IconShape.SYSTEM] before the user's chosen shape arrives.
+     */
+    @Volatile private var iconShape: IconShape? = null
+
+    /** Last rendered entry and cache key per app, guarded by [refreshing]. */
+    private var previousByRef: Map<AppRef, Pair<AppEntry, IconCacheKey>> = emptyMap()
 
     /**
      * Icons are drawn at most about this big; rasterising bigger is wasted memory and time. Read
@@ -79,28 +95,30 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
 
     private val callback =
         object : LauncherApps.Callback() {
-            override fun onPackageRemoved(packageName: String, user: UserHandle) = refresh()
+            override fun onPackageRemoved(packageName: String, user: UserHandle) =
+                refresh(packageName)
 
-            override fun onPackageAdded(packageName: String, user: UserHandle) = refresh()
+            override fun onPackageAdded(packageName: String, user: UserHandle) =
+                refresh(packageName)
 
-            override fun onPackageChanged(packageName: String, user: UserHandle) = refresh()
+            override fun onPackageChanged(packageName: String, user: UserHandle) =
+                refresh(packageName)
 
             override fun onPackagesAvailable(
                 packageNames: Array<String>,
                 user: UserHandle,
                 replacing: Boolean,
-            ) = refresh()
+            ) = refresh(*packageNames)
 
             override fun onPackagesUnavailable(
                 packageNames: Array<String>,
                 user: UserHandle,
                 replacing: Boolean,
-            ) = refresh()
+            ) = if (replacing) refresh(*packageNames) else refresh()
         }
 
     init {
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
-        refresh()
     }
 
     /**
@@ -117,21 +135,40 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         if (changed and STALING_CHANGES != 0) refresh()
     }
 
-    fun refresh() {
+    /** Masks every app icon to [shape], rebuilding the list when the shape changes. */
+    fun setIconShape(shape: IconShape) {
+        if (iconShape != shape) {
+            iconShape = shape
+            refresh()
+        }
+    }
+
+    fun refresh(vararg invalidatedPackages: String) {
         scope.launch {
             refreshing.withLock {
-                val previous = _apps.value.associateBy { it.ref }
-                // Rasterising every icon is the slow part of a refresh: spread it over the cores.
-                val fresh = coroutineScope {
-                    userManager.userProfiles
-                        .flatMap { user -> launcherApps.getActivityList(null, user) }
-                        .map { info -> async { info.toEntryOrNull(previous) } }
-                        .awaitAll()
+                invalidatedPackages.forEach(iconCache::invalidatePackage)
+                iconShape?.let { shape ->
+                    val previous = previousByRef
+                    val densityDpi = context.resources.displayMetrics.densityDpi
+                    // Rasterising every icon is the slow part of a refresh: spread it over the
+                    // cores.
+                    val loaded = coroutineScope {
+                        userManager.userProfiles
+                            .flatMap { user -> launcherApps.getActivityList(null, user) }
+                            .map { info ->
+                                async { info.toEntryOrNull(previous, shape, densityDpi) }
+                            }
+                            .awaitAll()
+                    }
+                        .filterNotNull()
+                    if (loaded.isNotEmpty()) {
+                        iconCache.retainOnly(loaded.mapTo(HashSet(loaded.size)) { it.second })
+                    }
+                    previousByRef = loaded.associateBy { it.first.ref }
+                    val fresh = loaded.map { it.first }.sortedWith(LabelOrder.entryComparator())
+                    _apps.value = fresh
+                    _refreshed.tryEmit(fresh)
                 }
-                    .filterNotNull()
-                    .sortedWith(LabelOrder.entryComparator())
-                _apps.value = fresh
-                _refreshed.tryEmit(fresh)
             }
         }
     }
@@ -206,38 +243,64 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
      * the launcher, from ever loading.
      */
     @Suppress("TooGenericExceptionCaught") // whatever a broken package throws, it is left out
-    private fun LauncherActivityInfo.toEntryOrNull(previous: Map<AppRef, AppEntry>): AppEntry? =
+    private fun LauncherActivityInfo.toEntryOrNull(
+        previous: Map<AppRef, Pair<AppEntry, IconCacheKey>>,
+        shape: IconShape,
+        densityDpi: Int,
+    ): Pair<AppEntry, IconCacheKey>? =
         try {
-            toEntry(previous)
+            val appContext = context
+            val profileSerial =
+                userManager.getSerialNumberForUser(user) // persistable, unlike UserHandle
+            val ref = AppRef(componentName.flattenToString(), profileSerial)
+            val currentLabel = label.toString()
+            val (versionCode, lastUpdateTime) = packageMetadata(appContext.packageManager)
+            val cacheKey =
+                IconCacheKey(
+                    packageName = componentName.packageName,
+                    component = componentName.flattenToString(),
+                    profileSerial = profileSerial,
+                    versionCode = versionCode,
+                    lastUpdateTime = lastUpdateTime,
+                    densityDpi = densityDpi,
+                    shape = shape,
+                )
+            val prev = previous[ref]
+            val unchanged =
+                prev != null && prev.second == cacheKey && prev.first.label == currentLabel
+            if (unchanged && iconCache.contains(cacheKey)) {
+                prev
+            } else {
+                val size = iconPx
+                val androidBitmap =
+                    iconCache.getOrPut(cacheKey) { renderIcon(appContext, size, shape) }
+                val prevEntry = prev?.first
+                val samePixels =
+                    prevEntry != null && prevEntry.bitmap.asAndroidBitmap().sameAs(androidBitmap)
+                val bitmap = if (samePixels) prevEntry.bitmap else androidBitmap.asImageBitmap()
+                val icon =
+                    if (samePixels) {
+                        prevEntry.icon
+                    } else {
+                        bitmap.asAndroidBitmap().toDrawable(appContext.resources)
+                    }
+                val entry =
+                    AppEntry(
+                        component = componentName,
+                        user = user,
+                        profileSerial = profileSerial,
+                        label = currentLabel,
+                        icon = icon,
+                        bitmap = bitmap,
+                    )
+                entry to cacheKey
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: RuntimeException) {
             Log.w(TAG, "could not read $componentName; left out of the list", e)
             null
         }
-
-    private fun LauncherActivityInfo.toEntry(previous: Map<AppRef, AppEntry>): AppEntry {
-        val profileSerial =
-            userManager.getSerialNumberForUser(user) // persistable, unlike UserHandle
-        val ref = AppRef(componentName.flattenToString(), profileSerial)
-        val drawable = getBadgedIcon(0) // device density, with work badge if in a work profile
-        val androidBitmap = drawable.toBitmap(iconPx, iconPx)
-        val prevBitmap = previous[ref]?.bitmap
-        val bitmap =
-            if (prevBitmap != null && prevBitmap.asAndroidBitmap().sameAs(androidBitmap)) {
-                prevBitmap
-            } else {
-                androidBitmap.asImageBitmap()
-            }
-        return AppEntry(
-            component = componentName,
-            user = user,
-            profileSerial = profileSerial,
-            label = label.toString(),
-            icon = drawable,
-            bitmap = bitmap,
-        )
-    }
 
     private companion object {
         const val STALING_CHANGES =
@@ -252,3 +315,34 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         const val TAG = "Runway"
     }
 }
+
+internal fun LauncherActivityInfo.renderIcon(
+    context: Context,
+    size: Int,
+    shape: IconShape,
+): Bitmap =
+    IconRenderer.render(
+        drawable = getIcon(0),
+        sizePx = size,
+        shape = shape,
+        badge =
+            if (user != Process.myUserHandle()) {
+                { shaped ->
+                    context.packageManager
+                        .getUserBadgedIcon(shaped.toDrawable(context.resources), user)
+                        .toBitmap(size, size)
+                }
+            } else {
+                null
+            },
+    )
+
+internal fun LauncherActivityInfo.packageMetadata(pm: PackageManager): Pair<Long, Long> =
+    try {
+        val pkg = pm.getPackageInfo(componentName.packageName, 0)
+        pkg.longVersionCode to pkg.lastUpdateTime
+    } catch (_: PackageManager.NameNotFoundException) {
+        // Work-profile-only packages may not be visible to the primary user's PackageManager.
+        val apkModified = applicationInfo.sourceDir?.let { File(it).lastModified() } ?: 0L
+        0L to maxOf(apkModified, firstInstallTime)
+    }

@@ -44,7 +44,7 @@ private enum class SettingsPage(
     val summary: String? = null,
     val parent: SettingsPage? = null,
 ) {
-    HOME("Home screen", "Grid, dock, labels, badges and wallpaper"),
+    HOME("Home screen", "Grid, dock, icons, labels, badges and wallpaper"),
     DRAWER("Drawer", "Swipe, keyboard, columns, labels and hidden apps"),
     HIDDEN_APPS("Hidden apps", parent = DRAWER),
     SEARCH_BAR("Search bar", "Where it sits and what it searches with"),

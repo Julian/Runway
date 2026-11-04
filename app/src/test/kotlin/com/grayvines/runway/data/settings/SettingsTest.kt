@@ -49,6 +49,7 @@ class SettingsTest {
                     homeLabels = true,
                     dockLabels = true,
                     drawerLabels = false,
+                    iconShape = IconShape.SQUIRCLE,
                     badgeStyle = BadgeStyle.DOT,
                     searchBarAtTop = false,
                     searchTarget = "org.mozilla.firefox",
