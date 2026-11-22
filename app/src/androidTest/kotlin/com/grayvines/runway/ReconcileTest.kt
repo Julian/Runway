@@ -2,7 +2,6 @@ package com.grayvines.runway
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.grayvines.runway.data.AppRef
-import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.autoFill
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -31,8 +30,8 @@ class ReconcileTest : LauncherFixture() {
     }
 
     private fun placed(ref: AppRef) = runBlocking {
-        listOf(Container.HOME, Container.DOCK)
-            .flatMap { graph.workspace.observe(it).first().pages }
+        val snapshot = graph.workspace.observeSnapshot().first()
+        (snapshot.home.pages + snapshot.dock.pages)
             .flatMap { it.items }
             .any { it.component == ref.component && it.profile == ref.profile }
     }

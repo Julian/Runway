@@ -39,7 +39,6 @@ import com.grayvines.runway.data.PlacedItem
 import com.grayvines.runway.data.addWidget
 import com.grayvines.runway.data.autoFill
 import com.grayvines.runway.data.observeBadgeMutes
-import com.grayvines.runway.data.observeFolders
 import com.grayvines.runway.data.observeHiddenApps
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.Settings
@@ -175,6 +174,11 @@ open class LauncherFixture {
      */
     @After
     fun putKeyboardAway() {
+        // Drain any Compose animation or overscroll fling parked on the test clock before
+        // compose.activity calls Instrumentation.waitForIdleSync(), which waits on the main looper
+        // without advancing the test clock and would otherwise hang forever on active redraws.
+        compose.mainClock.autoAdvance = true
+        runCatching { compose.waitForIdle() }
         val activity = runCatching { compose.activity }.getOrNull() ?: return
         if (activity.isDestroyed) return
         // Never masks the test's own failure: a keyboard that will not go is not this test's fault.
@@ -216,24 +220,40 @@ open class LauncherFixture {
     protected fun dismissKeyboard() {
         val window = compose.activity.window
         compose.runOnUiThread {
-            window.currentFocus?.clearFocus()
+            // Do not call window.currentFocus?.clearFocus(): on AndroidComposeView the root
+            // container immediately re-focuses it, which makes a focused Compose text field ask
+            // for the IME again right after hide(Type.ime()).
             WindowCompat.getInsetsController(window, window.decorView).hide(Type.ime())
         }
-        awaitNoKeyboard(TIMEOUT_MS)
+        awaitNoKeyboard(LONG_TIMEOUT_MS)
     }
 
     /**
      * Waits for the keyboard to be gone. The insets say "hidden" as soon as the hide is asked for;
-     * the keyboard's own window is still on its way out, and a window torn down under it leaves the
-     * system bringing the keyboard back for the next one, so wait for the window itself as well.
+     * the keyboard's own window is still on its way out, and on a cold start the IME service can
+     * still have a show or its back callback in flight before its window even appears, swallowing
+     * the next Back press. Wait for the insets, the window, and the IME service itself to be idle.
      */
     protected fun awaitNoKeyboard(timeoutMillis: Long = LONG_TIMEOUT_MS) {
         val window = compose.activity.window
         val keyboard = keyboardPackage()
         waitUntil(timeoutMillis) {
             ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(Type.ime()) != true &&
-                (keyboard == null || !device.hasObject(By.pkg(keyboard)))
+                (keyboard == null || !device.hasObject(By.pkg(keyboard))) &&
+                !imeActiveInSystem()
         }
+    }
+
+    /**
+     * Whether the system's input method service still reports a shown keyboard, an in-flight show
+     * request, or an active IME back callback (true during a slow cold start before the window is
+     * drawn).
+     */
+    private fun imeActiveInSystem(): Boolean {
+        val dump = device.executeShellCommand("dumpsys input_method")
+        return "mInputShown=true" in dump ||
+            "mShowInputRequested=true" in dump ||
+            "mBackCallbackRegistered=true" in dump
     }
 
     /**
@@ -867,11 +887,11 @@ open class LauncherFixture {
         return pull
     }
 
-    /** Every placement of [label], across home and dock. */
+    /** Every placement of [label], across home and dock, read from one atomic snapshot. */
     protected fun placementsOf(label: String): List<PlacedItem> = runBlocking {
         val ref = apps.first { it.label == label }.ref
-        listOf(Container.HOME, Container.DOCK)
-            .flatMap { graph.workspace.observe(it).first().pages }
+        val snapshot = graph.workspace.observeSnapshot().first()
+        (snapshot.home.pages + snapshot.dock.pages)
             .flatMap { it.items }
             .filter { it.component == ref.component && it.profile == ref.profile }
     }
@@ -992,16 +1012,18 @@ open class LauncherFixture {
         folderLabels(Container.DOCK) { it.x == slot }
 
     private fun folderLabels(container: Container, at: (PlacedItem) -> Boolean) = runBlocking {
+        // Read placements and folder contents from one transaction: a folder deletion landing
+        // between two separate queries otherwise leaves a placement whose folder row is gone.
+        val snapshot = graph.workspace.observeSnapshot().first()
+        val content = if (container == Container.DOCK) snapshot.dock else snapshot.home
         val folder =
-            graph.workspace.observe(container).first().pages.first().items.firstOrNull {
-                it.kind == ItemKind.FOLDER && at(it)
-            }
+            content.pages.first().items.firstOrNull { it.kind == ItemKind.FOLDER && at(it) }
         folder?.let { item ->
-            val apps = graph.appRepository.apps.first { it.isNotEmpty() }
-            val content = graph.workspace.observeFolders().first().first { it.id == item.folderId }
-            val labels = content.apps.map { ref -> apps.first { it.ref == ref }.label }
+            val installed = graph.appRepository.apps.first { it.isNotEmpty() }
+            val held = snapshot.folders.first { it.id == item.folderId }
+            val labels = held.apps.map { ref -> installed.first { it.ref == ref }.label }
             // As the sheet shows them: its hand order, or the drawer's.
-            if (content.handSorted) labels else labels.sortedWith(LabelOrder.comparator())
+            if (held.handSorted) labels else labels.sortedWith(LabelOrder.comparator())
         }
     }
 

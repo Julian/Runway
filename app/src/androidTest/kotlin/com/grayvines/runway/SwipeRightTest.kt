@@ -203,6 +203,10 @@ class SwipeRightTest : LauncherFixture() {
         waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == FIXTURE_PACKAGE }
         sendHomeIntent()
         waitUntil(LONG_TIMEOUT_MS) { device.currentPackageName == app.packageName }
+        // Advance Compose's test clock once the launcher is back on screen so the pager's fling
+        // finishes and releases its EdgeEffect; otherwise StretchOverscrollNode keeps redrawing on
+        // real vsyncs while teardown's waitForIdleSync waits forever without advancing the clock.
+        compose.waitForIdle()
     }
 
     /** Given the time an app takes to come up on a slow device, nothing did. */

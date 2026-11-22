@@ -23,8 +23,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.settings.DrawerSwipe
@@ -402,7 +400,7 @@ class DrawerTest : LauncherFixture() {
         searchField().assertIsFocused()
         awaitKeyboard()
         device.pressBack() // the keyboard's own Back: it goes, the field keeps focus
-        waitUntil(LONG_TIMEOUT_MS) { !keyboardVisible() }
+        awaitNoKeyboard()
         searchField().assertIsFocused()
         // Hold the clock: with it running, the first look would already be the finished close.
         compose.mainClock.autoAdvance = false
@@ -418,10 +416,6 @@ class DrawerTest : LauncherFixture() {
         }
         awaitDrawerClosed()
     }
-
-    private fun keyboardVisible() =
-        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
-            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
 
     @Test
     fun typingQuicklyKeepsEveryCharacter() {
@@ -651,7 +645,7 @@ class DrawerTest : LauncherFixture() {
     /** With the keyboard up the first back only hides that, as in any app; then back closes. */
     private fun closeDrawerWithBack() {
         device.pressBack()
-        if (!drawerGoneWithin(KEYBOARD_GRACE_MS)) device.pressBack()
+        if (!drawerGoneWithin(KEYBOARD_GRACE_MS)) pressBack()
         awaitDrawerClosed()
     }
 

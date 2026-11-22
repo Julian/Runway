@@ -169,6 +169,7 @@ class WidgetDragTest : LauncherFixture() {
         holdDragAt(widgetCentre(), grid.homeCell(2, 2))
         pressBack()
         awaitGone(DRAG_OVERLAY_TAG)
+        release()
         assertEquals(0 to 0, widget().let { it.x to it.y })
         awaitFrame()
     }
@@ -236,8 +237,10 @@ class WidgetDragTest : LauncherFixture() {
         compose.onNodeWithTag(WIDGET_TAG).fetchSemanticsNode().boundsInRoot.center
 
     private fun widget(): PlacedItem = runBlocking {
-        listOf(Container.HOME)
-            .flatMap { graph.workspace.observe(it).first().pages }
+        graph.workspace
+            .observe(Container.HOME)
+            .first()
+            .pages
             .flatMap { it.items }
             .single { it.kind == ItemKind.WIDGET }
     }

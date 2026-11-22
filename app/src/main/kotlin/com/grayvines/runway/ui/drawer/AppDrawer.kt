@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -319,7 +320,12 @@ private fun SearchField(query: DrawerQuery, keyboard: Boolean, open: Boolean, mo
         onChange = query.onChange,
         hint = "Search apps",
         modifier = modifier,
-        fieldModifier = Modifier.focusRequester(focus).testTag(DRAWER_SEARCH_TAG),
+        // Refuse focus while closing or covered so clearFocus() cannot bounce focus back onto the
+        // field via Android's root refocus in non-touch mode.
+        fieldModifier =
+            Modifier.focusProperties { canFocus = open }
+                .focusRequester(focus)
+                .testTag(DRAWER_SEARCH_TAG),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { query.onSubmit() }),
     )

@@ -10,7 +10,6 @@ import com.grayvines.runway.ui.home.DRAG_OVERLAY_TAG
 import com.grayvines.runway.ui.home.DragMotion
 import com.grayvines.runway.ui.home.WORKSPACE_TAG
 import kotlin.math.abs
-import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

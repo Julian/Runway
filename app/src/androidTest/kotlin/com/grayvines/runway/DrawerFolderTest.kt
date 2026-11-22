@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.NEW_FOLDER_NAME
@@ -477,28 +476,18 @@ class DrawerFolderTest : LauncherFixture() {
 
     /**
      * Each drawer folder's app labels, as the folder lists them: in its hand order, or as the
-     * drawer sorts them. One read: a write landing between a folders query and a placements query
-     * showed placements of a folder the other query had not seen, and so nothing at all.
+     * drawer sorts them. One atomic snapshot: a write landing between a folders query and a
+     * placements query otherwise showed placements of a folder the other query had not seen.
      */
     private fun drawerFolders(): List<List<String>> = runBlocking {
-        val installed = graph.appRepository.apps.first()
-        val workspace = graph.workspace
-        workspace.read {
-            val apps = workspace.dao.folderApps().groupBy { it.folderId }
-            val folders = workspace.dao.folders().associateBy { it.id }
-            workspace.dao
-                .items()
-                .filter { it.container == Container.DRAWER }
-                .mapNotNull { placement ->
-                    folders[placement.folderId]?.let { folder ->
-                        val held = apps[folder.id].orEmpty()
-                        val labels = held.map { row ->
-                            installed.first { it.ref == AppRef(row.component, row.profile) }.label
-                        }
-                        val handSorted = held.any { it.position != null }
-                        if (handSorted) labels else labels.sortedWith(LabelOrder.comparator())
-                    }
-                }
+        val installed = graph.appRepository.apps.first { it.isNotEmpty() }
+        val snapshot = graph.workspace.observeSnapshot().first()
+        val folders = snapshot.folders.associateBy { it.id }
+        snapshot.drawer.mapNotNull { placement ->
+            folders[placement.folderId]?.let { folder ->
+                val labels = folder.apps.map { ref -> installed.first { it.ref == ref }.label }
+                if (folder.handSorted) labels else labels.sortedWith(LabelOrder.comparator())
+            }
         }
     }
 
