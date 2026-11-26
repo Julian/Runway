@@ -2,12 +2,14 @@ package com.grayvines.runway.system.badges
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.UserHandle
 import android.os.UserManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.grayvines.runway.model.ActiveNotification
@@ -38,6 +40,7 @@ class BadgeHost(context: Context, scope: CoroutineScope) {
             scope = scope,
             dispatcher = Dispatchers.IO,
             onDisconnect = profileSerials::clear,
+            onRefreshWhileDisconnected = ::requestRebindIfGranted,
             readCounts = ::readActiveNotifications,
         )
 
@@ -45,15 +48,42 @@ class BadgeHost(context: Context, scope: CoroutineScope) {
     val counts: StateFlow<Map<PackageKey, Int>> = poller.counts
 
     /** True when the user has granted Runway notification listener access in system Settings. */
+    @Suppress("TooGenericExceptionCaught")
     fun hasAccess(): Boolean =
-        notificationManager.isNotificationListenerAccessGranted(listenerComponent)
+        try {
+            notificationManager.isNotificationListenerAccessGranted(listenerComponent)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not check notification listener access", e)
+            false
+        }
 
-    /** Opens the system's Notification access screen so the user can grant or revoke access. */
-    fun openAccessSettings() {
-        context.startActivity(
-            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+    /**
+     * Opens the system's Notification access screen so the user can grant or revoke access; false
+     * when this device has no such screen or refuses it.
+     */
+    fun openAccessSettings(): Boolean =
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no notification access settings screen", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "not allowed to open notification access settings", e)
+            false
+        }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun requestRebindIfGranted() {
+        if (!hasAccess()) return
+        try {
+            NotificationListenerService.requestRebind(listenerComponent)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not request notification listener rebind", e)
+        }
     }
 
     /**
@@ -132,6 +162,7 @@ internal class BadgePoller<L : Any>(
     scope: CoroutineScope,
     dispatcher: CoroutineDispatcher,
     private val onDisconnect: () -> Unit = {},
+    private val onRefreshWhileDisconnected: (() -> Unit)? = null,
     private val readCounts: (L) -> Map<PackageKey, Int>,
 ) {
     private val stateLock = Any()
@@ -176,7 +207,7 @@ internal class BadgePoller<L : Any>(
                     true
                 }
             }
-        if (active) requests.trySend(Unit)
+        if (active || onRefreshWhileDisconnected != null) requests.trySend(Unit)
     }
 
     fun setForTest(counts: Map<PackageKey, Int>) {
@@ -189,9 +220,13 @@ internal class BadgePoller<L : Any>(
                 listener
                     ?: run {
                         _counts.value = emptyMap()
-                        return
+                        null
                     }
             }
+        if (current == null) {
+            onRefreshWhileDisconnected?.invoke()
+            return
+        }
         val next = readCounts(current)
         synchronized(stateLock) {
             if (listener === current) {

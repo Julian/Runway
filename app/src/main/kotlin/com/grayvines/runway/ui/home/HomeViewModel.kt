@@ -195,7 +195,9 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         HomeMenuHost(
             graph,
             viewModelScope,
-            awaitPages = { count -> state.first { it.homePages.size >= count } },
+            awaitPages = { count ->
+                withTimeoutOrNull(REFLECT_TIMEOUT_MS) { state.first { it.homePages.size >= count } }
+            },
             mayOpen = { dragging.drag.value == null },
         )
 
@@ -239,11 +241,12 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 if (move.newWidget != null) return widgetPicker.place(move)
                 if (move.removed) {
                     // A widget's host id goes with it, or the provider would go on thinking it is
-                    // placed.
-                    val widget = state.value.item(move.itemId)?.appWidgetId
+                    // placed. Read from the deleted row so a concurrent remap cannot leak the id.
                     return attempt("remove the item; it stays where it was") {
-                        graph.workspace.removeItem(move.itemId)
-                        widget?.let(graph.widgets::deleteId)
+                        graph.workspace
+                            .removeItem(move.itemId)
+                            ?.appWidgetId
+                            ?.let(graph.widgets::deleteId)
                     }
                 }
                 val saved =
@@ -266,11 +269,17 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     ?: Log.w(TAG, "the layout never showed $move")
             }
 
-            override suspend fun addPage(container: Container, index: Int): Boolean =
+            override suspend fun addPage(container: Container, index: Int): Boolean {
+                var reflected = false
                 attempt("add a page") {
                     graph.workspace.addPage(container, index)
-                    state.first { it.pages(container).size > index }
+                    reflected =
+                        withTimeoutOrNull(REFLECT_TIMEOUT_MS) {
+                            state.first { it.pages(container).size > index }
+                        } != null
                 }
+                return reflected
+            }
 
             override suspend fun pruneEmptyPages() {
                 attempt("remove empty pages") { graph.workspace.pruneEmptyPages() }

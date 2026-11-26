@@ -21,23 +21,26 @@ suspend fun WorkspaceRepository.addWidget(
     spanX: Int,
     spanY: Int,
     displaced: Map<Long, Footprint> = emptyMap(),
-): Long? = write {
-    if (!makeRoom(Container.HOME, page, displaced, target = Footprint(x, y, spanX, spanY))) {
-        null
-    } else {
-        dao.insertItem(
-            ItemEntity(
-                kind = ItemKind.WIDGET,
-                container = Container.HOME,
-                pageIndex = page,
-                x = x,
-                y = y,
-                spanX = spanX,
-                spanY = spanY,
-                appWidgetId = appWidgetId,
-                provider = provider,
+): Long? {
+    if (spanX < 1 || spanY < 1) return null
+    return write {
+        if (!makeRoom(Container.HOME, page, displaced, target = Footprint(x, y, spanX, spanY))) {
+            null
+        } else {
+            dao.insertItem(
+                ItemEntity(
+                    kind = ItemKind.WIDGET,
+                    container = Container.HOME,
+                    pageIndex = page,
+                    x = x,
+                    y = y,
+                    spanX = spanX,
+                    spanY = spanY,
+                    appWidgetId = appWidgetId,
+                    provider = provider,
+                )
             )
-        )
+        }
     }
 }
 
@@ -68,16 +71,17 @@ suspend fun WorkspaceRepository.resizeWidget(
  * release them from the host.
  */
 suspend fun WorkspaceRepository.remapWidgets(remapped: Map<Int, Int>): Set<Int> {
-    if (remapped.isEmpty()) return emptySet()
+    val valid = remapped.filterValues { newId -> newId > 0 }
+    if (valid.isEmpty()) return emptySet()
     return write {
         val used = mutableSetOf<Int>()
         // Read before any row is written: an old id in one row may be the new id of another, and a
         // query per old id would then remap the first row twice.
         for (item in dao.itemsOfKind(ItemKind.WIDGET)) {
-            val newId = item.appWidgetId?.let(remapped::get) ?: continue
+            val newId = item.appWidgetId?.takeIf { it > 0 }?.let(valid::get) ?: continue
             dao.updateItem(item.copy(appWidgetId = newId))
             used += newId
         }
-        remapped.values.toSet() - used
+        valid.values.toSet() - used
     }
 }

@@ -51,13 +51,17 @@ class AppGraph(private val context: Context) {
                 .distinctUntilChanged()
                 .collect(appRepository::setIconShape)
         }
-        // Every refresh also reconciles the layout, for uninstalls missed while not running.
+        // Every reconciling refresh also reconciles the layout, for uninstalls missed while not
+        // running; packages marked temporarily unavailable by the system are preserved.
         appScope.launch {
             appRepository.refreshed
-                .filter { it.isNotEmpty() }
-                .collect { apps ->
+                .filter { it.apps.isNotEmpty() }
+                .collect { snapshot ->
                     attempt("reconcile the layout with the installed apps") {
-                        workspace.retainApps(apps.mapTo(mutableSetOf()) { it.ref })
+                        workspace.retainApps(
+                            snapshot.apps.mapTo(mutableSetOf()) { it.ref },
+                            preservePackages = snapshot.unavailable,
+                        )
                     }
                 }
         }

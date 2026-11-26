@@ -20,7 +20,9 @@ suspend fun WorkspaceRepository.removeFromFolder(folderId: Long, app: AppRef) = 
 }
 
 /** Deletes every folder with no apps in it, and (by cascade) every placement of each. */
-suspend fun WorkspaceRepository.pruneEmptyFolders() = write { dao.deleteEmptyFolders() }
+suspend fun WorkspaceRepository.pruneEmptyFolders() = write {
+    if (dao.deleteEmptyFolders() > 0) dao.dropTrailingEmptyPages()
+}
 
 /**
  * Puts the folder's apps in [order], the order its sheet was left showing, and keeps them that way:
@@ -30,8 +32,10 @@ suspend fun WorkspaceRepository.pruneEmptyFolders() = write { dao.deleteEmptyFol
  */
 suspend fun WorkspaceRepository.reorderFolder(folderId: Long, order: List<AppRef>) = write {
     val held = dao.folderApps(folderId).map { it.ref }
-    val placed = order.filter { it in held }
-    (placed + held.filterNot { it in placed }).forEachIndexed { position, app ->
+    val heldSet = held.toHashSet()
+    val placed = order.distinct().filter { it in heldSet }
+    val placedSet = placed.toHashSet()
+    (placed + held.filterNot { it in placedSet }).forEachIndexed { position, app ->
         dao.setFolderPosition(folderId, app.component, app.profile, position)
     }
 }

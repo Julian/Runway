@@ -4,7 +4,9 @@ import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.settings.SettingsRepository
 import com.grayvines.runway.system.widgets.WidgetHost
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 /** Makes a backup of the launcher as it is, and makes the launcher into one. */
 class BackupService(
@@ -26,15 +28,18 @@ class BackupService(
         quiet: Set<Long> = emptySet(),
     ): Restored {
         val backup = Backup.fromJson(text)
-        val restored =
-            workspace.restoreLayout(
-                backup.layout,
-                installed,
-                quiet,
-                bindWidget = widgets::restore,
-                deleteWidget = widgets::deleteId,
-            )
-        settings.update { backup.settings }
-        return restored
+        return withContext(NonCancellable) {
+            val bindWidget = widgets.restorer()
+            val restored =
+                workspace.restoreLayout(
+                    backup.layout,
+                    installed,
+                    quiet,
+                    bindWidget = bindWidget,
+                    deleteWidget = widgets::deleteId,
+                )
+            settings.replace(backup.settings)
+            restored
+        }
     }
 }

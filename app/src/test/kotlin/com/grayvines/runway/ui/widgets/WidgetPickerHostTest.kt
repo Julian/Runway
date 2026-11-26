@@ -10,10 +10,12 @@ import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.system.widgets.Widgets
+import com.grayvines.runway.system.widgets.parseWidgetRemap
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -350,6 +352,110 @@ class WidgetPickerHostTest {
             host.open()
             assertEquals(emptyList<WidgetProvider>(), host.providers.first { it != null })
         }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `cancelling while suspended in a bind prompt releases the allocated widget id`() = runTest {
+        workspace.ensureInitialised()
+        allowImmediateBind = false
+        val promptStarted = CompletableDeferred<Unit>()
+        val host =
+            WidgetPickerHost(
+                workspace = workspace,
+                widgets = widgets,
+                scope = backgroundScope,
+                lookup = lookup,
+                shownPage = { 0 },
+            )
+        host.prompts =
+            object : WidgetPrompts {
+                override suspend fun requestBind(id: Int, provider: WidgetProvider): Boolean {
+                    promptStarted.complete(Unit)
+                    CompletableDeferred<Boolean>().await()
+                    return false
+                }
+
+                override suspend fun configure(id: Int): Boolean = true
+            }
+
+        val move =
+            PendingMove(
+                itemId = 0,
+                container = Container.HOME,
+                page = 0,
+                x = 0,
+                y = 0,
+                displaced = emptyMap(),
+                newWidget = provider(),
+            )
+        val job = launch { host.place(move) }
+        promptStarted.await()
+        job.cancel()
+        advanceUntilIdle()
+
+        assertEquals(listOf(101), allocated)
+        assertEquals(listOf(101), deleted)
+    }
+
+    @Test
+    fun `place returns false without throwing when allocateId or a prompt throws RuntimeException`() =
+        runTest {
+            workspace.ensureInitialised()
+            val move =
+                PendingMove(
+                    itemId = 0,
+                    container = Container.HOME,
+                    page = 0,
+                    x = 0,
+                    y = 0,
+                    displaced = emptyMap(),
+                    newWidget = provider(),
+                )
+
+            val failingAllocHost =
+                WidgetPickerHost(
+                    workspace = workspace,
+                    widgets =
+                        object : Widgets by widgets {
+                            override fun allocateId(): Int = error("host dead")
+                        },
+                    scope = backgroundScope,
+                    lookup = lookup,
+                    shownPage = { 0 },
+                )
+            assertFalse(failingAllocHost.place(move))
+
+            allowImmediateBind = false
+            val host =
+                WidgetPickerHost(
+                    workspace = workspace,
+                    widgets = widgets,
+                    scope = backgroundScope,
+                    lookup = lookup,
+                    shownPage = { 0 },
+                )
+            host.prompts =
+                object : WidgetPrompts {
+                    override suspend fun requestBind(id: Int, provider: WidgetProvider): Boolean =
+                        error("prompt crashed")
+
+                    override suspend fun configure(id: Int): Boolean = true
+                }
+            assertFalse(host.place(move))
+            assertEquals(listOf(101), allocated)
+            assertEquals(listOf(101), deleted)
+        }
+
+    @Test
+    fun `parseWidgetRemap drops invalid new ids and returns orphan or superseded valid new ids`() {
+        val (remapped, extraUnused) =
+            parseWidgetRemap(
+                oldIds = intArrayOf(0, -1, 10, 10, 20),
+                newIds = intArrayOf(50, 60, 100, 101, 0),
+            )
+        assertEquals(mapOf(10 to 101), remapped)
+        assertEquals(setOf(50, 60, 100), extraUnused)
+    }
 
     private fun provider(targetW: Int = 1, targetH: Int = 1, needsSetup: Boolean = false) =
         WidgetProvider(

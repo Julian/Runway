@@ -25,8 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -129,6 +131,7 @@ fun WidgetCell(
     HostedWidget(
         id = id,
         info = info,
+        fallbackLabel = item.label,
         size = SizeF(cell.width.value * item.spanX, cell.height.value * item.spanY),
         framed = framed,
         lifted = lifted,
@@ -138,9 +141,11 @@ fun WidgetCell(
 }
 
 @Composable
+@Suppress("LongParameterList")
 private fun HostedWidget(
     id: Int,
     info: AppWidgetProviderInfo,
+    fallbackLabel: String,
     size: SizeF,
     framed: Boolean,
     lifted: Boolean,
@@ -149,11 +154,27 @@ private fun HostedWidget(
 ) {
     val context = LocalContext.current
     val host = context.appGraph.widgets
-    val label = remember(info) { info.loadLabel(context.packageManager) }
+    val label =
+        remember(info, fallbackLabel) {
+            runCatching { info.loadLabel(context.packageManager) }.getOrDefault(fallbackLabel)
+        }
+    var viewFailed by remember(id, info) { mutableStateOf(false) }
+    if (viewFailed) {
+        Placeholder(label, lifted, modifier)
+        return
+    }
     key(id) {
         AndroidView(
             factory = { ctx ->
-                WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { refs.frame = it }
+                val frame = WidgetFrame(ctx)
+                val view = host.createView(ctx, id, info)
+                if (view == null) {
+                    viewFailed = true
+                } else {
+                    frame.hosting(view)
+                    refs.frame = frame
+                }
+                frame
             },
             update = { f ->
                 f.muted = framed
@@ -165,7 +186,7 @@ private fun HostedWidget(
                     }
                 if (size != f.reportedSize) {
                     f.reportedSize = size
-                    f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
+                    runCatching { f.widget?.updateAppWidgetSize(Bundle(), listOf(size)) }
                 }
             },
             onRelease = { f ->

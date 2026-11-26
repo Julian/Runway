@@ -9,9 +9,11 @@ import com.grayvines.runway.system.widgets.Widgets
 import com.grayvines.runway.ui.attempt
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.WorkspaceLookup
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -101,9 +103,15 @@ class WidgetPickerHost(
      */
     suspend fun place(move: PendingMove): Boolean {
         val provider = move.newWidget ?: return false
-        val id = bound(provider) ?: return false
-        val at = Footprint(move.x, move.y, move.spanX, move.spanY)
-        return store(id, provider, move.page, at, move.displaced)
+        var placed = false
+        attempt("add the widget") {
+            val id = bound(provider)
+            if (id != null) {
+                val at = Footprint(move.x, move.y, move.spanX, move.spanY)
+                placed = store(id, provider, move.page, at, move.displaced)
+            }
+        }
+        return placed
     }
 
     /**
@@ -148,19 +156,22 @@ class WidgetPickerHost(
      * would not have it: the system asks their leave to bind the first time, and a widget's setup
      * screen can be cancelled. Only a refused bind is worth a notice; a cancelled setup was theirs.
      */
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun bound(provider: WidgetProvider): Int? {
         val id = widgets.allocateId()
-        val allowed = widgets.bind(id, provider) || prompts?.requestBind(id, provider) == true
-        if (!allowed) {
+        return try {
+            val allowed = widgets.bind(id, provider) || prompts?.requestBind(id, provider) == true
+            if (!allowed) _notices.tryEmit("Runway was not allowed to add widgets")
+            val ready = allowed && (!provider.needsSetup || prompts?.configure(id) == true)
+            if (!ready) widgets.deleteId(id)
+            id.takeIf { ready }
+        } catch (e: CancellationException) {
             widgets.deleteId(id)
-            _notices.tryEmit("Runway was not allowed to add widgets")
-            return null
-        }
-        if (provider.needsSetup && prompts?.configure(id) != true) {
+            throw e
+        } catch (e: RuntimeException) {
             widgets.deleteId(id)
-            return null
+            throw e
         }
-        return id
     }
 
     /** Stores the placement; the id goes back to the host if the layout would not take it. */
@@ -170,23 +181,24 @@ class WidgetPickerHost(
         page: Int,
         at: Footprint,
         displaced: Map<Long, Footprint>,
-    ): Boolean {
-        var stored: Long? = null
-        attempt("store the widget") {
-            stored =
-                workspace.addWidget(
-                    id,
-                    provider.providerName,
-                    page,
-                    at.x,
-                    at.y,
-                    at.width,
-                    at.height,
-                    displaced,
-                )
+    ): Boolean =
+        withContext(NonCancellable) {
+            var stored: Long? = null
+            attempt("store the widget") {
+                stored =
+                    workspace.addWidget(
+                        id,
+                        provider.providerName,
+                        page,
+                        at.x,
+                        at.y,
+                        at.width,
+                        at.height,
+                        displaced,
+                    )
+            }
+            val itemId = stored
+            if (itemId == null) widgets.deleteId(id) else onPlaced(itemId)
+            itemId != null
         }
-        val itemId = stored
-        if (itemId == null) widgets.deleteId(id) else onPlaced(itemId)
-        return itemId != null
-    }
 }

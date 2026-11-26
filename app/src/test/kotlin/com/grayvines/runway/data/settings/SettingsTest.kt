@@ -1,12 +1,21 @@
 package com.grayvines.runway.data.settings
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.grayvines.runway.data.AppRef
 import java.io.File
+import java.io.IOException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -92,5 +101,91 @@ class SettingsTest {
                 ),
                 repo.settings.first(),
             )
+        }
+
+    @Test
+    fun `clamping turns a blank search target into null`() {
+        assertNull(Settings(searchTarget = "").clamped().searchTarget)
+        assertNull(Settings(searchTarget = "   ").clamped().searchTarget)
+        assertEquals(
+            "org.mozilla.firefox",
+            Settings(searchTarget = " org.mozilla.firefox ").clamped().searchTarget,
+        )
+    }
+
+    @Test
+    fun `IOException reading preferences falls back to default settings`() = runTest {
+        val failingStore =
+            object : DataStore<Preferences> {
+                override val data: Flow<Preferences> = flow {
+                    throw IOException("disk unavailable")
+                }
+
+                override suspend fun updateData(
+                    transform: suspend (t: Preferences) -> Preferences
+                ): Preferences = error("unused")
+            }
+        val repo = SettingsRepository(failingStore)
+        assertEquals(Settings(), repo.settings.first())
+    }
+
+    @Test
+    fun `unrelated update preserves unknown future enum and swipe values on disk, while replace clears them`() =
+        runTest {
+            val store =
+                PreferenceDataStoreFactory.create(
+                    corruptionHandler = settingsCorruptionHandler,
+                    scope = backgroundScope,
+                ) {
+                    File(tempDir, "future.preferences_pb")
+                }
+            val iconShapeKey = stringPreferencesKey("icon_shape")
+            val swipeRightKey = stringPreferencesKey("swipe_right")
+            val futureSwipe = """{"type":"open_assistant","mode":"voice"}"""
+            store.edit { prefs ->
+                prefs[iconShapeKey] = "TEARDROP"
+                prefs[swipeRightKey] = futureSwipe
+            }
+
+            val repo = SettingsRepository(store)
+            assertEquals(IconShape.SYSTEM, repo.settings.first().iconShape)
+            assertNull(repo.settings.first().swipeRight)
+
+            repo.update { it.copy(homeLabels = true) }
+
+            assertTrue(repo.settings.first().homeLabels)
+            assertEquals("TEARDROP", store.data.first()[iconShapeKey])
+            assertEquals(futureSwipe, store.data.first()[swipeRightKey])
+
+            repo.replace(Settings(homeLabels = false))
+            assertEquals(IconShape.SYSTEM.name, store.data.first()[iconShapeKey])
+            assertNull(store.data.first()[swipeRightKey])
+        }
+
+    @Test
+    fun `swipeActionOrNull ignores unknown extra fields and drops unknown action types`() {
+        val withExtra =
+            """{"type":"open_app","app":{"component":"pkg/.Main","profile":0},"extra":true}"""
+        assertEquals(SwipeAction.OpenApp(AppRef("pkg/.Main", 0)), swipeActionOrNull(withExtra))
+        assertNull(swipeActionOrNull("""{"type":"future_action"}"""))
+    }
+
+    @Test
+    fun `wrong-typed preference keys on disk fall back to defaults instead of throwing ClassCastException`() =
+        runTest {
+            val store =
+                PreferenceDataStoreFactory.create(
+                    corruptionHandler = settingsCorruptionHandler,
+                    scope = backgroundScope,
+                ) {
+                    File(tempDir, "mismatched.preferences_pb")
+                }
+            store.edit { prefs ->
+                prefs[stringPreferencesKey("columns")] = "not-an-int"
+                prefs[intPreferencesKey("icon_shape")] = 42
+                prefs[intPreferencesKey("swipe_right")] = 99
+            }
+            val repo = SettingsRepository(store)
+            assertEquals(Settings(), repo.settings.first())
         }
 }

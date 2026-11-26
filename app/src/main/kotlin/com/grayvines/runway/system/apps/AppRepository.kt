@@ -23,7 +23,9 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.net.toUri
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.settings.IconShape
+import com.grayvines.runway.model.PackageKey
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -89,33 +91,38 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
      */
     private val refreshQueue = RefreshQueue(scope, ioDispatcher, ::performRefresh)
 
+    private val unavailablePackages = ConcurrentHashMap.newKeySet<PackageKey>()
+
     private val _refreshed =
-        MutableSharedFlow<List<AppEntry>>(
-            extraBufferCapacity = 1,
+        MutableSharedFlow<RefreshedApps>(
+            replay = 1,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
 
     /**
-     * Every list a refresh produced, including one identical to the last: [apps] only reports
-     * changes, and reconciling the layout must happen on every refresh regardless. Each list is the
-     * whole truth, so a collector that falls behind a burst of refreshes is given the newest and
-     * skips the rest; nothing is ever lost by that.
+     * Every reconciling refresh snapshot, including one whose app list is identical to the last:
+     * [apps] only reports changes, and reconciling the layout must happen on every reconciling
+     * refresh regardless. Each snapshot is the whole truth (including packages currently marked
+     * unavailable by the system), so a late subscriber or one behind a burst sees the newest.
      */
-    val refreshed: SharedFlow<List<AppEntry>> = _refreshed
+    val refreshed: SharedFlow<RefreshedApps> = _refreshed
 
     private val callback =
         object : LauncherApps.Callback() {
             override fun onPackageRemoved(packageName: String, user: UserHandle) {
+                markAvailable(arrayOf(packageName), user)
                 _packageChanges.value++
                 refresh(packageName)
             }
 
             override fun onPackageAdded(packageName: String, user: UserHandle) {
+                markAvailable(arrayOf(packageName), user)
                 _packageChanges.value++
                 refresh(packageName)
             }
 
             override fun onPackageChanged(packageName: String, user: UserHandle) {
+                markAvailable(arrayOf(packageName), user)
                 _packageChanges.value++
                 refresh(packageName)
             }
@@ -125,6 +132,7 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                 user: UserHandle,
                 replacing: Boolean,
             ) {
+                markAvailable(packageNames, user)
                 _packageChanges.value++
                 refresh(*packageNames)
             }
@@ -134,8 +142,12 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                 user: UserHandle,
                 replacing: Boolean,
             ) {
+                markUnavailable(packageNames, user)
                 _packageChanges.value++
-                if (replacing) refresh(*packageNames) else refresh()
+                refreshQueue.enqueue(
+                    if (replacing) packageNames else emptyArray(),
+                    reconcile = false,
+                )
             }
         }
 
@@ -147,8 +159,16 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
      * The serials of every profile on the device, whether or not it reports any apps right now: a
      * paused work profile is in here and not in [apps].
      */
+    @Suppress("TooGenericExceptionCaught")
     fun profiles(): Set<Long> =
-        userManager.userProfiles.mapTo(mutableSetOf()) { userManager.getSerialNumberForUser(it) }
+        try {
+            userManager.userProfiles.mapTo(mutableSetOf()) {
+                userManager.getSerialNumberForUser(it)
+            }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not list user profiles", e)
+            emptySet()
+        }
 
     /** The device configuration is now [config]; the list is rebuilt if that made it stale. */
     fun configurationChanged(config: Configuration) {
@@ -165,11 +185,24 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    fun refresh(vararg invalidatedPackages: String) = refreshQueue.enqueue(invalidatedPackages)
+    fun refresh(vararg invalidatedPackages: String) =
+        refreshQueue.enqueue(invalidatedPackages, reconcile = true)
 
-    private suspend fun performRefresh(invalidatedPackages: List<String>) {
-        iconCache.invalidatePackages(invalidatedPackages)
+    internal fun markUnavailable(packageNames: Array<String>, user: UserHandle) {
+        val serial = userManager.getSerialNumberForUser(user)
+        packageNames.forEach { unavailablePackages += PackageKey(it, serial) }
+    }
+
+    internal fun markAvailable(packageNames: Array<String>, user: UserHandle) {
+        val serial = userManager.getSerialNumberForUser(user)
+        packageNames.forEach { unavailablePackages -= PackageKey(it, serial) }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun performRefresh(batch: RefreshBatch) {
+        iconCache.invalidatePackages(batch.invalidatedPackages)
         val shape = iconShape ?: return
+        val unavailableBefore = unavailablePackages.toSet()
         val metrics = context.resources.displayMetrics
         val densityDpi = metrics.densityDpi
         val sizePx = (ICON_DP * metrics.density).toInt().coerceAtLeast(1)
@@ -184,23 +217,34 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
                 mask = IconRenderer.maskTemplate(shape, sizePx),
             )
         // Rasterising every icon is the slow part of a refresh: spread it over the bounded IO pool.
+        var queryFailed = false
         val loaded = coroutineScope {
             userManager.userProfiles
                 .flatMap { user ->
                     val serial = userManager.getSerialNumberForUser(user)
-                    launcherApps.getActivityList(null, user).map { it to serial }
+                    try {
+                        launcherApps.getActivityList(null, user).map { it to serial }
+                    } catch (e: RuntimeException) {
+                        queryFailed = true
+                        Log.w(TAG, "could not list activities for profile $serial", e)
+                        emptyList()
+                    }
                 }
                 .map { (info, serial) -> async { info.toEntryOrNull(config, serial) } }
                 .awaitAll()
         }
             .filterNotNull()
-        if (loaded.isNotEmpty()) {
+        if (queryFailed && loaded.isEmpty()) return
+        val unavailable = unavailableBefore + unavailablePackages
+        if (!queryFailed && loaded.isNotEmpty() && unavailable.isEmpty()) {
             iconCache.retainOnly(loaded.mapTo(HashSet(loaded.size)) { it.second })
         }
         previousByRef = loaded.associateBy { it.first.ref }
         val fresh = loaded.map { it.first }.sortedWith(LabelOrder.entryComparator())
         _apps.value = fresh
-        _refreshed.tryEmit(fresh)
+        if (batch.reconcile) {
+            _refreshed.tryEmit(RefreshedApps(fresh, unavailable))
+        }
     }
 
     /** Launches [entry]; if it can't be (uninstalled or suspended since), refreshes the list. */
@@ -210,6 +254,8 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
         } catch (e: ActivityNotFoundException) {
             failedLaunch(entry, e)
         } catch (e: SecurityException) {
+            failedLaunch(entry, e)
+        } catch (e: IllegalStateException) {
             failedLaunch(entry, e)
         }
     }
@@ -243,7 +289,15 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
 
     /** The system's settings page for the app. */
     fun showAppInfo(entry: AppEntry) {
-        launcherApps.startAppDetailsActivity(entry.component, entry.user, null, null)
+        try {
+            launcherApps.startAppDetailsActivity(entry.component, entry.user, null, null)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no app info screen for ${entry.component}", e)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "not allowed to open app info for ${entry.component}", e)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "could not open app info for ${entry.component}", e)
+        }
     }
 
     /**
@@ -259,6 +313,8 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "no uninstaller for ${entry.component}", e)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "not allowed to uninstall ${entry.component}", e)
         }
     }
 
@@ -282,20 +338,30 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
     }
 }
 
+/** One reconciling snapshot of the app list and packages temporarily marked unavailable. */
+data class RefreshedApps(val apps: List<AppEntry>, val unavailable: Set<PackageKey> = emptySet())
+
+internal data class RefreshBatch(
+    val invalidatedPackages: List<String>,
+    val reconcile: Boolean = true,
+)
+
 internal class RefreshQueue(
     private val scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher,
-    private val run: suspend (List<String>) -> Unit,
+    private val run: suspend (RefreshBatch) -> Unit,
 ) {
     private val lock = Any()
     private val pendingInvalidations = mutableSetOf<String>()
+    private var pendingReconcile = false
     private var pending = false
     private var running = false
 
-    fun enqueue(invalidatedPackages: Array<out String>) {
+    fun enqueue(invalidatedPackages: Array<out String>, reconcile: Boolean = true) {
         val startWorker =
             synchronized(lock) {
                 pendingInvalidations.addAll(invalidatedPackages)
+                pendingReconcile = if (pending) pendingReconcile || reconcile else reconcile
                 pending = true
                 if (running) {
                     false
@@ -332,14 +398,20 @@ internal class RefreshQueue(
         }
     }
 
-    private fun takeNextOrStop(): List<String>? =
+    private fun takeNextOrStop(): RefreshBatch? =
         synchronized(lock) {
             if (!pending) {
                 running = false
                 null
             } else {
                 pending = false
-                pendingInvalidations.toList().also { pendingInvalidations.clear() }
+                val reconcile = pendingReconcile
+                pendingReconcile = false
+                RefreshBatch(
+                    invalidatedPackages =
+                        pendingInvalidations.toList().also { pendingInvalidations.clear() },
+                    reconcile = reconcile,
+                )
             }
         }
 }

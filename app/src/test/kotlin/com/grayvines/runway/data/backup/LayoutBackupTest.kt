@@ -29,6 +29,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -334,6 +335,127 @@ class LayoutBackupTest {
             assertEquals(listOf(app(1, 0)), folders.getValue("First").apps)
             assertEquals(listOf(app(2, 0)), folders.getValue("Second").apps)
             assertEquals(emptySet<AppRef>(), repo.observeHiddenApps().first())
+        }
+
+    @Test
+    fun `restoreLayout rejects structurally invalid layouts before binding widgets or modifying data`() =
+        runTest {
+            val before = seed()
+            val bound = mutableListOf<String>()
+            val invalid =
+                Layout(
+                    homePages = 1,
+                    dockPages = 1,
+                    placements =
+                        listOf(
+                            Placement(Container.HOME, 0, 0, 0, app = app(1)),
+                            Placement(Container.HOME, 0, 0, 0, widget = Widget("w/.One", 1, 1)),
+                        ),
+                )
+
+            assertThrows(IllegalArgumentException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    repo.restoreLayout(
+                        invalid,
+                        apps.toSet(),
+                        bindWidget = {
+                            bound += it
+                            99
+                        },
+                    )
+                }
+            }
+
+            assertTrue(bound.isEmpty())
+            assertEquals(before, repo.layoutBackup())
+        }
+
+    @Test
+    fun `restoreLayout releases newly bound widget ids if binding fails midway, keeping old layout`() =
+        runTest {
+            seed()
+            assertNotNull(repo.addWidget(7, "w/.Old", page = 1, x = 1, y = 0, spanX = 1, spanY = 1))
+            val before = repo.layoutBackup()
+            val deleted = mutableListOf<Int>()
+            val incoming =
+                Layout(
+                    homePages = 1,
+                    dockPages = 1,
+                    placements =
+                        listOf(
+                            Placement(Container.HOME, 0, 0, 0, widget = Widget("w/.First", 1, 1)),
+                            Placement(Container.HOME, 0, 1, 0, widget = Widget("w/.Boom", 1, 1)),
+                        ),
+                )
+
+            assertThrows(IllegalStateException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    repo.restoreLayout(
+                        incoming,
+                        apps.toSet(),
+                        bindWidget = { provider ->
+                            if (provider == "w/.First") 51 else error("binder died")
+                        },
+                        deleteWidget = deleted::add,
+                    )
+                }
+            }
+
+            assertEquals(listOf(51), deleted)
+            assertEquals(before, repo.layoutBackup())
+        }
+
+    @Test
+    fun `restoreLayout deletes remaining old widget ids even if one deleteWidget throws`() =
+        runTest {
+            repo.ensureInitialised()
+            assertNotNull(
+                repo.addWidget(10, "w/.One", page = 0, x = 0, y = 0, spanX = 1, spanY = 1)
+            )
+            assertNotNull(
+                repo.addWidget(20, "w/.Two", page = 0, x = 1, y = 0, spanX = 1, spanY = 1)
+            )
+            val attempted = mutableListOf<Int>()
+
+            repo.restoreLayout(
+                Layout(homePages = 1, dockPages = 1, placements = emptyList()),
+                apps.toSet(),
+                deleteWidget = { id ->
+                    attempted += id
+                    if (id == 10) error("host error")
+                },
+            )
+
+            assertEquals(listOf(10, 20), attempted)
+        }
+
+    @Test
+    fun `restoreLayout releases newly bound widget ids if the database transaction itself fails`() =
+        runTest {
+            val deleted = mutableListOf<Int>()
+            val incoming =
+                Layout(
+                    homePages = 1,
+                    dockPages = 1,
+                    placements =
+                        listOf(
+                            Placement(Container.HOME, 0, 0, 0, widget = Widget("w/.Live", 1, 1))
+                        ),
+                )
+            db.close()
+
+            assertThrows(Exception::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    repo.restoreLayout(
+                        incoming,
+                        apps.toSet(),
+                        bindWidget = { 77 },
+                        deleteWidget = deleted::add,
+                    )
+                }
+            }
+
+            assertEquals(listOf(77), deleted)
         }
 
     private fun Placement.apps() = listOfNotNull(app) + folder?.apps.orEmpty()

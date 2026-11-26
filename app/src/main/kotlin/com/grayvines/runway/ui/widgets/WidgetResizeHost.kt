@@ -150,9 +150,8 @@ class WidgetResizeHost(
     fun remove(item: HomeItem) {
         dismiss()
         scope.writing("remove the widget") {
-            graph.workspace.removeItem(item.id)
-            // Or the provider would go on thinking it is placed.
-            item.appWidgetId?.let(graph.widgets::deleteId)
+            // Use the deleted row's host id so a concurrent remap cannot leak or delete a stale id.
+            graph.workspace.removeItem(item.id)?.appWidgetId?.let(graph.widgets::deleteId)
         }
     }
 }

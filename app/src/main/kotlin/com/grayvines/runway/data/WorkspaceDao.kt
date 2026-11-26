@@ -12,7 +12,9 @@ interface WorkspaceDao {
     @Query("SELECT * FROM pages WHERE container = :container ORDER BY page_index")
     suspend fun pages(container: Container): List<PageEntity>
 
-    @Query("SELECT DISTINCT page_index FROM items WHERE container = :container")
+    @Query(
+        "SELECT DISTINCT page_index FROM items WHERE container = :container AND page_index IS NOT NULL"
+    )
     suspend fun usedPages(container: Container): List<Int>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPage(page: PageEntity)
@@ -73,16 +75,37 @@ interface WorkspaceDao {
     )
     suspend fun removeFromFolder(folderId: Long, component: String, profile: Long)
 
-    /** An app is in at most one drawer folder: this takes it out of whichever it is in. */
+    /** An app is in at most one drawer folder: this takes it out of any other it is in. */
     @Query(
         "DELETE FROM folder_apps WHERE component = :component AND profile = :profile " +
+            "AND folder_id != :exceptFolderId " +
             "AND folder_id IN (SELECT folder_id FROM items WHERE container = :container)"
     )
     suspend fun leaveDrawerFolders(
         component: String,
         profile: Long,
+        exceptFolderId: Long = -1L,
         container: Container = Container.DRAWER,
     )
+
+    @Query(
+        "SELECT folder_id FROM folder_apps WHERE component = :component AND profile = :profile " +
+            "AND folder_id IN (SELECT folder_id FROM items WHERE container = :container)"
+    )
+    suspend fun drawerFoldersContaining(
+        component: String,
+        profile: Long,
+        container: Container = Container.DRAWER,
+    ): List<Long>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM folders WHERE id = :folderId)")
+    suspend fun folderExists(folderId: Long): Boolean
+
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM folder_apps " +
+            "WHERE folder_id = :folderId AND component = :component AND profile = :profile)"
+    )
+    suspend fun isInFolder(folderId: Long, component: String, profile: Long): Boolean
 
     /** Whether the folder has a placement in [container]: in the drawer, say. */
     @Query(
@@ -90,12 +113,21 @@ interface WorkspaceDao {
     )
     suspend fun isPlacedIn(folderId: Long, container: Container): Boolean
 
-    /** The folder, its apps and (by cascade) every placement of it. */
-    @Query("DELETE FROM folders WHERE id = :id") suspend fun deleteFolder(id: Long)
+    /** The folder, its apps and (by cascade) every placement of it. Returns deleted row count. */
+    @Query("DELETE FROM folders WHERE id = :id") suspend fun deleteFolder(id: Long): Int
 
     /** A folder with nothing in it is gone, and (by cascade) so is every placement of it. */
     @Query("DELETE FROM folders WHERE id NOT IN (SELECT DISTINCT folder_id FROM folder_apps)")
-    suspend fun deleteEmptyFolders()
+    suspend fun deleteEmptyFolders(): Int
+
+    /**
+     * Deletes only folders in [folderIds] that now have no apps, leaving unrelated sheets alone.
+     */
+    @Query(
+        "DELETE FROM folders WHERE id IN (:folderIds) " +
+            "AND id NOT IN (SELECT DISTINCT folder_id FROM folder_apps)"
+    )
+    suspend fun deleteEmptyFoldersIn(folderIds: List<Long>): Int
 
     /** A folder nothing places any more is gone, with its apps. */
     @Query(

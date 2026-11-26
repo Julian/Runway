@@ -12,6 +12,8 @@ import com.grayvines.runway.data.PageEntity
 import com.grayvines.runway.data.WorkspaceDao
 import com.grayvines.runway.data.WorkspaceRepository
 import com.grayvines.runway.data.appRef
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * The layout as it is now, as a backup carries it. One snapshot: the app list's reconciliation can
@@ -23,13 +25,14 @@ suspend fun WorkspaceRepository.layoutBackup(): Layout = read {
     val folderApps = dao.folderApps().groupBy { it.folderId }
     val folders = dao.folders().associateBy { it.id }
     val items = dao.items()
-    // Drawer folders by name, and which index each folder id became.
+    // Drawer folders by name (tie-broken by id for deterministic exports), and each folder's index.
     val drawerIds =
         items
             .filter { it.container == Container.DRAWER }
             .mapNotNull { it.folderId }
+            .distinct()
             .filter { it in folders }
-            .sortedBy { folders.getValue(it).name }
+            .sortedWith(compareBy<Long> { folders.getValue(it).name }.thenBy { it })
     val drawerIndex = drawerIds.withIndex().associate { (i, id) -> id to i }
     val placements = items.mapNotNull { it.placement(folders, folderApps, drawerIndex) }
     Layout(
@@ -93,44 +96,68 @@ suspend fun WorkspaceRepository.restoreLayout(
     bindWidget: (provider: String) -> Int? = { null },
     deleteWidget: (id: Int) -> Unit = {},
 ): Restored {
+    layout.validateStructure()
+    val boundWidgets = mutableMapOf<Int, Int>()
     val oldWidgets = mutableListOf<Int>()
-    val restored = write {
-        val match = AppMatcher(installed, quiet)
-        oldWidgets += dao.itemsOfKind(ItemKind.WIDGET).mapNotNull { it.appWidgetId }
-        dao.deleteAllItems()
-        dao.deleteAllFolders()
-        dao.deleteAllPages()
-        repeat(maxOf(layout.homePages, 1)) { dao.insertPage(PageEntity(Container.HOME, it)) }
-        repeat(maxOf(layout.dockPages, 1)) { dao.insertPage(PageEntity(Container.DOCK, it)) }
-        layout.hiddenApps?.let { hidden ->
-            dao.deleteAllHiddenApps()
-            hidden.mapNotNull(match::find).forEach {
-                dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
+    var committed = false
+    return withContext(NonCancellable) {
+        try {
+            // Bind widgets before opening the SQLite write transaction so Binder IPC never holds
+            // the DB lock, and any rollback releases newly allocated widget ids cleanly.
+            layout.placements.forEachIndexed { index, placement ->
+                val provider = placement.widget?.provider
+                if (provider != null) {
+                    bindWidget(provider)?.let { boundWidgets[index] = it }
+                }
+            }
+            val restored = write {
+                val match = AppMatcher(installed, quiet)
+                oldWidgets += dao.itemsOfKind(ItemKind.WIDGET).mapNotNull { it.appWidgetId }
+                dao.deleteAllItems()
+                dao.deleteAllFolders()
+                dao.deleteAllPages()
+                repeat(maxOf(layout.homePages, 1)) {
+                    dao.insertPage(PageEntity(Container.HOME, it))
+                }
+                repeat(maxOf(layout.dockPages, 1)) {
+                    dao.insertPage(PageEntity(Container.DOCK, it))
+                }
+                layout.hiddenApps?.let { hidden ->
+                    dao.deleteAllHiddenApps()
+                    hidden.mapNotNull(match::find).forEach {
+                        dao.insertHiddenApp(HiddenAppEntity(it.component, it.profile))
+                    }
+                }
+                layout.badgeMutes?.let { mutes ->
+                    dao.deleteAllBadgeMutes()
+                    mutes.mapNotNull(match::find).forEach {
+                        dao.insertBadgeMute(BadgeMuteEntity(it.component, it.profile))
+                    }
+                }
+                val counts = Counts()
+                // Drawer folders first: a placement may refer to one by index.
+                val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
+                layout.placements.forEachIndexed { index, placement ->
+                    dao.restorePlacement(placement, match, drawerIds, boundWidgets[index], counts)
+                }
+                Restored(counts.placed, counts.skipped)
+            }
+            committed = true
+            oldWidgets.forEach { id -> runCatching { deleteWidget(id) } }
+            restored
+        } finally {
+            if (!committed) {
+                boundWidgets.values.forEach { id -> runCatching { deleteWidget(id) } }
             }
         }
-        layout.badgeMutes?.let { mutes ->
-            dao.deleteAllBadgeMutes()
-            mutes.mapNotNull(match::find).forEach {
-                dao.insertBadgeMute(BadgeMuteEntity(it.component, it.profile))
-            }
-        }
-        val counts = Counts()
-        // Drawer folders first: a placement may refer to one by index.
-        val drawerIds = dao.restoreDrawerFolders(layout.drawerFolders, match, counts)
-        for (placement in layout.placements) {
-            dao.restorePlacement(placement, match, drawerIds, bindWidget, counts)
-        }
-        Restored(counts.placed, counts.skipped)
     }
-    oldWidgets.forEach(deleteWidget)
-    return restored
 }
 
 private suspend fun WorkspaceDao.restorePlacement(
     placement: Placement,
     match: AppMatcher,
     drawerIds: Map<Int, Long>,
-    bindWidget: (provider: String) -> Int?,
+    boundWidgetId: Int?,
     counts: Counts,
 ) {
     val folder = placement.folder
@@ -152,7 +179,7 @@ private suspend fun WorkspaceDao.restorePlacement(
             val apps = folder.apps.mapNotNull(match::find)
             counts.skipped += folder.apps.size - apps.size
             if (apps.isEmpty()) return
-            val folderId = insertFolder(FolderEntity(name = folder.name))
+            val folderId = insertFolder(FolderEntity(name = folder.name.trim()))
             fill(folderId, apps, folder.handSorted)
             insertItem(placement.entity(ItemKind.FOLDER, folderId = folderId))
             counts.placed++
@@ -162,7 +189,7 @@ private suspend fun WorkspaceDao.restorePlacement(
                 placement.entity(
                     ItemKind.WIDGET,
                     widget = widget,
-                    appWidgetId = bindWidget(widget.provider),
+                    appWidgetId = boundWidgetId,
                 )
             )
             counts.placed++
@@ -235,7 +262,7 @@ private suspend fun WorkspaceDao.restoreDrawerFolders(
         val apps = matched.distinct().filter { claimed.add(it) }
         if (apps.isNotEmpty()) {
             apps.forEach { deleteHiddenApp(it.component, it.profile) }
-            val folderId = insertFolder(FolderEntity(name = folder.name))
+            val folderId = insertFolder(FolderEntity(name = folder.name.trim()))
             fill(folderId, apps, folder.handSorted)
             insertItem(
                 ItemEntity(

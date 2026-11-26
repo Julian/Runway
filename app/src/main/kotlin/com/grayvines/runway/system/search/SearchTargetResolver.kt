@@ -1,6 +1,7 @@
 package com.grayvines.runway.system.search
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,11 +16,16 @@ class SearchTarget(
     val packageName: String,
     val label: String,
     val icon: ImageBitmap? = null,
+    internal val component: ComponentName? = null,
 ) {
     override fun equals(other: Any?) =
-        other is SearchTarget && other.packageName == packageName && other.label == label
+        other is SearchTarget &&
+            other.packageName == packageName &&
+            other.label == label &&
+            other.component == component
 
-    override fun hashCode() = packageName.hashCode() * 31 + label.hashCode()
+    override fun hashCode() =
+        (packageName.hashCode() * 31 + label.hashCode()) * 31 + (component?.hashCode() ?: 0)
 }
 
 /**
@@ -32,14 +38,16 @@ class SearchTargetResolver(context: Context) {
     /** Every app that can take a web search, as the settings picker lists them. */
     fun handlers(): List<SearchTarget> {
         val pm = context.packageManager
-        return exportedHandlers(pm).map {
+        return exportedHandlers(pm).map { info ->
             // The app's own name and icon: an activity may call itself just "Search".
-            val app = it.activityInfo.applicationInfo
+            val app = info.activityInfo.applicationInfo
             val bitmap = runCatching {
                 app.loadIcon(pm).toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap()
             }
                 .getOrNull()
-            SearchTarget(app.packageName, app.loadLabel(pm).toString(), bitmap)
+            val label = runCatching { app.loadLabel(pm).toString() }.getOrDefault(app.packageName)
+            val component = ComponentName(info.activityInfo.packageName, info.activityInfo.name)
+            SearchTarget(app.packageName, label, bitmap, component)
         }
     }
 
@@ -57,18 +65,36 @@ class SearchTargetResolver(context: Context) {
                 ?: candidates.firstOrNull()
                 ?: return null
         val app = chosen.activityInfo.applicationInfo
-        return SearchTarget(app.packageName, app.loadLabel(pm).toString())
+        val label = runCatching { app.loadLabel(pm).toString() }.getOrDefault(app.packageName)
+        val component = ComponentName(chosen.activityInfo.packageName, chosen.activityInfo.name)
+        return SearchTarget(app.packageName, label, component = component)
     }
 
-    private fun exportedHandlers(pm: PackageManager): List<ResolveInfo> =
-        // Only activities other apps may start: a browser's private search entry point shows up
-        // in the query but refuses us.
-        pm.queryIntentActivities(
-                Intent(Intent.ACTION_WEB_SEARCH),
-                PackageManager.ResolveInfoFlags.of(0),
-            )
-            .filter { it.activityInfo.exported }
+    @Suppress("TooGenericExceptionCaught")
+    private fun exportedHandlers(pm: PackageManager): List<ResolveInfo> {
+        val resolved =
+            try {
+                pm.queryIntentActivities(
+                    Intent(Intent.ACTION_WEB_SEARCH),
+                    PackageManager.ResolveInfoFlags.of(0),
+                )
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not query web search handlers", e)
+                return emptyList()
+            }
+        // Only activities this launcher may start: a browser's private or permission-gated search
+        // entry point shows up in the query but refuses us.
+        return resolved
+            .filter { info ->
+                val activity = info.activityInfo
+                val permission = activity.permission ?: activity.applicationInfo.permission
+                activity.exported &&
+                    (permission == null ||
+                        context.checkSelfPermission(permission) ==
+                            PackageManager.PERMISSION_GRANTED)
+            }
             .distinctBy { it.activityInfo.applicationInfo.packageName }
+    }
 
     /**
      * Opens [target]'s search. If it no longer handles the intent, or refuses it (updated,
@@ -76,15 +102,15 @@ class SearchTargetResolver(context: Context) {
      * nothing happens.
      */
     fun search(target: SearchTarget?) {
-        val packageName = target?.packageName ?: return
-        val search = searchIntent(packageName) ?: return
+        if (target == null) return
+        val search = searchIntent(target) ?: return
         try {
             context.startActivity(search.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "$packageName would not take the search; opening it instead", e)
+            Log.w(TAG, "${target.packageName} would not take the search; opening it instead", e)
             open(target)
         } catch (e: SecurityException) {
-            Log.w(TAG, "$packageName would not take the search; opening it instead", e)
+            Log.w(TAG, "${target.packageName} would not take the search; opening it instead", e)
             open(target)
         }
     }
@@ -107,15 +133,18 @@ class SearchTargetResolver(context: Context) {
 
     /**
      * Firefox opens plain web-search intents on its home page; its search widget's entry point is
-     * what opens the address bar with the keyboard up. Everyone else gets the web-search intent.
+     * what opens the address bar with the keyboard up. Everyone else gets the resolved exported
+     * web-search component (falling back to the package when constructed without one).
      */
-    private fun searchIntent(packageName: String): Intent? =
-        if (packageName in FIREFOXES) {
+    private fun searchIntent(target: SearchTarget): Intent? =
+        if (target.packageName in FIREFOXES) {
             context.packageManager
-                .getLaunchIntentForPackage(packageName)
+                .getLaunchIntentForPackage(target.packageName)
                 ?.putExtra("open_to_search", "search_widget")
+        } else if (target.component != null) {
+            Intent(Intent.ACTION_WEB_SEARCH).setComponent(target.component)
         } else {
-            Intent(Intent.ACTION_WEB_SEARCH).setPackage(packageName)
+            Intent(Intent.ACTION_WEB_SEARCH).setPackage(target.packageName)
         }
 
     private companion object {

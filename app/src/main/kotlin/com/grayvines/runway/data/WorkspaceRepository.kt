@@ -6,6 +6,7 @@ import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.LayoutEngine
+import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.Flow
@@ -121,11 +122,14 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
 
     /**
      * Adds a page at [index] if it does not exist yet, along with any preceding pages from `0` so
-     * page indices stay contiguous.
+     * page indices stay contiguous. Ignores [Container.DRAWER] and negative indices.
      */
-    suspend fun addPage(container: Container, index: Int) = write {
-        for (i in 0..index) {
-            dao.insertPage(PageEntity(container, i))
+    suspend fun addPage(container: Container, index: Int) {
+        if (container == Container.DRAWER || index < 0) return
+        write {
+            for (i in 0..index) {
+                dao.insertPage(PageEntity(container, i))
+            }
         }
     }
 
@@ -164,7 +168,9 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         y: Int,
         displaced: Map<Long, Footprint>,
     ): Boolean {
+        if (container == Container.DRAWER) return false
         val item = dao.item(id) ?: return false
+        if (item.container == Container.DRAWER) return false
         if (item.kind == ItemKind.WIDGET && container != Container.HOME) return false
         val target = Footprint(x, y, item.spanX, item.spanY)
         if (!makeRoom(container, page, displaced, mover = id, target = target)) return false
@@ -187,6 +193,7 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
         mover: Long? = null,
         target: Footprint? = null,
     ): Boolean {
+        if (container == Container.DRAWER) return false
         val pageExists = dao.pages(container).any { it.index == page }
         if (!pageExists || mover in displaced) return false
         val onPage = dao.itemsOnPage(container, page).filter { it.id != mover }
@@ -251,15 +258,20 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * Forgets apps not among [installed], within the profiles [installed] covers: their placements,
      * their places in folders, that they were hidden, and that their badges were muted. A profile
      * with no app in the list is left alone: it is off (quiet mode), not empty, and its icons come
-     * back with it. Catches uninstalls that happened while the launcher was not running.
+     * back with it. Packages in [preservePackages] (temporarily unavailable on external storage or
+     * mid-replacement) are left alone as well. Catches uninstalls that happened while the launcher
+     * was not running.
      */
-    suspend fun retainApps(installed: Set<AppRef>) {
+    suspend fun retainApps(
+        installed: Set<AppRef>,
+        preservePackages: Set<PackageKey> = emptySet(),
+    ) {
         val profiles = installed.mapTo(mutableSetOf()) { it.profile }
-        if (!read { dao.hasStaleApps(profiles, installed) }) return
+        if (!read { dao.hasStaleApps(profiles, installed, preservePackages) }) return
         write {
             // Read and deleted in the one transaction: a fold landing between the two could turn a
             // stale app row into a folder row of the same id, which must not then be deleted.
-            dao.pruneStaleApps(profiles, installed)
+            dao.pruneStaleApps(profiles, installed, preservePackages)
         }
     }
 
@@ -308,38 +320,58 @@ internal fun ItemEntity.footprint(): Footprint? {
     return Footprint(cellX, cellY, spanX, spanY)
 }
 
-private fun ItemEntity.isStaleApp(profiles: Set<Long>, installed: Set<AppRef>): Boolean {
+internal fun AppRef.isStale(
+    profiles: Set<Long>,
+    installed: Set<AppRef>,
+    preservePackages: Set<PackageKey>,
+): Boolean =
+    profile in profiles &&
+        this !in installed &&
+        PackageKey(component.substringBefore('/'), profile) !in preservePackages
+
+internal fun ItemEntity.isStaleApp(
+    profiles: Set<Long>,
+    installed: Set<AppRef>,
+    preservePackages: Set<PackageKey>,
+): Boolean {
     val comp = component ?: return false
     val prof = profile ?: return false
-    return prof in profiles && AppRef(comp, prof) !in installed
+    return AppRef(comp, prof).isStale(profiles, installed, preservePackages)
 }
 
 internal suspend fun WorkspaceDao.hasStaleApps(
     profiles: Set<Long>,
     installed: Set<AppRef>,
+    preservePackages: Set<PackageKey>,
 ): Boolean =
-    itemsOfKind(ItemKind.APP).any { it.isStaleApp(profiles, installed) } ||
-        folderApps().any { it.profile in profiles && it.ref !in installed } ||
-        hiddenApps().any { it.profile in profiles && it.ref !in installed } ||
-        badgeMutes().any { it.profile in profiles && it.ref !in installed }
+    itemsOfKind(ItemKind.APP).any { it.isStaleApp(profiles, installed, preservePackages) } ||
+        folderApps().any { it.ref.isStale(profiles, installed, preservePackages) } ||
+        hiddenApps().any { it.ref.isStale(profiles, installed, preservePackages) } ||
+        badgeMutes().any { it.ref.isStale(profiles, installed, preservePackages) }
 
-internal suspend fun WorkspaceDao.pruneStaleApps(profiles: Set<Long>, installed: Set<AppRef>) {
-    val stale = itemsOfKind(ItemKind.APP).filter { it.isStaleApp(profiles, installed) }
-    val gone =
-        folderApps()
-            .filter { it.profile in profiles && it.ref !in installed }
-            .mapTo(mutableSetOf()) { it.ref }
+internal suspend fun WorkspaceDao.pruneStaleApps(
+    profiles: Set<Long>,
+    installed: Set<AppRef>,
+    preservePackages: Set<PackageKey>,
+) {
+    val stale =
+        itemsOfKind(ItemKind.APP).filter { it.isStaleApp(profiles, installed, preservePackages) }
+    val staleFolderApps =
+        folderApps().filter { it.ref.isStale(profiles, installed, preservePackages) }
+    val gone = staleFolderApps.mapTo(mutableSetOf()) { it.ref }
+    val affectedFolders = staleFolderApps.mapTo(mutableSetOf()) { it.folderId }
     if (stale.isNotEmpty() || gone.isNotEmpty()) {
         if (stale.isNotEmpty()) deleteItems(stale.map { it.id })
         gone.forEach { deleteFolderApp(it.component, it.profile) }
-        deleteEmptyFolders()
-        dropTrailingEmptyPages()
+        val foldersDeleted =
+            if (affectedFolders.isNotEmpty()) deleteEmptyFoldersIn(affectedFolders.toList()) else 0
+        if (stale.isNotEmpty() || foldersDeleted > 0) dropTrailingEmptyPages()
     }
     hiddenApps()
-        .filter { it.profile in profiles && it.ref !in installed }
+        .filter { it.ref.isStale(profiles, installed, preservePackages) }
         .forEach { deleteHiddenApp(it.component, it.profile) }
     badgeMutes()
-        .filter { it.profile in profiles && it.ref !in installed }
+        .filter { it.ref.isStale(profiles, installed, preservePackages) }
         .forEach { deleteBadgeMute(it.component, it.profile) }
 }
 

@@ -19,10 +19,10 @@ class RefreshQueueTest {
         val firstStarted = CountDownLatch(1)
         val allowFirstFinish = CountDownLatch(1)
         val secondFinished = CountDownLatch(1)
-        val batches = CopyOnWriteArrayList<List<String>>()
+        val batches = CopyOnWriteArrayList<RefreshBatch>()
         val queue =
-            RefreshQueue(scope = backgroundScope, dispatcher = Dispatchers.IO) { invalidated ->
-                batches += invalidated
+            RefreshQueue(scope = backgroundScope, dispatcher = Dispatchers.IO) { batch ->
+                batches += batch
                 if (batches.size == 1) {
                     firstStarted.countDown()
                     allowFirstFinish.await(5, TimeUnit.SECONDS)
@@ -39,18 +39,24 @@ class RefreshQueueTest {
         allowFirstFinish.countDown()
         assertTrue(secondFinished.await(5, TimeUnit.SECONDS))
 
-        assertEquals(listOf(listOf("pkg.one"), listOf("pkg.two", "pkg.three")), batches.toList())
+        assertEquals(
+            listOf(
+                RefreshBatch(listOf("pkg.one"), reconcile = true),
+                RefreshBatch(listOf("pkg.two", "pkg.three"), reconcile = true),
+            ),
+            batches.toList(),
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `failure on one pass still drains a queued trailing refresh`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val seen = mutableListOf<List<String>>()
+        val seen = mutableListOf<RefreshBatch>()
         lateinit var queue: RefreshQueue
         queue =
-            RefreshQueue(scope = backgroundScope, dispatcher = dispatcher) { invalidated ->
-                seen += invalidated
+            RefreshQueue(scope = backgroundScope, dispatcher = dispatcher) { batch ->
+                seen += batch
                 if (seen.size == 1) {
                     queue.enqueue(arrayOf("pkg.after"))
                     error("transient binder failure")
@@ -60,6 +66,39 @@ class RefreshQueueTest {
         queue.enqueue(arrayOf("pkg.first"))
         runCurrent()
 
-        assertEquals(listOf(listOf("pkg.first"), listOf("pkg.after")), seen)
+        assertEquals(
+            listOf(
+                RefreshBatch(listOf("pkg.first"), reconcile = true),
+                RefreshBatch(listOf("pkg.after"), reconcile = true),
+            ),
+            seen,
+        )
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `non-reconciling enqueue stays non-reconciling unless coalesced with a reconciling one`() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val seen = mutableListOf<RefreshBatch>()
+            val queue =
+                RefreshQueue(scope = backgroundScope, dispatcher = dispatcher) { batch ->
+                    seen += batch
+                }
+
+            queue.enqueue(arrayOf("pkg.sd"), reconcile = false)
+            runCurrent()
+
+            queue.enqueue(arrayOf("pkg.sd"), reconcile = false)
+            queue.enqueue(arrayOf("pkg.other"), reconcile = true)
+            runCurrent()
+
+            assertEquals(
+                listOf(
+                    RefreshBatch(listOf("pkg.sd"), reconcile = false),
+                    RefreshBatch(listOf("pkg.sd", "pkg.other"), reconcile = true),
+                ),
+                seen,
+            )
+        }
 }

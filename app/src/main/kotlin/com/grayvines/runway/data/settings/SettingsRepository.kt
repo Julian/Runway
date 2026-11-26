@@ -12,7 +12,9 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -27,12 +29,36 @@ internal val Context.settingsStore: DataStore<Preferences> by
     preferencesDataStore("settings", corruptionHandler = settingsCorruptionHandler)
 
 class SettingsRepository internal constructor(private val store: DataStore<Preferences>) {
-    val settings: Flow<Settings> = store.data.map { it.toSettings() }.distinctUntilChanged()
+    val settings: Flow<Settings> =
+        store.data
+            .catch { e ->
+                if (e is IOException) {
+                    runCatching { Log.w(TAG, "could not read settings; using defaults", e) }
+                    emit(emptyPreferences())
+                } else {
+                    throw e
+                }
+            }
+            .map { it.toSettings() }
+            .distinctUntilChanged()
 
     constructor(context: Context) : this(context.settingsStore)
 
+    /**
+     * Applies [transform] and writes only the keys that changed, so unknown values written by a
+     * newer Runway (future enum names or swipe actions) survive unrelated setting toggles.
+     */
     suspend fun update(transform: (Settings) -> Settings) {
-        store.edit { prefs -> transform(prefs.toSettings()).clamped().writeTo(prefs) }
+        store.edit { prefs ->
+            val before = prefs.toSettings()
+            val after = transform(before).clamped()
+            after.writeDiffTo(before, prefs)
+        }
+    }
+
+    /** Replaces every setting on disk with [settings], as when restoring a backup. */
+    suspend fun replace(settings: Settings) {
+        store.edit { prefs -> settings.clamped().writeTo(prefs) }
     }
 
     private object Keys {
@@ -69,17 +95,41 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
                 iconShape = enumOrDefault(Keys.iconShape, defaults.iconShape),
                 badgeStyle = enumOrDefault(Keys.badgeStyle, defaults.badgeStyle),
                 searchBarAtTop = getOrDefault(Keys.searchBarAtTop, defaults.searchBarAtTop),
-                searchTarget = this[Keys.searchTarget],
+                searchTarget = getOrNull(Keys.searchTarget),
                 drawerSwipe = enumOrDefault(Keys.drawerSwipe, defaults.drawerSwipe),
                 drawerKeyboard = getOrDefault(Keys.drawerKeyboard, defaults.drawerKeyboard),
-                drawerColumns = this[Keys.drawerColumns],
+                drawerColumns = getOrNull(Keys.drawerColumns),
                 drawerIndex = getOrDefault(Keys.drawerIndex, defaults.drawerIndex),
                 searchHiddenApps = getOrDefault(Keys.searchHiddenApps, defaults.searchHiddenApps),
                 wallpaperParallax =
                     getOrDefault(Keys.wallpaperParallax, defaults.wallpaperParallax),
-                swipeRight = this[Keys.swipeRight]?.let(::swipeActionOrNull),
+                swipeRight = getOrNull(Keys.swipeRight)?.let(::swipeActionOrNull),
             )
             .clamped()
+    }
+
+    private fun Settings.writeDiffTo(before: Settings, prefs: MutablePreferences) {
+        prefs.putIfChanged(Keys.columns, before.columns, columns)
+        prefs.putIfChanged(Keys.rows, before.rows, rows)
+        prefs.putIfChanged(Keys.dockSlots, before.dockSlots, dockSlots)
+        prefs.putIfChanged(Keys.homeLabels, before.homeLabels, homeLabels)
+        prefs.putIfChanged(Keys.dockLabels, before.dockLabels, dockLabels)
+        prefs.putIfChanged(Keys.drawerLabels, before.drawerLabels, drawerLabels)
+        prefs.putIfChanged(Keys.iconShape, before.iconShape.name, iconShape.name)
+        prefs.putIfChanged(Keys.badgeStyle, before.badgeStyle.name, badgeStyle.name)
+        prefs.putIfChanged(Keys.searchBarAtTop, before.searchBarAtTop, searchBarAtTop)
+        prefs.putOrRemoveIfChanged(Keys.searchTarget, before.searchTarget, searchTarget)
+        prefs.putIfChanged(Keys.drawerSwipe, before.drawerSwipe.name, drawerSwipe.name)
+        prefs.putIfChanged(Keys.drawerKeyboard, before.drawerKeyboard, drawerKeyboard)
+        prefs.putOrRemoveIfChanged(Keys.drawerColumns, before.drawerColumns, drawerColumns)
+        prefs.putIfChanged(Keys.drawerIndex, before.drawerIndex, drawerIndex)
+        prefs.putIfChanged(Keys.searchHiddenApps, before.searchHiddenApps, searchHiddenApps)
+        prefs.putIfChanged(Keys.wallpaperParallax, before.wallpaperParallax, wallpaperParallax)
+        prefs.putOrRemoveIfChanged(
+            Keys.swipeRight,
+            before.swipeRight?.let(actionJson::encodeToString),
+            swipeRight?.let(actionJson::encodeToString),
+        )
     }
 
     private fun Settings.writeTo(prefs: MutablePreferences) {
@@ -99,8 +149,24 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
         prefs[Keys.drawerIndex] = drawerIndex
         prefs[Keys.searchHiddenApps] = searchHiddenApps
         prefs[Keys.wallpaperParallax] = wallpaperParallax
-        swipeRight?.let { prefs[Keys.swipeRight] = Json.encodeToString<SwipeAction>(it) }
+        swipeRight?.let { prefs[Keys.swipeRight] = actionJson.encodeToString<SwipeAction>(it) }
             ?: prefs.remove(Keys.swipeRight)
+    }
+}
+
+internal val actionJson = Json { ignoreUnknownKeys = true }
+
+internal fun <T> MutablePreferences.putIfChanged(key: Preferences.Key<T>, before: T, after: T) {
+    if (after != before) this[key] = after
+}
+
+internal fun <T> MutablePreferences.putOrRemoveIfChanged(
+    key: Preferences.Key<T>,
+    before: T?,
+    after: T?,
+) {
+    if (after != before) {
+        if (after != null) this[key] = after else remove(key)
     }
 }
 
@@ -108,20 +174,25 @@ class SettingsRepository internal constructor(private val store: DataStore<Prefe
  * The action [json] describes, or null for one this build cannot read (written by a newer Runway,
  * or edited by hand): a swipe that does nothing, rather than settings that cannot be read.
  */
-private fun swipeActionOrNull(json: String): SwipeAction? =
+internal fun swipeActionOrNull(json: String): SwipeAction? =
     try {
-        Json.decodeFromString<SwipeAction>(json)
+        actionJson.decodeFromString<SwipeAction>(json)
     } catch (e: IllegalArgumentException) {
-        Log.w(TAG, "a swipe action this build cannot read; it does nothing", e)
+        runCatching { Log.w(TAG, "a swipe action this build cannot read; it does nothing", e) }
         null
     }
 
-internal fun <T> Preferences.getOrDefault(key: Preferences.Key<T>, default: T): T =
-    this[key] ?: default
+internal inline fun <reified T : Any> Preferences.getOrNull(key: Preferences.Key<T>): T? =
+    asMap()[key] as? T
+
+internal inline fun <reified T : Any> Preferences.getOrDefault(
+    key: Preferences.Key<T>,
+    default: T,
+): T = getOrNull(key) ?: default
 
 private inline fun <reified E : Enum<E>> Preferences.enumOrDefault(
     key: Preferences.Key<String>,
     default: E,
-): E = this[key]?.let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
+): E = getOrNull(key)?.let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
 
 private const val TAG = "Runway"

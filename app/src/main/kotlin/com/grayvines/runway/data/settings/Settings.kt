@@ -83,6 +83,7 @@ data class Settings(
         const val MAX_COLUMNS = 12
         const val MIN_ROWS = RESERVED_ROWS + 2
         const val MAX_ROWS = 16
+        const val MAX_PAGE_ROWS = MAX_ROWS - RESERVED_ROWS
         const val MIN_DOCK_SLOTS = 1
         const val MAX_DOCK_SLOTS = 10
     }
@@ -98,5 +99,6 @@ fun Settings.clamped() =
         columns = columns.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
         rows = rows.coerceIn(Settings.MIN_ROWS, Settings.MAX_ROWS),
         dockSlots = dockSlots.coerceIn(Settings.MIN_DOCK_SLOTS, Settings.MAX_DOCK_SLOTS),
+        searchTarget = searchTarget?.trim()?.takeIf { it.isNotEmpty() },
         drawerColumns = drawerColumns?.coerceIn(Settings.MIN_COLUMNS, Settings.MAX_COLUMNS),
     )

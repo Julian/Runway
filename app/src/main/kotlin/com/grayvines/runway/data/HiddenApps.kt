@@ -15,12 +15,17 @@ fun WorkspaceRepository.observeHiddenApps(): Flow<Set<AppRef>> =
         .distinctUntilChanged()
 
 /**
- * Hides [app] from the drawer, taking it out of the drawer folder it was in. A folder this empties
- * stays, as with [removeFromFolder], for [pruneEmptyFolders] to take once its sheet has closed.
+ * Hides [app] from the drawer, taking it out of the drawer folder it was in. A drawer folder this
+ * empties is removed right away along with any trailing empty pages left behind, since hiding runs
+ * from Settings with no folder sheet open.
  */
 suspend fun WorkspaceRepository.hideApp(app: AppRef) = write {
+    val affectedFolders = dao.drawerFoldersContaining(app.component, app.profile)
     dao.leaveDrawerFolders(app.component, app.profile)
     dao.insertHiddenApp(HiddenAppEntity(app.component, app.profile))
+    if (affectedFolders.isNotEmpty() && dao.deleteEmptyFoldersIn(affectedFolders) > 0) {
+        dao.dropTrailingEmptyPages()
+    }
 }
 
 /** Shows [app] in the drawer again; one that was not hidden is left as it was. */

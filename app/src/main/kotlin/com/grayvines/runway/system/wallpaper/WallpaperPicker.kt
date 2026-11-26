@@ -17,6 +17,9 @@ class WallpaperPicker(private val context: Context) {
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "no wallpaper picker on this device", e)
             false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "not allowed to open wallpaper picker", e)
+            false
         }
 
     private companion object {

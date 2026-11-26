@@ -39,20 +39,32 @@ class HiddenAppsTest {
         }
 
     @Test
-    fun `a hidden app leaves its drawer folder, and an emptied one waits for a prune`() = runTest {
-        val folderId = repo.createDrawerFolder(app(1))
-        repo.addToDrawerFolder(folderId, app(2))
+    fun `hiding the last app in a drawer folder removes that folder and prunes any emptied trailing page`() =
+        runTest {
+            repo.ensureInitialised()
+            repo.addPage(Container.HOME, 1)
+            val folderId = repo.createDrawerFolder(app(1))
+            repo.addToDrawerFolder(folderId, app(2))
+            assertTrue(repo.placeFolder(folderId, Container.HOME, page = 1, x = 0, y = 0))
 
-        repo.hideApp(app(1))
-        assertEquals(listOf(app(2)), repo.observeFolders().first().single().apps)
+            // An unrelated folder emptied in a sheet stays until its own sheet prunes it.
+            val otherId = repo.createDrawerFolder(app(3))
+            repo.removeFromFolder(otherId, app(3))
 
-        repo.hideApp(app(2))
-        assertEquals(emptyList<AppRef>(), repo.observeFolders().first().single().apps)
-        assertEquals(listOf(folderId), repo.observeDrawerPlacements().first().map { it.folderId })
+            repo.hideApp(app(1))
+            assertEquals(
+                listOf(app(2)),
+                repo.observeFolders().first().single { it.id == folderId }.apps,
+            )
 
-        repo.pruneEmptyFolders()
-        assertTrue(repo.observeFolders().first().isEmpty())
-    }
+            repo.hideApp(app(2))
+            assertEquals(listOf(otherId), repo.observeFolders().first().map { it.id })
+            assertEquals(
+                listOf(otherId),
+                repo.observeDrawerPlacements().first().map { it.folderId },
+            )
+            assertEquals(listOf(0), repo.observe(Container.HOME).first().pages.map { it.index })
+        }
 
     @Test
     fun `hiding an app leaves its placements and home folders as they were`() = runTest {

@@ -62,8 +62,12 @@ private suspend fun WorkspaceDao.foldOnto(targetId: Long, dropped: Dropped, outO
 private suspend fun WorkspaceDao.fold(folderId: Long, taken: Taken, outOf: Long?) {
     taken.placementId?.let { deleteItem(it) }
     if (isPlacedIn(folderId, Container.DRAWER)) {
+        val previousFolders =
+            drawerFoldersContaining(taken.app.component, taken.app.profile).filter {
+                it != folderId
+            }
         moveIntoDrawerFolder(folderId, taken.app)
-        deleteEmptyFolders()
+        if (previousFolders.isNotEmpty()) deleteEmptyFoldersIn(previousFolders)
     } else {
         addToFolder(folderId, taken.app)
     }
@@ -85,7 +89,10 @@ suspend fun WorkspaceRepository.unfold(
     y: Int,
     displaced: Map<Long, Footprint> = emptyMap(),
 ): Boolean = write {
-    if (!makeRoom(container, page, displaced, target = Footprint(x, y))) {
+    if (
+        !dao.isInFolder(folderId, app.component, app.profile) ||
+            !makeRoom(container, page, displaced, target = Footprint(x, y))
+    ) {
         false
     } else {
         dao.insertItem(
@@ -129,10 +136,10 @@ suspend fun WorkspaceRepository.moveOutOf(
     }
 }
 
-/** [app] leaves [folderId]; a folder left empty is gone, with every placement of it. */
+/** [app] leaves [folderId]; if that empties [folderId], it is gone with every placement of it. */
 private suspend fun WorkspaceDao.leave(folderId: Long, app: AppRef) {
     removeFromFolder(folderId, app.component, app.profile)
-    deleteEmptyFolders()
+    deleteEmptyFoldersIn(listOf(folderId))
 }
 
 /** The folder [item] is, or becomes (an app turns into a new folder holding it); else null. */

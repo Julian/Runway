@@ -1,7 +1,7 @@
 package com.grayvines.runway
 
-import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.IntentSender
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -96,26 +96,38 @@ class LauncherActivity : ComponentActivity() {
             override suspend fun requestBind(id: Int, provider: WidgetProvider): Boolean =
                 prompting.withLock {
                     val info = provider.info
-                    if (info == null) {
+                    if (isDestroyed || isFinishing || info == null) {
                         false
                     } else {
-                        val answer = CompletableDeferred<Boolean>()
-                        pendingBind = answer
-                        bindRequest.launch(bindWidgetRequest(id, info.provider, info.profile))
-                        answer.await()
+                        runWidgetPrompt(
+                            setPending = { pendingBind = it },
+                            clearPending = { if (pendingBind === it) pendingBind = null },
+                            start = {
+                                bindRequest.launch(
+                                    bindWidgetRequest(id, info.provider, info.profile)
+                                )
+                            },
+                            failureMessage = "could not open bind screen for widget $id",
+                        )
                     }
                 }
 
             override suspend fun configure(id: Int): Boolean = prompting.withLock {
-                val answer = CompletableDeferred<Boolean>()
-                pendingSetup = answer
-                try {
-                    appGraph.widgets.configure(this@LauncherActivity, id, REQUEST_WIDGET_SETUP)
-                    answer.await()
-                } catch (e: ActivityNotFoundException) {
-                    Log.w(TAG, "no setup screen for widget $id", e)
-                    pendingSetup = null
+                if (isDestroyed || isFinishing) {
                     false
+                } else {
+                    runWidgetPrompt(
+                        setPending = { pendingSetup = it },
+                        clearPending = { if (pendingSetup === it) pendingSetup = null },
+                        start = {
+                            appGraph.widgets.configure(
+                                this@LauncherActivity,
+                                id,
+                                REQUEST_WIDGET_SETUP,
+                            )
+                        },
+                        failureMessage = "could not open setup screen for widget $id",
+                    )
                 }
             }
         }
@@ -167,7 +179,9 @@ class LauncherActivity : ComponentActivity() {
         if (viewModel.widgetPicker.prompts === widgetPrompts) viewModel.widgetPicker.prompts = null
         if (viewModel.widgetResize.prompts === widgetPrompts) viewModel.widgetResize.prompts = null
         pendingBind?.complete(false)
+        pendingBind = null
         pendingSetup?.complete(false)
+        pendingSetup = null
         appGraph.widgets.clearViews(this)
         super.onDestroy()
     }
@@ -295,7 +309,39 @@ class LauncherActivity : ComponentActivity() {
 
     private companion object {
         const val REQUEST_WIDGET_SETUP = 1
-        const val TAG = "Runway"
+    }
+}
+
+private const val LAUNCHER_TAG = "Runway"
+
+/**
+ * Starts a system widget prompt and awaits its activity result, catching synchronous launch
+ * failures without catching [kotlinx.coroutines.CancellationException] from awaiting the result.
+ */
+@Suppress("TooGenericExceptionCaught")
+internal suspend fun runWidgetPrompt(
+    setPending: (CompletableDeferred<Boolean>) -> Unit,
+    clearPending: (CompletableDeferred<Boolean>) -> Unit,
+    start: () -> Unit,
+    failureMessage: String,
+): Boolean {
+    val answer = CompletableDeferred<Boolean>()
+    setPending(answer)
+    return try {
+        val started =
+            try {
+                start()
+                true
+            } catch (e: IntentSender.SendIntentException) {
+                Log.w(LAUNCHER_TAG, failureMessage, e)
+                false
+            } catch (e: RuntimeException) {
+                Log.w(LAUNCHER_TAG, failureMessage, e)
+                false
+            }
+        if (started) answer.await() else false
+    } finally {
+        clearPending(answer)
     }
 }
 

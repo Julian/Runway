@@ -98,4 +98,28 @@ class BadgePollerTest {
             poller.counts.first { it.isNotEmpty() },
         )
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `refresh while disconnected invokes the disconnected callback, and connected skips it`() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            var rebindAttempts = 0
+            val poller =
+                BadgePoller<String>(
+                    scope = backgroundScope,
+                    dispatcher = dispatcher,
+                    onRefreshWhileDisconnected = { rebindAttempts++ },
+                    readCounts = { emptyMap() },
+                )
+
+            poller.refresh()
+            runCurrent()
+            assertEquals(1, rebindAttempts)
+
+            poller.connect("listener-1")
+            poller.refresh()
+            runCurrent()
+            assertEquals(1, rebindAttempts)
+        }
 }

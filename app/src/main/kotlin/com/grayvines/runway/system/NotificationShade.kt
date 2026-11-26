@@ -23,10 +23,11 @@ class NotificationShade(context: Context) {
 
     /** Pulls the shade down. False when this Android refuses, so the caller can say so. */
     @SuppressLint("WrongConstant", "PrivateApi")
+    @Suppress("TooGenericExceptionCaught")
     fun open(): Boolean {
-        val statusBar = context.getSystemService("statusbar") ?: return false
         val method = expandMethod ?: return false
         return try {
+            val statusBar = context.getSystemService("statusbar") ?: return false
             method.invoke(statusBar)
             true
         } catch (e: ReflectiveOperationException) {
@@ -34,6 +35,9 @@ class NotificationShade(context: Context) {
             false
         } catch (e: SecurityException) {
             Log.w(TAG, "not allowed to open the notification shade", e)
+            false
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not open the notification shade", e)
             false
         }
     }

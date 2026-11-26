@@ -142,18 +142,34 @@ class WidgetHost(context: Context) : Widgets {
                 infoCache.remove(appWidgetId)
             }
         }
-    private var activeActivity: Activity? = null
+    private var listeningActivity: Activity? = null
+    private var viewActivity: Activity? = null
 
     /** Providers start sending updates; hosted views draw them. */
+    @Suppress("TooGenericExceptionCaught")
     fun startListening(activity: Activity) {
-        activeActivity = activity
+        viewActivity = activity
         // Provider metadata updates while stopped are not replayed as PendingHostUpdates.
         infoCache.clear()
-        host.startListening()
+        try {
+            host.startListening()
+            listeningActivity = activity
+        } catch (e: RuntimeException) {
+            listeningActivity = null
+            Log.w(TAG, "could not start listening to widgets", e)
+        }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     fun stopListening(activity: Activity) {
-        if (activeActivity === activity) host.stopListening()
+        if (listeningActivity === activity) {
+            listeningActivity = null
+            try {
+                host.stopListening()
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not stop listening to widgets", e)
+            }
+        }
     }
 
     /**
@@ -161,43 +177,89 @@ class WidgetHost(context: Context) : Widgets {
      * replaced activity is not kept alive until its widgets are drawn again, while an older
      * instance finishing after its replacement has started leaves the replacement's views alone.
      */
+    @Suppress("TooGenericExceptionCaught")
     fun clearViews(activity: Activity) {
-        if (activeActivity === activity) {
-            activeActivity = null
-            host.dropViews()
+        if (viewActivity === activity) {
+            viewActivity = null
+            try {
+                host.dropViews()
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not clear widget views", e)
+            }
         }
     }
 
     override fun allocateId(): Int = host.allocateAppWidgetId()
 
+    @Suppress("TooGenericExceptionCaught")
     override fun deleteId(id: Int) {
         infoCache.remove(id)
-        host.deleteAppWidgetId(id)
+        try {
+            host.deleteAppWidgetId(id)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not delete widget id $id", e)
+        }
     }
 
     /** What is bound to [id], or null when nothing is (never bound, or its app is gone). */
+    @Suppress("TooGenericExceptionCaught")
     fun info(id: Int): AppWidgetProviderInfo? =
-        infoCache[id] ?: manager.getAppWidgetInfo(id)?.also { infoCache[id] = it }
+        infoCache[id]
+            ?: try {
+                manager.getAppWidgetInfo(id)?.also { infoCache[id] = it }
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not read widget info for $id", e)
+                null
+            }
 
+    @Suppress("TooGenericExceptionCaught")
     override fun bind(id: Int, provider: WidgetProvider): Boolean {
         val info = provider.info ?: return false
         infoCache.remove(id)
-        return manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+        return try {
+            manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not bind widget ${info.provider}", e)
+            false
+        }
     }
 
     /**
      * Binds a fresh id to [provider] (a flattened component name) when it is installed, needs no
      * setup screen of its own, and the system allows the bind without asking; null otherwise.
      */
-    fun restore(provider: String): Int? {
-        val component = ComponentName.unflattenFromString(provider) ?: return null
-        val info =
-            userManager.userProfiles
-                .flatMap { manager.getInstalledProvidersForProfile(it) }
-                .firstOrNull { it.provider == component && !it.needsSetup }
-        if (info == null) return null
-        val id = allocateId()
-        return if (manager.bindAppWidgetIdIfAllowed(id, info.profile, component, null)) {
+    fun restore(provider: String): Int? = restorer().invoke(provider)
+
+    /**
+     * Snapshot of eligible installed providers for one backup restore, avoiding repeated IPC per
+     * restored widget.
+     */
+    internal fun restorer(): (String) -> Int? {
+        val eligible = installedProviders().filterNot { it.needsSetup }.associateBy { it.provider }
+        return { provider ->
+            ComponentName.unflattenFromString(provider)
+                ?.let(eligible::get)
+                ?.let(::bindRestoredProvider)
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    internal fun bindRestoredProvider(info: AppWidgetProviderInfo): Int? {
+        val id =
+            try {
+                allocateId()
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not allocate widget id for ${info.provider}", e)
+                return null
+            }
+        val bound =
+            try {
+                manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not restore widget ${info.provider}", e)
+                false
+            }
+        return if (bound) {
             infoCache[id] = info
             id
         } else {
@@ -205,6 +267,22 @@ class WidgetHost(context: Context) : Widgets {
             null
         }
     }
+
+    @Suppress("TooGenericExceptionCaught")
+    internal fun installedProviders(): List<AppWidgetProviderInfo> =
+        try {
+            userManager.userProfiles.flatMap { profile ->
+                try {
+                    manager.getInstalledProvidersForProfile(profile)
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "could not read widget providers for profile $profile", e)
+                    emptyList()
+                }
+            }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not list user profiles for widgets", e)
+            emptyList()
+        }
 
     /**
      * Starts the setup screen of the widget bound to [id] from [activity], which hears back in its
@@ -214,18 +292,27 @@ class WidgetHost(context: Context) : Widgets {
     fun configure(activity: Activity, id: Int, requestCode: Int) =
         host.startAppWidgetConfigureActivityForResult(activity, id, 0, requestCode, null)
 
-    /** The view that draws widget [id]; [context] is the activity's, for its theme. */
-    fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView {
-        if (context is Activity) activeActivity = context
-        return host.createView(context, id, info)
+    /**
+     * The view that draws widget [id]; [context] is the activity's, for its theme. Null if the
+     * system or provider fails to inflate it, so the cell can show a placeholder instead of
+     * crashing the launcher.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun createView(context: Context, id: Int, info: AppWidgetProviderInfo): AppWidgetHostView? {
+        if (context is Activity) viewActivity = context
+        return try {
+            host.createView(context, id, info)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "could not create view for widget $id (${info.provider})", e)
+            null
+        }
     }
 
     override fun providers(): List<WidgetProvider> {
         val pm = context.packageManager
         val density = context.resources.displayMetrics.density
         val order = LabelOrder.comparator()
-        return userManager.userProfiles
-            .flatMap { manager.getInstalledProvidersForProfile(it) }
+        return installedProviders()
             .filter { it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0 }
             // Some ask to be kept out of pickers: a launcher's own internal widgets, say.
             .filter {

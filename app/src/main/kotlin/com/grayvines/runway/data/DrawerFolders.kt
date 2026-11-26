@@ -23,28 +23,37 @@ fun WorkspaceRepository.observeDrawerPlacements(): Flow<List<DrawerPlacement>> =
  * longer hidden; one emptied by that goes, as with [addToDrawerFolder].
  */
 suspend fun WorkspaceRepository.createDrawerFolder(app: AppRef): Long = write {
+    val previousFolders = dao.drawerFoldersContaining(app.component, app.profile)
     val folderId = dao.insertFolder(FolderEntity(name = NEW_FOLDER_NAME))
     dao.insertItem(
         ItemEntity(kind = ItemKind.FOLDER, container = Container.DRAWER, folderId = folderId)
     )
     dao.moveIntoDrawerFolder(folderId, app)
-    dao.deleteEmptyFolders()
+    if (previousFolders.isNotEmpty() && dao.deleteEmptyFoldersIn(previousFolders) > 0) {
+        dao.dropTrailingEmptyPages()
+    }
     folderId
 }
 
 /**
  * Puts [app] in the drawer folder [folderId], out of any other and no longer hidden; one emptied by
- * that goes.
+ * that goes. Does nothing if [folderId] no longer exists.
  */
 suspend fun WorkspaceRepository.addToDrawerFolder(folderId: Long, app: AppRef) = write {
-    dao.moveIntoDrawerFolder(folderId, app)
-    dao.deleteEmptyFolders()
+    if (dao.folderExists(folderId)) {
+        val previousFolders =
+            dao.drawerFoldersContaining(app.component, app.profile).filter { it != folderId }
+        dao.moveIntoDrawerFolder(folderId, app)
+        if (previousFolders.isNotEmpty() && dao.deleteEmptyFoldersIn(previousFolders) > 0) {
+            dao.dropTrailingEmptyPages()
+        }
+    }
 }
 
 /**
  * A further placement of the drawer folder [folderId], in a cell, after moving aside the neighbours
- * it [displaced]; the drawer keeps its own. False, and nothing changed, if the neighbours could not
- * be moved.
+ * it [displaced]; the drawer keeps its own. False, and nothing changed, if the folder no longer
+ * exists or the neighbours could not be moved.
  */
 @Suppress("LongParameterList") // one drop, spelled out
 suspend fun WorkspaceRepository.placeFolder(
@@ -55,7 +64,10 @@ suspend fun WorkspaceRepository.placeFolder(
     y: Int,
     displaced: Map<Long, Footprint> = emptyMap(),
 ): Boolean = write {
-    if (!makeRoom(container, page, displaced, target = Footprint(x, y))) {
+    if (
+        !dao.folderExists(folderId) ||
+            !makeRoom(container, page, displaced, target = Footprint(x, y))
+    ) {
         false
     } else {
         dao.insertItem(
@@ -73,14 +85,17 @@ suspend fun WorkspaceRepository.placeFolder(
 }
 
 /** Deletes the folder outright: every placement of it goes, and its apps are loose again. */
-suspend fun WorkspaceRepository.deleteFolder(folderId: Long) = write { dao.deleteFolder(folderId) }
+suspend fun WorkspaceRepository.deleteFolder(folderId: Long) = write {
+    if (dao.deleteFolder(folderId) > 0) dao.dropTrailingEmptyPages()
+}
 
 /**
  * Puts [app] in the drawer folder [folderId], out of any other drawer folder it was in and out of
- * `hidden_apps`: an app in a drawer folder is in the drawer.
+ * `hidden_apps`: an app in a drawer folder is in the drawer. Leaves [folderId] untouched if [app]
+ * is already in it, preserving its hand-sorted position.
  */
 internal suspend fun WorkspaceDao.moveIntoDrawerFolder(folderId: Long, app: AppRef) {
     deleteHiddenApp(app.component, app.profile)
-    leaveDrawerFolders(app.component, app.profile)
+    leaveDrawerFolders(app.component, app.profile, exceptFolderId = folderId)
     addToFolder(folderId, app)
 }

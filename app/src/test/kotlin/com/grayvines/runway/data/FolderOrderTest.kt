@@ -81,4 +81,26 @@ class FolderOrderTest {
 
         assertEquals(listOf(app(3), app(1)), folder(id).apps)
     }
+
+    @Test
+    fun `re-adding an app to a hand-sorted drawer folder it is already in keeps its position`() =
+        runTest {
+            val id = folderOf(app(1), app(2), app(3))
+            repo.reorderFolder(id, listOf(app(3), app(1), app(2)))
+
+            repo.addToDrawerFolder(id, app(3))
+
+            val after = folder(id)
+            assertTrue(after.handSorted)
+            assertEquals(listOf(app(3), app(1), app(2)), after.apps)
+        }
+
+    @Test
+    fun `reorderFolder ignores duplicate entries in the requested order`() = runTest {
+        val id = folderOf(app(1), app(2), app(3))
+
+        repo.reorderFolder(id, listOf(app(2), app(2), app(1), app(3), app(1)))
+
+        assertEquals(listOf(app(2), app(1), app(3)), folder(id).apps)
+    }
 }
