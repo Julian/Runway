@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -12,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import com.grayvines.runway.data.Container
+import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 
@@ -35,6 +37,16 @@ fun Dock(
     // The grab is measured within the slot; the overlay's box is a cell centred on the same icon,
     // so the grab within it is nearer the middle by half the difference in width.
     val grabShift = with(LocalDensity.current) { ((slot.width - cell.width) / 2).toPx() }
+    val handlersFor: (Int, HomeItem) -> DragHandlers? =
+        remember(drag, grabShift) {
+            { page, item ->
+                drag?.handlersFor(item, page, Container.DOCK)?.grabbedShiftedBy(grabShift)
+            }
+        }
+    val onPagePositioned: (Int, Bounds) -> Unit =
+        remember(drag) { { page, bounds -> drag?.onDockPagePositioned?.invoke(page, bounds) } }
+    val landing: (Int) -> Footprint? =
+        remember(drag) { { page -> drag?.plannedDockFootprint(page) } }
     Box(Modifier.fillMaxWidth().height(slot.height)) {
         PagedGrid(
             pages = pages,
@@ -44,11 +56,9 @@ fun Dock(
             labels = labels,
             onLaunch = onLaunch,
             drag = drag,
-            handlersFor = { page, item ->
-                drag?.handlersFor(item, page, Container.DOCK)?.grabbedShiftedBy(grabShift)
-            },
-            onPagePositioned = { page, bounds -> drag?.onDockPagePositioned?.invoke(page, bounds) },
-            landing = { page -> drag?.plannedDockFootprint(page) },
+            handlersFor = handlersFor,
+            onPagePositioned = onPagePositioned,
+            landing = landing,
             modifier = Modifier.testTag(DOCK_TAG),
         )
         PageDots(pagerState, Modifier.align(Alignment.TopCenter))

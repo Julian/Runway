@@ -11,6 +11,7 @@ import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.WorkspaceLookup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -54,21 +55,28 @@ class WidgetPickerHost(
      */
     var prompts: WidgetPrompts? = null
 
+    private var loadJob: Job? = null
+
     val isOpen: Boolean
         get() = _open.value
 
     fun open() {
         if (!mayOpen()) return
+        loadJob?.cancel()
         _open.value = true
         _providers.value = null
-        scope.launch {
+        loadJob = scope.launch {
+            var loaded: List<WidgetProvider>? = null
             attempt("list the widgets") {
-                _providers.value = withContext(Dispatchers.Default) { widgets.providers() }
+                loaded = withContext(Dispatchers.IO) { widgets.providers() }
             }
+            if (_open.value) _providers.value = loaded ?: emptyList()
         }
     }
 
     fun dismiss() {
+        loadJob?.cancel()
+        loadJob = null
         _open.value = false
         _providers.value = null
     }

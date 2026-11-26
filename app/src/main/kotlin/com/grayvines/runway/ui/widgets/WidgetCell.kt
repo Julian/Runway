@@ -1,6 +1,7 @@
 package com.grayvines.runway.ui.widgets
 
 import android.appwidget.AppWidgetHostView
+import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
@@ -24,10 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -91,15 +90,20 @@ fun WidgetCell(
     val host = context.appGraph.widgets
     val id = item.appWidgetId
     val info = remember(id, item.label) { id?.let(host::info) }
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var frame by remember { mutableStateOf<WidgetFrame?>(null) }
-    val handlers by rememberWidgetHandlers(drag, session) { frame }
+    val refs = remember { WidgetCellRefs() }
+    val handlers by rememberWidgetHandlers(drag, session) { refs.frame }
     // Framed, the widget is not live: its view sees no touch, and a tap puts the frame away. The
     // cell's own gestures go on as before, so a hold lifts the framed widget again.
     val framed = framedBy?.frames(item.id) == true
     // The frame may arrive after the cell's last layout: it is told where the cell is at once.
     LaunchedEffect(framedBy, framed) {
-        if (framed) coords?.let { framedBy.positioned(item.id, it.boundsInRoot()) }
+        if (framed) {
+            refs.coords
+                ?.takeIf { it.isAttached }
+                ?.let {
+                    framedBy.positioned(item.id, it.boundsInRoot())
+                }
+        }
     }
     val dismissFrame = rememberUpdatedState { framedBy?.dismiss() }
     val cellModifier =
@@ -110,25 +114,46 @@ fun WidgetCell(
             // Invisible while carried: removing the view would end its own gesture.
             .hiddenWhen(lifted)
             .onGloballyPositioned {
-                coords = it
+                refs.coords = it
                 framedBy?.positioned(item.id, it.boundsInRoot())
                 if (settlingHere != null) {
                     val c = it.boundsInRoot().center
                     settlingHere.onSettleTargetPositioned(Point(c.x, c.y))
                 }
             }
-            .dragAfterLongPress(item.id, { coords }, { handlers })
+            .dragAfterLongPress(item.id, { refs.coords }, { handlers })
     if (id == null || info == null) {
-        frame = null
         Placeholder(item.label, lifted, cellModifier)
         return
     }
+    HostedWidget(
+        id = id,
+        info = info,
+        size = SizeF(cell.width.value * item.spanX, cell.height.value * item.spanY),
+        framed = framed,
+        lifted = lifted,
+        refs = refs,
+        modifier = cellModifier,
+    )
+}
+
+@Composable
+private fun HostedWidget(
+    id: Int,
+    info: AppWidgetProviderInfo,
+    size: SizeF,
+    framed: Boolean,
+    lifted: Boolean,
+    refs: WidgetCellRefs,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val host = context.appGraph.widgets
     val label = remember(info) { info.loadLabel(context.packageManager) }
-    val size = SizeF(cell.width.value * item.spanX, cell.height.value * item.spanY)
     key(id) {
         AndroidView(
             factory = { ctx ->
-                WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { frame = it }
+                WidgetFrame(ctx).hosting(host.createView(ctx, id, info)).also { refs.frame = it }
             },
             update = { f ->
                 f.muted = framed
@@ -143,10 +168,16 @@ fun WidgetCell(
                     f.widget?.updateAppWidgetSize(Bundle(), listOf(size))
                 }
             },
-            modifier = cellModifier.semantics { contentDescription = label },
+            onRelease = { f ->
+                f.release()
+                if (refs.frame === f) refs.frame = null
+            },
+            modifier = modifier.semantics { contentDescription = label },
         )
     }
 }
+
+private class WidgetCellRefs(var coords: LayoutCoordinates? = null, var frame: WidgetFrame? = null)
 
 /**
  * Stand-in for a widget nothing is bound to: a dim rounded card over its cells with the app's name.
@@ -253,6 +284,11 @@ private class WidgetFrame(context: Context) : FrameLayout(context) {
             LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
         return this
+    }
+
+    fun release() {
+        removeAllViews()
+        widget = null
     }
 
     /**

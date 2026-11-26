@@ -1,6 +1,7 @@
 package com.grayvines.runway.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /*
@@ -9,7 +10,9 @@ import kotlinx.coroutines.flow.map
  */
 
 fun WorkspaceRepository.observeHiddenApps(): Flow<Set<AppRef>> =
-    dao.observeHiddenApps().map { hidden -> hidden.mapTo(mutableSetOf()) { it.ref } }
+    dao.observeHiddenApps()
+        .map { hidden -> hidden.mapTo(mutableSetOf()) { it.ref } }
+        .distinctUntilChanged()
 
 /**
  * Hides [app] from the drawer, taking it out of the drawer folder it was in. A folder this empties

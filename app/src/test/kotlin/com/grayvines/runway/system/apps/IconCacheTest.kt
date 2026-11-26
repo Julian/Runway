@@ -138,4 +138,56 @@ class IconCacheTest {
         assertEquals("ICON:fresh", value)
         assertEquals("ICON:fresh", file.readText())
     }
+
+    @Test
+    fun `invalidatePackages removes multiple packages in one pass while sparing neighbors`() {
+        val cache = stringCache()
+        val a = key(pkg = "com.example.alpha")
+        val b = key(pkg = "com.example.beta")
+        val keep = key(pkg = "com.example.alpha.extra")
+
+        cache.getOrPut(a) { "ICON:A" }
+        cache.getOrPut(b) { "ICON:B" }
+        cache.getOrPut(keep) { "ICON:KEEP" }
+
+        cache.invalidatePackages(listOf("com.example.alpha", "com.example.beta"))
+
+        assertFalse(cache.contains(a))
+        assertFalse(cache.contains(b))
+        assertTrue(cache.contains(keep))
+    }
+
+    @Test
+    fun `decoder runtime exception discards corrupt file and re-renders`() {
+        var throwOnDecode = true
+        val cache =
+            IconCache(
+                dir = tempDir,
+                encode = { value, out ->
+                    out.write(value.toByteArray(Charsets.UTF_8))
+                    true
+                },
+                decode = { input ->
+                    if (throwOnDecode) error("corrupt png")
+                    input.readBytes().toString(Charsets.UTF_8)
+                },
+            )
+        val k = key()
+        File(tempDir, k.fileName()).writeText("BROKEN")
+
+        val rendered = cache.getOrPut(k) { "ICON:recovered" }
+        assertEquals("ICON:recovered", rendered)
+        throwOnDecode = false
+        assertEquals("ICON:recovered", cache.getOrPut(k) { error("should hit cache") })
+    }
+
+    @Test
+    fun `long package names still write through short temp files`() {
+        val cache = stringCache()
+        val longPkg = "com.example." + "segment.".repeat(20) + "app"
+        val k = key(pkg = longPkg)
+
+        assertEquals("ICON:long", cache.getOrPut(k) { "ICON:long" })
+        assertTrue(cache.contains(k))
+    }
 }

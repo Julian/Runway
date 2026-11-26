@@ -4,11 +4,18 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
+import android.content.pm.ResolveInfo
 import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 
 /** The app the search bar hands off to; the same app is the same target, whatever icon object. */
-class SearchTarget(val packageName: String, val label: String, val icon: Drawable) {
+class SearchTarget(
+    val packageName: String,
+    val label: String,
+    val icon: ImageBitmap? = null,
+) {
     override fun equals(other: Any?) =
         other is SearchTarget && other.packageName == packageName && other.label == label
 
@@ -19,30 +26,49 @@ class SearchTarget(val packageName: String, val label: String, val icon: Drawabl
  * Picks the web-search handler (the configured package, else Firefox, else the first one) and hands
  * a search off to it. The launcher never talks to a search engine itself.
  */
-class SearchTargetResolver(private val context: Context) {
+class SearchTargetResolver(context: Context) {
+    private val context = context.applicationContext
+
     /** Every app that can take a web search, as the settings picker lists them. */
     fun handlers(): List<SearchTarget> {
         val pm = context.packageManager
+        return exportedHandlers(pm).map {
+            // The app's own name and icon: an activity may call itself just "Search".
+            val app = it.activityInfo.applicationInfo
+            val bitmap = runCatching {
+                app.loadIcon(pm).toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap()
+            }
+                .getOrNull()
+            SearchTarget(app.packageName, app.loadLabel(pm).toString(), bitmap)
+        }
+    }
+
+    /**
+     * Resolves the chosen search handler without loading icons for every candidate on the phone.
+     */
+    fun resolve(preferredPackage: String?): SearchTarget? {
+        val pm = context.packageManager
+        val candidates = exportedHandlers(pm)
+        val chosen =
+            candidates.firstOrNull {
+                it.activityInfo.applicationInfo.packageName == preferredPackage
+            }
+                ?: candidates.firstOrNull { it.activityInfo.applicationInfo.packageName == FIREFOX }
+                ?: candidates.firstOrNull()
+                ?: return null
+        val app = chosen.activityInfo.applicationInfo
+        return SearchTarget(app.packageName, app.loadLabel(pm).toString())
+    }
+
+    private fun exportedHandlers(pm: PackageManager): List<ResolveInfo> =
         // Only activities other apps may start: a browser's private search entry point shows up
         // in the query but refuses us.
-        return pm.queryIntentActivities(
+        pm.queryIntentActivities(
                 Intent(Intent.ACTION_WEB_SEARCH),
                 PackageManager.ResolveInfoFlags.of(0),
             )
             .filter { it.activityInfo.exported }
-            .map {
-                // The app's own name and icon: an activity may call itself just "Search".
-                val app = it.activityInfo.applicationInfo
-                SearchTarget(app.packageName, app.loadLabel(pm).toString(), app.loadIcon(pm))
-            }
-    }
-
-    fun resolve(preferredPackage: String?): SearchTarget? {
-        val handlers = handlers()
-        return handlers.firstOrNull { it.packageName == preferredPackage }
-            ?: handlers.firstOrNull { it.packageName == FIREFOX }
-            ?: handlers.firstOrNull()
-    }
+            .distinctBy { it.activityInfo.applicationInfo.packageName }
 
     /**
      * Opens [target]'s search. If it no longer handles the intent, or refuses it (updated,
@@ -101,6 +127,7 @@ class SearchTargetResolver(private val context: Context) {
                 "org.mozilla.fenix",
                 "org.mozilla.fennec_fdroid",
             )
+        const val CHOICE_ICON_PX = 96
         const val TAG = "Runway"
     }
 }

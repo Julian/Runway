@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -35,13 +34,15 @@ fun Modifier.drawerPull(
 ): Modifier {
     val release = rememberUpdatedState(onRelease)
     val ignores = rememberUpdatedState(startsOnWidget)
-    val coords = remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val coords = remember { CoordsRef() }
     return this.onGloballyPositioned { coords.value = it }
         .then(
             remember(motion) {
                 Modifier.pullsDrawer(
                     motion,
-                    rootOf = { local -> coords.value?.localToRoot(local) },
+                    rootOf = { local ->
+                        coords.value?.takeIf { it.isAttached }?.localToRoot(local)
+                    },
                     startsOnWidget = { ignores.value(it) },
                 ) {
                     release.value(it)
@@ -49,6 +50,8 @@ fun Modifier.drawerPull(
             }
         )
 }
+
+private class CoordsRef(var value: LayoutCoordinates? = null)
 
 /**
  * The safety net under every pull: whenever the last finger lifts anywhere on the screen and the

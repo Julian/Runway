@@ -127,7 +127,7 @@ private fun Choices(
     onPick: (WidgetProvider) -> Unit,
     handlersFor: (WidgetProvider) -> DragHandlers?,
 ) {
-    val groups = providers.groupBy { it.appLabel }
+    val groups = remember(providers) { providers.groupBy { it.appLabel } }
     // The last rows scroll up from under the navigation bar rather than staying beneath it.
     LazyColumn(
         Modifier.fillMaxSize().testTag(WIDGET_LIST_TAG),

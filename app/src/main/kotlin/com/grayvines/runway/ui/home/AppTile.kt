@@ -13,10 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -117,10 +115,11 @@ internal fun rememberLiftConfiguration(): ViewConfiguration {
 
 /** Tracks a node's bounds in root pixels so clicks and long presses can report where it sits. */
 internal class RootBounds {
-    var coords by mutableStateOf<LayoutCoordinates?>(null)
+    var coords: LayoutCoordinates? = null
     val modifier = Modifier.onGloballyPositioned { coords = it }
 
-    fun current(): Bounds = coords?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)
+    fun current(): Bounds =
+        coords?.takeIf { it.isAttached }?.boundsInRoot()?.toBounds() ?: Bounds(0f, 0f, 0f, 0f)
 }
 
 @Composable internal fun rememberRootBounds(): RootBounds = remember { RootBounds() }

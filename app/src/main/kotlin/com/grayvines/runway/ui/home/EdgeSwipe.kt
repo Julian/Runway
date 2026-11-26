@@ -41,8 +41,10 @@ import kotlin.math.sign
 internal fun Modifier.swipesPastFirstPage(
     pager: PagerState,
     sensitivity: DrawerSwipe,
+    enabled: Boolean,
     onSwipe: () -> Unit,
 ): Modifier {
+    if (!enabled) return this
     val swiped = rememberUpdatedState(onSwipe)
     val swipe = rememberUpdatedState(sensitivity)
     val screenHeight = rememberUpdatedState(LocalWindowInfo.current.containerSize.height)

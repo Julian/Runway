@@ -16,11 +16,12 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -68,8 +69,11 @@ fun SearchBar(
     pressedBy: () -> Rect? = { null },
 ) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
+    val currentPressedBy by rememberUpdatedState(pressedBy)
     // Recomputed per move while something is carried; only a change of answer recomposes.
-    val pressed by remember { derivedStateOf { bounds?.let { pressedBy()?.overlaps(it) } == true } }
+    val pressed by remember {
+        derivedStateOf { bounds?.let { currentPressedBy()?.overlaps(it) } == true }
+    }
     val searchWith = target?.let { "Search with ${it.label}" }
     Box(
         modifier =
@@ -121,14 +125,15 @@ fun SearchBar(
     }
 }
 
-private fun Modifier.edgeOutline(pressed: () -> Boolean): Modifier = drawBehind {
-    if (pressed()) {
-        val corner = CornerRadius(EDGE_CORNER.toPx())
-        drawRoundRect(Color.White.copy(alpha = EDGE_FILL_ALPHA), cornerRadius = corner)
-        drawRoundRect(
-            Color.White.copy(alpha = EDGE_OUTLINE_ALPHA),
-            cornerRadius = corner,
-            style = Stroke(EDGE_STROKE.toPx()),
-        )
+private fun Modifier.edgeOutline(pressed: () -> Boolean): Modifier = drawWithCache {
+    val corner = CornerRadius(EDGE_CORNER.toPx())
+    val stroke = Stroke(EDGE_STROKE.toPx())
+    val fill = Color.White.copy(alpha = EDGE_FILL_ALPHA)
+    val border = Color.White.copy(alpha = EDGE_OUTLINE_ALPHA)
+    onDrawBehind {
+        if (pressed()) {
+            drawRoundRect(fill, cornerRadius = corner)
+            drawRoundRect(border, cornerRadius = corner, style = stroke)
+        }
     }
 }

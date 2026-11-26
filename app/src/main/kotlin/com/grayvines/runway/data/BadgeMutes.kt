@@ -1,6 +1,7 @@
 package com.grayvines.runway.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /*
@@ -9,7 +10,9 @@ import kotlinx.coroutines.flow.map
  */
 
 fun WorkspaceRepository.observeBadgeMutes(): Flow<Set<AppRef>> =
-    dao.observeBadgeMutes().map { muted -> muted.mapTo(mutableSetOf()) { it.ref } }
+    dao.observeBadgeMutes()
+        .map { muted -> muted.mapTo(mutableSetOf()) { it.ref } }
+        .distinctUntilChanged()
 
 /** Mutes notification badges for [app]; an app already muted is left as it was. */
 suspend fun WorkspaceRepository.muteBadges(app: AppRef) = write {

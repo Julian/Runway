@@ -159,6 +159,17 @@ class RunwayDatabaseMigrationTest {
                 emptyList<Long>(),
                 opened.workspaceDao().allPages().map { it.index.toLong() },
             )
+            val ownComponent =
+                instrumentation.targetContext.packageManager
+                    .getLaunchIntentForPackage(instrumentation.targetContext.packageName)
+                    ?.component
+                    ?.flattenToString()
+            if (ownComponent != null) {
+                assertEquals(
+                    listOf(ownComponent),
+                    opened.workspaceDao().hiddenApps().map { it.component },
+                )
+            }
         } finally {
             opened.close()
         }

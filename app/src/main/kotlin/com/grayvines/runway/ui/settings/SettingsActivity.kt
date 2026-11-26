@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -31,6 +32,7 @@ import java.io.IOException
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,19 +58,37 @@ class SettingsActivity : ComponentActivity() {
     private var hasNotificationAccess by mutableStateOf(false)
     private var searchTargets by mutableStateOf(emptyList<SearchTarget>())
     private var isDefault by mutableStateOf(false)
+    private var refreshJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = appGraph
-        refreshStatus()
         val debugActions = debugActions()
         val hiddenApps = graph.workspace.observeHiddenApps()
+        val backupActions =
+            BackupActions(
+                save = { saveBackup.launch("runway-${LocalDate.now()}.json") },
+                restore = { restoreBackup.launch(arrayOf(BACKUP_MIME, "*/*")) },
+            )
+        val onChange: ((Settings) -> Settings) -> Unit = { transform ->
+            graph.appScope.launch { graph.settings.update(transform) }
+        }
+        val openHome: () -> Unit = { startActivity(Intent(this, LauncherActivity::class.java)) }
+        val setDefaultHome: () -> Unit = {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                requestHomeRole.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
+            }
+        }
         setContent {
             SettingsTheme {
                 val settings by graph.settings.settings.collectAsStateWithLifecycle(Settings())
                 val apps by graph.appRepository.apps.collectAsStateWithLifecycle()
                 val hidden by hiddenApps.collectAsStateWithLifecycle(emptySet())
+                val onOpenHome = remember(isDefault) { openHome.takeUnless { isDefault } }
+                val onSetDefaultHome =
+                    remember(isDefault) { setDefaultHome.takeUnless { isDefault } }
                 SettingsScreen(
                     settings = settings,
                     searchTargets = searchTargets,
@@ -77,36 +97,10 @@ class SettingsActivity : ComponentActivity() {
                     onHide = ::setHidden,
                     hasNotificationAccess = hasNotificationAccess,
                     onGrantNotificationAccess = graph.badges::openAccessSettings,
-                    onOpenHome =
-                        if (isDefault) {
-                            null
-                        } else {
-                            { startActivity(Intent(this, LauncherActivity::class.java)) }
-                        },
-                    onSetDefaultHome =
-                        if (isDefault) {
-                            null
-                        } else {
-                            {
-                                val roleManager = getSystemService(RoleManager::class.java)
-                                if (
-                                    roleManager != null &&
-                                        roleManager.isRoleAvailable(RoleManager.ROLE_HOME)
-                                ) {
-                                    requestHomeRole.launch(
-                                        roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
-                                    )
-                                }
-                            }
-                        },
-                    onChange = { transform ->
-                        graph.appScope.launch { graph.settings.update(transform) }
-                    },
-                    backupActions =
-                        BackupActions(
-                            save = { saveBackup.launch("runway-${LocalDate.now()}.json") },
-                            restore = { restoreBackup.launch(arrayOf(BACKUP_MIME, "*/*")) },
-                        ),
+                    onOpenHome = onOpenHome,
+                    onSetDefaultHome = onSetDefaultHome,
+                    onChange = onChange,
+                    backupActions = backupActions,
                     debugActions = debugActions,
                 )
             }
@@ -122,8 +116,9 @@ class SettingsActivity : ComponentActivity() {
         val graph = appGraph
         hasNotificationAccess = graph.badges.hasAccess()
         isDefault = isDefaultHome()
-        lifecycleScope.launch {
-            searchTargets = withContext(Dispatchers.Default) { graph.searchTargets.handlers() }
+        refreshJob?.cancel()
+        refreshJob = lifecycleScope.launch {
+            searchTargets = withContext(Dispatchers.IO) { graph.searchTargets.handlers() }
         }
     }
 

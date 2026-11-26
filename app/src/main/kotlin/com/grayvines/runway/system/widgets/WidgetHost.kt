@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.system.apps.LabelOrder
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A widget the device offers, as the picker lists it: its provider, what to call it and the app it
@@ -117,15 +118,37 @@ class WidgetHost(context: Context) : Widgets {
     private val context = context.applicationContext
     private val manager: AppWidgetManager = AppWidgetManager.getInstance(this.context)
     private val userManager = this.context.getSystemService(UserManager::class.java)
+    private val infoCache = ConcurrentHashMap<Int, AppWidgetProviderInfo>()
     private val host =
         object : AppWidgetHost(this.context, HOST_ID) {
             fun dropViews() = clearViews()
+
+            override fun onProviderChanged(appWidgetId: Int, appWidget: AppWidgetProviderInfo?) {
+                super.onProviderChanged(appWidgetId, appWidget)
+                if (appWidget != null) {
+                    infoCache[appWidgetId] = appWidget
+                } else {
+                    infoCache.remove(appWidgetId)
+                }
+            }
+
+            override fun onProvidersChanged() {
+                super.onProvidersChanged()
+                infoCache.clear()
+            }
+
+            override fun onAppWidgetRemoved(appWidgetId: Int) {
+                super.onAppWidgetRemoved(appWidgetId)
+                infoCache.remove(appWidgetId)
+            }
         }
     private var activeActivity: Activity? = null
 
     /** Providers start sending updates; hosted views draw them. */
     fun startListening(activity: Activity) {
         activeActivity = activity
+        // Provider metadata updates while stopped are not replayed as PendingHostUpdates.
+        infoCache.clear()
         host.startListening()
     }
 
@@ -147,13 +170,18 @@ class WidgetHost(context: Context) : Widgets {
 
     override fun allocateId(): Int = host.allocateAppWidgetId()
 
-    override fun deleteId(id: Int) = host.deleteAppWidgetId(id)
+    override fun deleteId(id: Int) {
+        infoCache.remove(id)
+        host.deleteAppWidgetId(id)
+    }
 
     /** What is bound to [id], or null when nothing is (never bound, or its app is gone). */
-    fun info(id: Int): AppWidgetProviderInfo? = manager.getAppWidgetInfo(id)
+    fun info(id: Int): AppWidgetProviderInfo? =
+        infoCache[id] ?: manager.getAppWidgetInfo(id)?.also { infoCache[id] = it }
 
     override fun bind(id: Int, provider: WidgetProvider): Boolean {
         val info = provider.info ?: return false
+        infoCache.remove(id)
         return manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
     }
 
@@ -170,6 +198,7 @@ class WidgetHost(context: Context) : Widgets {
         if (info == null) return null
         val id = allocateId()
         return if (manager.bindAppWidgetIdIfAllowed(id, info.profile, component, null)) {
+            infoCache[id] = info
             id
         } else {
             deleteId(id)

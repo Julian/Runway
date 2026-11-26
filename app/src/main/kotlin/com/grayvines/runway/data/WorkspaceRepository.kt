@@ -9,7 +9,7 @@ import com.grayvines.runway.model.LayoutEngine
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.model.overlaps
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -78,12 +78,10 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * folder created or deleted) is seen all at once, never half-way through.
      */
     fun observeSnapshot(): Flow<WorkspaceSnapshot> =
-        combine(
-                dao.observeAllPages(),
-                dao.observeAllItems(),
-                dao.observeFolders(),
-                dao.observeFolderApps(),
-            ) { _, _, _, _ ->
+        db.invalidationTracker
+            .createFlow("pages", "items", "folders", "folder_apps", emitInitialState = true)
+            .conflate()
+            .map {
                 read {
                     val pages = dao.allPages()
                     val items = dao.items()
@@ -191,10 +189,7 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
     ): Boolean {
         val pageExists = dao.pages(container).any { it.index == page }
         if (!pageExists || mover in displaced) return false
-        val onPage =
-            dao.items().filter {
-                it.container == container && it.pageIndex == page && it.id != mover
-            }
+        val onPage = dao.itemsOnPage(container, page).filter { it.id != mover }
         val byId = onPage.associateBy { it.id }
         if (!displaced.keys.all { it in byId }) return false
         val stayed = onPage.filter { it.id !in displaced }.mapNotNull { it.footprint() }
@@ -204,7 +199,8 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
                 Footprint(to.x, to.y, other.spanX, other.spanY)
             } + listOfNotNull(target)
         if (!landing.fitsAmong(stayed, container)) return false
-        dao.park(displaced.keys.toList() + listOfNotNull(mover))
+        val toPark = displaced.keys.toList() + listOfNotNull(mover)
+        if (toPark.isNotEmpty()) dao.park(toPark)
         displaced.forEach { (otherId, to) -> dao.place(otherId, container, page, to.x, to.y) }
         return true
     }
@@ -257,32 +253,14 @@ class WorkspaceRepository(private val db: RunwayDatabase) {
      * with no app in the list is left alone: it is off (quiet mode), not empty, and its icons come
      * back with it. Catches uninstalls that happened while the launcher was not running.
      */
-    suspend fun retainApps(installed: Set<AppRef>) = write {
-        // Read and deleted in the one transaction: a fold landing between the two could turn a
-        // stale app row into a folder row of the same id, which must not then be deleted.
+    suspend fun retainApps(installed: Set<AppRef>) {
         val profiles = installed.mapTo(mutableSetOf()) { it.profile }
-        val stale =
-            dao.itemsOfKind(ItemKind.APP).filter { item ->
-                val component = item.component
-                val profile = item.profile
-                component != null &&
-                    profile != null &&
-                    profile in profiles &&
-                    AppRef(component, profile) !in installed
-            }
-        val gone = dao.folderApps().filter { it.profile in profiles && it.ref !in installed }
-        if (stale.isNotEmpty() || gone.isNotEmpty()) {
-            dao.deleteItems(stale.map { it.id })
-            gone.forEach { dao.deleteFolderApp(it.component, it.profile) }
-            dao.deleteEmptyFolders()
-            dao.dropTrailingEmptyPages()
+        if (!read { dao.hasStaleApps(profiles, installed) }) return
+        write {
+            // Read and deleted in the one transaction: a fold landing between the two could turn a
+            // stale app row into a folder row of the same id, which must not then be deleted.
+            dao.pruneStaleApps(profiles, installed)
         }
-        dao.hiddenApps()
-            .filter { it.profile in profiles && it.ref !in installed }
-            .forEach { dao.deleteHiddenApp(it.component, it.profile) }
-        dao.badgeMutes()
-            .filter { it.profile in profiles && it.ref !in installed }
-            .forEach { dao.deleteBadgeMute(it.component, it.profile) }
     }
 
     internal suspend fun <T> write(block: suspend () -> T): T =
@@ -328,6 +306,41 @@ internal fun ItemEntity.footprint(): Footprint? {
     val cellX = x ?: return null
     val cellY = y ?: return null
     return Footprint(cellX, cellY, spanX, spanY)
+}
+
+private fun ItemEntity.isStaleApp(profiles: Set<Long>, installed: Set<AppRef>): Boolean {
+    val comp = component ?: return false
+    val prof = profile ?: return false
+    return prof in profiles && AppRef(comp, prof) !in installed
+}
+
+internal suspend fun WorkspaceDao.hasStaleApps(
+    profiles: Set<Long>,
+    installed: Set<AppRef>,
+): Boolean =
+    itemsOfKind(ItemKind.APP).any { it.isStaleApp(profiles, installed) } ||
+        folderApps().any { it.profile in profiles && it.ref !in installed } ||
+        hiddenApps().any { it.profile in profiles && it.ref !in installed } ||
+        badgeMutes().any { it.profile in profiles && it.ref !in installed }
+
+internal suspend fun WorkspaceDao.pruneStaleApps(profiles: Set<Long>, installed: Set<AppRef>) {
+    val stale = itemsOfKind(ItemKind.APP).filter { it.isStaleApp(profiles, installed) }
+    val gone =
+        folderApps()
+            .filter { it.profile in profiles && it.ref !in installed }
+            .mapTo(mutableSetOf()) { it.ref }
+    if (stale.isNotEmpty() || gone.isNotEmpty()) {
+        if (stale.isNotEmpty()) deleteItems(stale.map { it.id })
+        gone.forEach { deleteFolderApp(it.component, it.profile) }
+        deleteEmptyFolders()
+        dropTrailingEmptyPages()
+    }
+    hiddenApps()
+        .filter { it.profile in profiles && it.ref !in installed }
+        .forEach { deleteHiddenApp(it.component, it.profile) }
+    badgeMutes()
+        .filter { it.profile in profiles && it.ref !in installed }
+        .forEach { deleteBadgeMute(it.component, it.profile) }
 }
 
 internal fun containerContent(

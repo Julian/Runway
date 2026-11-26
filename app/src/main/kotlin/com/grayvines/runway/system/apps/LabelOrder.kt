@@ -33,7 +33,8 @@ object LabelOrder {
     /** A comparator for the current locale; make one per sort, since the locale can change. */
     fun comparator(): Comparator<String> {
         val collator = Collator.getInstance().apply { strength = Collator.SECONDARY }
-        return compareBy<String> { initial(it) != NON_LETTER }.thenComparator(collator::compare)
+        return compareBy<String> { it.trimStart().firstOrNull()?.isLetter() == true }
+            .thenComparator(collator::compare)
     }
 
     /**

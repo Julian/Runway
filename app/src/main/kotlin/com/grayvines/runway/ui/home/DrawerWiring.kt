@@ -3,8 +3,11 @@ package com.grayvines.runway.ui.home
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -18,6 +21,7 @@ import com.grayvines.runway.ui.drawer.releasesAbandonedPull
 class DrawerActions(val open: () -> Unit, val close: () -> Unit, val openShade: () -> Unit)
 
 /** The drawer's motion, its release decision, and what a pull must know, wired once. */
+@Stable
 internal class DrawerControls(
     val motion: DrawerMotion,
     val release: (velocity: Float) -> Unit,
@@ -48,11 +52,14 @@ internal fun rememberDrawer(
 ): DrawerControls {
     val scope = rememberCoroutineScope()
     val motion = remember { DrawerMotion(scope) }
+    val currentOpen by rememberUpdatedState(open)
     LaunchedEffect(open) { motion.settle(open) }
-    val release = { velocity: Float ->
-        motion.release(velocity, open, actions.open, actions.close, actions.openShade)
+    return remember(motion, actions, startsOnWidget) {
+        val release = { velocity: Float ->
+            motion.release(velocity, currentOpen, actions.open, actions.close, actions.openShade)
+        }
+        DrawerControls(motion, release, startsOnWidget)
     }
-    return DrawerControls(motion, release, startsOnWidget)
 }
 
 /** Told the screen height once it is known, so the motion knows how far a pull travels. */

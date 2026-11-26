@@ -16,10 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -41,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.ui.drag.Bounds
@@ -67,6 +69,7 @@ const val FOLD_HINT_TAG = "fold-hint"
  * cell, just after [onFinger] has said which pointer that is. Everything after the start is tracked
  * from the root, not by the cell, and the root follows that finger.
  */
+@Immutable
 class DragHandlers(
     val onHold: ((cell: Bounds) -> Unit)? = null,
     val onStart: (pointer: Point, grab: Point) -> Unit,
@@ -153,7 +156,6 @@ internal fun ItemIcon(item: HomeItem, modifier: Modifier = Modifier) {
 /** The first few apps of a folder on a dim rounded tile, described by the folder's [name]. */
 @Composable
 internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier = Modifier) {
-    val badges = LocalBadges.current
     Box {
         FolderPreviewGrid(
             modifier =
@@ -170,11 +172,7 @@ internal fun FolderIcon(apps: List<AppEntry>, name: String, modifier: Modifier =
                 }
             }
         }
-        Badge(
-            count = badges.countFor(apps.map { it.ref }),
-            style = badges.style,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
+        FolderBadge(apps, Modifier.align(Alignment.TopEnd))
     }
 }
 
@@ -220,19 +218,40 @@ internal fun AppIcon(app: AppEntry, modifier: Modifier = Modifier, described: Bo
         )
         return
     }
-    val badges = LocalBadges.current
     Box {
         Image(
             bitmap = app.bitmap,
             contentDescription = app.label,
             modifier = modifier,
         )
-        Badge(
-            count = badges.countFor(app.ref),
-            style = badges.style,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
+        AppBadge(app.ref, Modifier.align(Alignment.TopEnd))
     }
+}
+
+@Composable
+private fun AppBadge(app: AppRef, modifier: Modifier = Modifier) {
+    val badges = LocalBadges.current
+    val shown by
+        remember(app, badges) {
+            derivedStateOf {
+                val current = badges.value
+                current.countFor(app) to current.style
+            }
+        }
+    Badge(count = shown.first, style = shown.second, modifier = modifier)
+}
+
+@Composable
+private fun FolderBadge(apps: List<AppEntry>, modifier: Modifier = Modifier) {
+    val badges = LocalBadges.current
+    val shown by
+        remember(apps, badges) {
+            derivedStateOf {
+                val current = badges.value
+                current.countForEntries(apps) to current.style
+            }
+        }
+    Badge(count = shown.first, style = shown.second, modifier = modifier)
 }
 
 @Composable

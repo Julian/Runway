@@ -241,6 +241,7 @@ class ItemMenuTest : LauncherFixture() {
         waitUntil(TIMEOUT_MS) { graph.appRepository.shortcuts(fixture).isNotEmpty() }
         longPress(fixture.label)
         release()
+        waitUntil(TIMEOUT_MS) { menuRow("Fixture shortcut").isDisplayedOrFalse() }
         menuRow("Fixture shortcut").assertIsDisplayed().performClick()
         assertTrue(
             "shortcut did not launch fixture",

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 
@@ -26,7 +27,7 @@ internal val Context.settingsStore: DataStore<Preferences> by
     preferencesDataStore("settings", corruptionHandler = settingsCorruptionHandler)
 
 class SettingsRepository internal constructor(private val store: DataStore<Preferences>) {
-    val settings: Flow<Settings> = store.data.map { it.toSettings() }
+    val settings: Flow<Settings> = store.data.map { it.toSettings() }.distinctUntilChanged()
 
     constructor(context: Context) : this(context.settingsStore)
 

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.UserHandle
 import android.os.UserManager
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
@@ -12,26 +13,36 @@ import android.util.Log
 import com.grayvines.runway.model.ActiveNotification
 import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.badgeCounts
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Holds the live notification badge counts per package and profile while [BadgeListenerService] is
  * connected, and checks or requests notification listener access in system Settings.
  */
-class BadgeHost(context: Context) {
+class BadgeHost(context: Context, scope: CoroutineScope) {
     private val context = context.applicationContext
     private val notificationManager = this.context.getSystemService(NotificationManager::class.java)
     private val userManager = this.context.getSystemService(UserManager::class.java)
     private val listenerComponent = ComponentName(this.context, BadgeListenerService::class.java)
-
-    @Volatile private var service: BadgeListenerService? = null
-
-    private val _counts = MutableStateFlow<Map<PackageKey, Int>>(emptyMap())
+    private val profileSerials = ConcurrentHashMap<UserHandle, Long>()
+    private val poller =
+        BadgePoller<BadgeListenerService>(
+            scope = scope,
+            dispatcher = Dispatchers.IO,
+            onDisconnect = profileSerials::clear,
+            readCounts = ::readActiveNotifications,
+        )
 
     /** Current notification badge counts per `(packageName, profile)`. Empty when disconnected. */
-    val counts: StateFlow<Map<PackageKey, Int>> = _counts.asStateFlow()
+    val counts: StateFlow<Map<PackageKey, Int>> = poller.counts
 
     /** True when the user has granted Runway notification listener access in system Settings. */
     fun hasAccess(): Boolean =
@@ -46,19 +57,30 @@ class BadgeHost(context: Context) {
     }
 
     /**
-     * Re-reads active notifications from the connected [BadgeListenerService], or clears [counts]
-     * when the service is not connected. Safe to call on resume in case a callback was missed.
+     * Schedules an off-main-thread re-read of active notifications from the connected
+     * [BadgeListenerService], or clears [counts] when the service is not connected. Bursts coalesce
+     * into a single read. Safe to call on resume in case a callback was missed.
      */
+    fun refresh() = poller.refresh()
+
     @Suppress("TooGenericExceptionCaught")
-    fun refresh() {
-        val listener = service
-        if (listener == null) {
-            _counts.value = emptyMap()
-            return
-        }
+    private fun readActiveNotifications(listener: BadgeListenerService): Map<PackageKey, Int> {
         val active =
             try {
-                listener.activeNotifications?.map { it.toActiveNotification() }.orEmpty()
+                listener.activeNotifications
+                    ?.mapNotNull { notification ->
+                        try {
+                            notification.toActiveNotification()
+                        } catch (e: RuntimeException) {
+                            Log.w(
+                                TAG,
+                                "could not read notification for ${notification.packageName}",
+                                e,
+                            )
+                            null
+                        }
+                    }
+                    .orEmpty()
             } catch (e: SecurityException) {
                 Log.w(TAG, "not allowed to read active notifications", e)
                 emptyList()
@@ -66,24 +88,17 @@ class BadgeHost(context: Context) {
                 Log.w(TAG, "could not read active notifications", e)
                 emptyList()
             }
-        _counts.value = badgeCounts(active)
+        return badgeCounts(active)
     }
 
-    internal fun onListenerConnected(listener: BadgeListenerService) {
-        service = listener
-        refresh()
-    }
+    internal fun onListenerConnected(listener: BadgeListenerService) = poller.connect(listener)
 
-    internal fun onListenerDisconnected(listener: BadgeListenerService) {
-        if (service === listener) {
-            service = null
-            _counts.value = emptyMap()
-        }
-    }
+    internal fun onListenerDisconnected(listener: BadgeListenerService) =
+        poller.disconnect(listener)
 
     /** Sets [counts] from [notifications] for on-device tests, where the system listener is off. */
     internal fun setNotificationsForTest(notifications: Iterable<ActiveNotification>) {
-        _counts.value = badgeCounts(notifications)
+        poller.setForTest(badgeCounts(notifications))
     }
 
     private fun StatusBarNotification.toActiveNotification(): ActiveNotification {
@@ -92,9 +107,10 @@ class BadgeHost(context: Context) {
         val foregroundService = flags and Notification.FLAG_FOREGROUND_SERVICE != 0
         val mediaSession =
             notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+        val profile = profileSerials.getOrPut(user) { userManager.getSerialNumberForUser(user) }
         return ActiveNotification(
             packageName = packageName,
-            profile = userManager.getSerialNumberForUser(user),
+            profile = profile,
             number = notification.number,
             isGroupSummary = groupSummary,
             isOngoing = isOngoing || foregroundService,
@@ -104,5 +120,83 @@ class BadgeHost(context: Context) {
 
     private companion object {
         const val TAG = "Runway"
+    }
+}
+
+/**
+ * Serialises listener attach/detach against conflated background reads: an initial [refresh] sent
+ * before the worker coroutine starts is buffered by the conflated channel, and a disconnect racing
+ * an in-flight read cannot be overwritten by stale counts.
+ */
+internal class BadgePoller<L : Any>(
+    scope: CoroutineScope,
+    dispatcher: CoroutineDispatcher,
+    private val onDisconnect: () -> Unit = {},
+    private val readCounts: (L) -> Map<PackageKey, Int>,
+) {
+    private val stateLock = Any()
+    private var listener: L? = null
+
+    private val _counts = MutableStateFlow<Map<PackageKey, Int>>(emptyMap())
+    val counts: StateFlow<Map<PackageKey, Int>> = _counts.asStateFlow()
+
+    private val requests = Channel<Unit>(Channel.CONFLATED)
+
+    init {
+        scope.launch(dispatcher) {
+            while (true) {
+                requests.receive()
+                pollOnce()
+            }
+        }
+    }
+
+    fun connect(connected: L) {
+        synchronized(stateLock) { listener = connected }
+        requests.trySend(Unit)
+    }
+
+    fun disconnect(disconnected: L) {
+        synchronized(stateLock) {
+            if (listener === disconnected) {
+                listener = null
+                onDisconnect()
+                _counts.value = emptyMap()
+            }
+        }
+    }
+
+    fun refresh() {
+        val active =
+            synchronized(stateLock) {
+                if (listener == null) {
+                    _counts.value = emptyMap()
+                    false
+                } else {
+                    true
+                }
+            }
+        if (active) requests.trySend(Unit)
+    }
+
+    fun setForTest(counts: Map<PackageKey, Int>) {
+        synchronized(stateLock) { _counts.value = counts }
+    }
+
+    private fun pollOnce() {
+        val current =
+            synchronized(stateLock) {
+                listener
+                    ?: run {
+                        _counts.value = emptyMap()
+                        return
+                    }
+            }
+        val next = readCounts(current)
+        synchronized(stateLock) {
+            if (listener === current) {
+                _counts.value = next
+            }
+        }
     }
 }

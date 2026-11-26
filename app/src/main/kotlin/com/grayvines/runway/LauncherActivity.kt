@@ -17,6 +17,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
@@ -130,6 +131,7 @@ class LauncherActivity : ComponentActivity() {
         setContent {
             RunwayTheme {
                 val base by viewModel.state.collectAsStateWithLifecycle()
+                val badges = viewModel.badges.collectAsStateWithLifecycle()
                 val pending by viewModel.dragging.pending.collectAsStateWithLifecycle()
                 val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
                 val openFolder by viewModel.openFolder.collectAsStateWithLifecycle()
@@ -137,6 +139,7 @@ class LauncherActivity : ComponentActivity() {
                 val state = remember(base, pending) { base.applying(pending) }
                 HomeScreen(
                     state = state,
+                    badges = badges,
                     goHome = viewModel.goHome,
                     onLaunch = viewModel::launch,
                     onSearch = viewModel::search,
@@ -240,9 +243,13 @@ class LauncherActivity : ComponentActivity() {
         val settleTarget = remember {
             derivedStateOf { targetFor.value?.takeIf { it.first == settling.value }?.second }
         }
-        val active by remember { derivedStateOf { drag.value != null || settling.value != null } }
         val picture = remember { mutableStateOf<ImageBitmap?>(null) }
-        if (!active) picture.value = null
+        LaunchedEffect(drag, settling) {
+            snapshotFlow { drag.value == null && settling.value == null }
+                .collect { idle ->
+                    if (idle && drag.value == null && settling.value == null) picture.value = null
+                }
+        }
         // The live settings, not this composition's: page-shown callbacks are kept by effects that
         // outlive it, and a changed grid must reach them.
         val reports = remember {

@@ -1,6 +1,5 @@
 package com.grayvines.runway.ui.settings
 
-import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,9 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.grayvines.runway.data.settings.BadgeStyle
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.IconShape
@@ -270,10 +268,8 @@ private fun SearchTargetPicker(
 }
 
 @Composable
-private fun TargetIcon(icon: Drawable) {
-    val bitmap = remember(icon) { icon.toBitmap(CHOICE_ICON_PX, CHOICE_ICON_PX).asImageBitmap() }
-    Image(bitmap, contentDescription = null, modifier = Modifier.size(24.dp))
+private fun TargetIcon(icon: ImageBitmap?) {
+    icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(24.dp)) }
 }
 
 private const val AUTOMATIC = "Automatic"
-private const val CHOICE_ICON_PX = 96

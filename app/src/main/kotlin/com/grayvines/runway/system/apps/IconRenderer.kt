@@ -12,6 +12,7 @@ import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import androidx.core.graphics.createBitmap
 import com.grayvines.runway.data.settings.IconShape
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -38,16 +39,32 @@ internal object IconRenderer {
     private const val GREEN_SHIFT = 8
     private const val CHANNEL_MASK = 0xFF
 
+    private val geometricMasks = ConcurrentHashMap<Pair<IconShape, Int>, Path>()
+
+    /**
+     * Builds the mask template for [shape] at [sizePx]. Pure-geometry shapes are cached; callers
+     * rendering many icons under [IconShape.SYSTEM] can compute the template once per refresh and
+     * pass it into [render].
+     */
+    fun maskTemplate(shape: IconShape, sizePx: Int): Path =
+        if (shape == IconShape.SYSTEM) {
+            systemMaskPath(sizePx)
+        } else {
+            geometricMasks.getOrPut(shape to sizePx) { maskPath(shape, sizePx) }
+        }
+
     fun render(
         drawable: Drawable,
         sizePx: Int,
         shape: IconShape,
         badge: ((Bitmap) -> Bitmap)? = null,
+        maskTemplate: Path? = null,
     ): Bitmap {
         val output = createBitmap(sizePx, sizePx)
         val canvas = Canvas(output)
         val sizeF = sizePx.toFloat()
-        val mask = maskPath(shape, sizePx)
+        // Copy before drawing: Skia Paths lazily cache bounds/convexity and are not thread-safe.
+        val mask = Path(maskTemplate ?: maskTemplate(shape, sizePx))
 
         val maskPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -68,7 +85,9 @@ internal object IconRenderer {
         }
         canvas.restoreToCount(layer)
 
-        return badge?.invoke(output) ?: output
+        val result = badge?.invoke(output) ?: output
+        if (result !== output) output.recycle()
+        return result
     }
 
     private fun drawAdaptive(canvas: Canvas, drawable: AdaptiveIconDrawable, sizePx: Int) {
@@ -87,18 +106,22 @@ internal object IconRenderer {
 
     private fun drawLegacy(canvas: Canvas, drawable: Drawable, sizePx: Int) {
         val scratch = createBitmap(sizePx, sizePx)
-        val scratchCanvas = Canvas(scratch)
-        drawable.setBounds(0, 0, sizePx, sizePx)
-        drawable.draw(scratchCanvas)
+        try {
+            val scratchCanvas = Canvas(scratch)
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(scratchCanvas)
 
-        val pixels = IntArray(sizePx * sizePx)
-        scratch.getPixels(pixels, 0, sizePx, 0, 0, sizePx, sizePx)
-        canvas.drawColor(extractIconBackgroundColor(pixels))
+            val pixels = IntArray(sizePx * sizePx)
+            scratch.getPixels(pixels, 0, sizePx, 0, 0, sizePx, sizePx)
+            canvas.drawColor(extractIconBackgroundColor(pixels))
 
-        val inset = (sizePx * LEGACY_INSET_FRACTION).roundToInt()
-        val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        val dst = Rect(inset, inset, sizePx - inset, sizePx - inset)
-        canvas.drawBitmap(scratch, null, dst, bitmapPaint)
+            val inset = (sizePx * LEGACY_INSET_FRACTION).roundToInt()
+            val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            val dst = Rect(inset, inset, sizePx - inset, sizePx - inset)
+            canvas.drawBitmap(scratch, null, dst, bitmapPaint)
+        } finally {
+            scratch.recycle()
+        }
     }
 
     private fun maskPath(shape: IconShape, sizePx: Int): Path {

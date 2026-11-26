@@ -1,7 +1,6 @@
 package com.grayvines.runway.system.apps
 
 import android.content.ComponentName
-import android.graphics.drawable.Drawable
 import android.os.UserHandle
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -18,7 +17,6 @@ class AppEntry(
     val user: UserHandle,
     val profileSerial: Long,
     val label: String,
-    val icon: Drawable,
     /** The icon as drawn everywhere, rasterised once as the list loads, off the main thread. */
     val bitmap: ImageBitmap,
 ) {

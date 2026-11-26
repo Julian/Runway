@@ -8,6 +8,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
+import java.util.HexFormat
 
 /**
  * Everything that determines the rendered pixels of an app icon. A change to any field (an app
@@ -23,16 +24,24 @@ internal data class IconCacheKey(
     val densityDpi: Int,
     val shape: IconShape,
     val themed: Boolean = false,
-)
+) {
+    /** Computed once per key so `contains`, `getOrPut`, and `retainOnly` do not re-hash it. */
+    val cachedFileName: String by
+        lazy(LazyThreadSafetyMode.PUBLICATION) {
+            "${sanitizePackage(packageName)}@${sha256Hex()}.png"
+        }
+}
 
-internal fun IconCacheKey.fileName(): String = "${sanitizePackage(packageName)}@${sha256Hex()}.png"
+internal fun IconCacheKey.fileName(): String = cachedFileName
 
-private fun IconCacheKey.sha256Hex(): String {
+private val HEX: HexFormat = HexFormat.of()
+
+internal fun IconCacheKey.sha256Hex(): String {
     val digest = MessageDigest.getInstance("SHA-256")
     val payload =
         "$packageName|$component|$profileSerial|$versionCode|" +
             "$lastUpdateTime|$densityDpi|${shape.name}|$themed"
-    return digest.digest(payload.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    return HEX.formatHex(digest.digest(payload.toByteArray(Charsets.UTF_8)))
 }
 
 private val UNSAFE_PACKAGE_CHARS = Regex("[^a-zA-Z0-9_.]")
@@ -49,6 +58,9 @@ internal class IconCache<T : Any>(
     private val encode: (T, OutputStream) -> Boolean,
     private val decode: (InputStream) -> T?,
 ) {
+    private var lastRetainedKeys: Set<IconCacheKey>? = null
+    private var lastKeepNames: Set<String> = emptySet()
+
     /** Whether [key] currently has a cached entry on disk. */
     fun contains(key: IconCacheKey): Boolean = File(dir, key.fileName()).isFile
 
@@ -67,10 +79,18 @@ internal class IconCache<T : Any>(
     }
 
     /** Deletes all cached icons belonging to [packageName]. */
-    fun invalidatePackage(packageName: String) {
-        val prefix = "${sanitizePackage(packageName)}@"
+    fun invalidatePackage(packageName: String) = invalidatePackages(listOf(packageName))
+
+    /**
+     * Deletes all cached icons belonging to any package in [packageNames] in one directory scan.
+     */
+    fun invalidatePackages(packageNames: Collection<String>) {
+        if (packageNames.isEmpty()) return
+        val prefixes = packageNames.mapTo(HashSet(packageNames.size)) { "${sanitizePackage(it)}@" }
         dir.listFiles()?.forEach { file ->
-            if (file.name.startsWith(prefix)) {
+            val name = file.name
+            val at = name.indexOf('@')
+            if (at > 0 && name.substring(0, at + 1) in prefixes) {
                 file.delete()
             }
         }
@@ -82,8 +102,23 @@ internal class IconCache<T : Any>(
      */
     fun retainOnly(activeKeys: Set<IconCacheKey>) {
         val keep =
-            activeKeys.flatMapTo(HashSet(activeKeys.size * IconShape.entries.size)) { key ->
-                IconShape.entries.map { shape -> key.copy(shape = shape).fileName() }
+            if (activeKeys == lastRetainedKeys) {
+                lastKeepNames
+            } else {
+                activeKeys
+                    .flatMapTo(HashSet(activeKeys.size * IconShape.entries.size)) { key ->
+                        IconShape.entries.map { shape ->
+                            if (shape == key.shape) {
+                                key.fileName()
+                            } else {
+                                key.copy(shape = shape).fileName()
+                            }
+                        }
+                    }
+                    .also {
+                        lastRetainedKeys = HashSet(activeKeys)
+                        lastKeepNames = it
+                    }
             }
         dir.listFiles()?.forEach { file ->
             if (file.name !in keep) {
@@ -92,12 +127,15 @@ internal class IconCache<T : Any>(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private fun readFromDisk(file: File): T? {
         if (!file.isFile) return null
         val decoded =
             try {
                 file.inputStream().buffered().use(decode)
             } catch (_: IOException) {
+                null
+            } catch (_: RuntimeException) {
                 null
             }
         if (decoded == null) {
@@ -109,15 +147,18 @@ internal class IconCache<T : Any>(
     private fun writeToDisk(target: File, value: T) {
         try {
             if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory) return
-            val tmp = File.createTempFile(target.name, ".tmp", dir)
-            val wrote =
-                try {
-                    tmp.outputStream().buffered().use { out -> encode(value, out) }
-                } catch (_: IOException) {
-                    false
-                }
-            if (!wrote || !tmp.renameTo(target)) {
-                tmp.delete()
+            val tmp = File.createTempFile("icon-", ".tmp", dir)
+            var renamed = false
+            try {
+                val wrote =
+                    try {
+                        tmp.outputStream().buffered().use { out -> encode(value, out) }
+                    } catch (_: IOException) {
+                        false
+                    }
+                renamed = wrote && tmp.renameTo(target)
+            } finally {
+                if (!renamed) tmp.delete()
             }
         } catch (_: IOException) {
             // Caching is an optimisation; a failed write must never break app loading.

@@ -7,13 +7,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -51,7 +52,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
@@ -146,7 +149,7 @@ fun AppDrawer(
         Modifier.fillMaxSize().arriving { shown.value }.background(SURFACE).testTag(DRAWER_TAG)
     ) {
         val icon = fittedIconSize(iconSize, maxWidth, insets, columns)
-        val keyboardHeight = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        val contentPadding = rememberDrawerContentPadding(insets, indexed = index)
         Column(Modifier.fillMaxSize()) {
             SearchField(
                 query,
@@ -164,8 +167,7 @@ fun AppDrawer(
                 columns = columns,
                 iconSize = icon,
                 labels = labels,
-                contentPadding = insets.aboveKeyboard(keyboardHeight, indexed = index),
-                above = keyboardHeight,
+                contentPadding = contentPadding,
                 pullToClose = pullToClose,
                 onLaunch = onLaunch,
                 onOpenFolder = onOpenFolder,
@@ -190,7 +192,6 @@ private fun DrawerGrid(
     iconSize: Dp,
     labels: Boolean,
     contentPadding: PaddingValues,
-    above: Dp,
     pullToClose: NestedScrollConnection,
     onLaunch: (AppEntry) -> Unit,
     onOpenFolder: (HomeItem, Bounds) -> Unit,
@@ -201,7 +202,7 @@ private fun DrawerGrid(
         remember(apps, folders.size) {
             apps.index().map { IndexEntry(it.letter, it.position + folders.size) }
         }
-    IndexedGrid(entries, state, indexed, above, modifier) {
+    IndexedGrid(entries, state, indexed, above = 0.dp, modifier, followIme = true) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = it,
@@ -211,21 +212,23 @@ private fun DrawerGrid(
             modifier = Modifier.fillMaxSize().testTag(DRAWER_LIST_TAG).nestedScroll(pullToClose),
         ) {
             items(folders, key = { "folder:${it.id}" }) { folder ->
+                val folderDrag = remember(drag, folder) { drag?.handlersForDrawerFolder(folder) }
                 DrawerFolder(
                     folder,
                     iconSize,
                     labels,
                     onOpen = { cell -> onOpenFolder(folder, cell) },
-                    drag = drag?.handlersForDrawerFolder(folder),
+                    drag = folderDrag,
                 )
             }
             items(apps, key = { it.ref }) { app ->
+                val appDrag = remember(drag, app) { drag?.handlersForDrawer(app) }
                 DrawerApp(
                     app,
                     iconSize,
                     labels,
                     onClick = { onLaunch(app) },
-                    drag = drag?.handlersForDrawer(app),
+                    drag = appDrag,
                     chosen = app == firstMatch,
                 )
             }
@@ -235,8 +238,8 @@ private fun DrawerGrid(
 
 /**
  * The grid, with the alphabet index of [entries] over its right edge when [indexed], centred in the
- * part of the grid not covered from below: [above] is the keyboard's height while it shows, so the
- * index sits above it, in reach, rather than half under it.
+ * part of the grid not covered from below: [above] (or live IME insets when [followIme] is set)
+ * keeps the index above the keyboard, in reach, rather than half under it.
  */
 @Composable
 internal fun IndexedGrid(
@@ -245,16 +248,19 @@ internal fun IndexedGrid(
     indexed: Boolean,
     above: Dp,
     modifier: Modifier,
+    followIme: Boolean = false,
     content: @Composable (LazyGridState) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     Box(modifier.fillMaxWidth()) {
         content(state)
         if (indexed) {
+            val bottomClearance =
+                if (followIme) Modifier.imePadding() else Modifier.padding(bottom = above)
             DrawerIndex(
                 entries,
                 onJump = { position -> scope.launch { state.scrollToItem(position) } },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(bottom = above),
+                modifier = Modifier.align(Alignment.CenterEnd).then(bottomClearance),
             )
         }
     }
@@ -283,17 +289,41 @@ private fun fittedIconSize(iconSize: Dp, width: Dp, insets: PaddingValues, colum
 
 /**
  * The list's padding: the margin inside the system bars at the sides, a little under the field, and
- * at the bottom the [keyboard]'s height while it shows, else the bar's.
+ * at the bottom the live IME height while the keyboard shows, else the system bar's. Reads
+ * [WindowInsets.ime] inside [PaddingValues.calculateBottomPadding] so keyboard animations only
+ * re-measure the grid instead of recomposing the entire drawer every frame.
  */
 @Composable
-private fun PaddingValues.aboveKeyboard(keyboard: Dp, indexed: Boolean): PaddingValues {
-    val direction = LocalLayoutDirection.current
-    return PaddingValues(
-        start = calculateStartPadding(direction) + MARGIN,
-        top = MARGIN / 2,
-        end = calculateEndPadding(direction) + MARGIN + if (indexed) INDEX_WIDTH else 0.dp,
-        bottom = maxOf(calculateBottomPadding(), keyboard) + MARGIN,
-    )
+private fun rememberDrawerContentPadding(insets: PaddingValues, indexed: Boolean): PaddingValues {
+    val density = LocalDensity.current
+    val ime = WindowInsets.ime
+    return remember(insets, indexed, density, ime) {
+        DrawerContentPadding(insets, ime, density, indexed)
+    }
+}
+
+private data class DrawerContentPadding(
+    private val insets: PaddingValues,
+    private val ime: WindowInsets,
+    private val density: Density,
+    private val indexed: Boolean,
+) : PaddingValues {
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection): Dp {
+        val extra = if (indexed && layoutDirection == LayoutDirection.Rtl) INDEX_WIDTH else 0.dp
+        return insets.calculateLeftPadding(layoutDirection) + MARGIN + extra
+    }
+
+    override fun calculateTopPadding(): Dp = MARGIN / 2
+
+    override fun calculateRightPadding(layoutDirection: LayoutDirection): Dp {
+        val extra = if (indexed && layoutDirection == LayoutDirection.Ltr) INDEX_WIDTH else 0.dp
+        return insets.calculateRightPadding(layoutDirection) + MARGIN + extra
+    }
+
+    override fun calculateBottomPadding(): Dp {
+        val keyboard = with(density) { ime.getBottom(this).toDp() }
+        return maxOf(insets.calculateBottomPadding(), keyboard) + MARGIN
+    }
 }
 
 /**

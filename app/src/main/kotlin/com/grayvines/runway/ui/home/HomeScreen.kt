@@ -22,7 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -93,13 +93,10 @@ fun HomeScreen(
     drawerActions: DrawerActions,
     drawerQuery: DrawerQuery,
     onLaunchApp: (AppEntry) -> Unit,
+    badges: State<BadgeState> = remember { mutableStateOf(BadgeState()) },
 ) {
     if (!state.loaded) return
     val settings = state.settings
-    val badges =
-        remember(settings.badgeStyle, state.badgeCounts, state.badgeMutes) {
-            BadgeState(settings.badgeStyle, state.badgeCounts, state.badgeMutes)
-        }
     val homePager = rememberPagerState { state.homePages.size }
     val dockPager = rememberPagerState { state.dockPages.size }
     PagerCommands(homePager, goHome, drag.flipHomePage, homeMenu.showPage)
@@ -325,6 +322,7 @@ private fun HomeColumn(
             drag = drag,
             onHoldEmpty = onHoldEmpty,
             swipeSensitivity = settings.drawerSwipe,
+            swipeRightEnabled = settings.swipeRight != null,
             onSwipePastFirstPage = onSwipePastFirstPage,
             modifier =
                 Modifier.weight(1f)
@@ -460,15 +458,19 @@ private fun Modifier.pulledBack(lift: () -> Float): Modifier = graphicsLayer {
     scaleX = zoom
     scaleY = zoom
 }
-    .drawWithContent {
-        drawContent()
-        val alpha = (DragMotion.BORDER_ALPHA * lift()).coerceIn(0f, 1f)
-        if (alpha > 0f) {
-            drawRoundRect(
-                color = Color.White.copy(alpha = alpha),
-                cornerRadius = CornerRadius(DRAG_CORNER.toPx()),
-                style = Stroke(1.dp.toPx()),
-            )
+    .drawWithCache {
+        val corner = CornerRadius(DRAG_CORNER.toPx())
+        val stroke = Stroke(1.dp.toPx())
+        onDrawWithContent {
+            drawContent()
+            val alpha = (DragMotion.BORDER_ALPHA * lift()).coerceIn(0f, 1f)
+            if (alpha > 0f) {
+                drawRoundRect(
+                    color = Color.White.copy(alpha = alpha),
+                    cornerRadius = corner,
+                    style = stroke,
+                )
+            }
         }
     }
 

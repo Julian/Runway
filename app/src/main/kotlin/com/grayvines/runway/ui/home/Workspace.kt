@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -12,6 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.data.settings.DrawerSwipe
+import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.widgets.WidgetResizeHost
@@ -33,14 +35,26 @@ fun Workspace(
     onHoldEmpty: (Point) -> Unit,
     /** How far or fast a swipe past the first page must go to count. */
     swipeSensitivity: DrawerSwipe,
+    swipeRightEnabled: Boolean,
     onSwipePastFirstPage: () -> Unit,
     modifier: Modifier = Modifier,
     resize: WidgetResizeHost? = null,
 ) {
+    val handlersFor: (Int, HomeItem) -> DragHandlers? =
+        remember(drag) { { page, item -> drag?.handlersFor(item, page) } }
+    val onPagePositioned: (Int, Bounds) -> Unit =
+        remember(drag) { { page, bounds -> drag?.onHomePagePositioned?.invoke(page, bounds) } }
+    val landing: (Int) -> Footprint? =
+        remember(drag) { { page -> drag?.plannedHomeFootprint(page) } }
     Box(
         modifier
             .fillMaxSize()
-            .swipesPastFirstPage(pagerState, swipeSensitivity, onSwipePastFirstPage)
+            .swipesPastFirstPage(
+                pagerState,
+                swipeSensitivity,
+                swipeRightEnabled,
+                onSwipePastFirstPage,
+            )
     ) {
         PagedGrid(
             pages = pages,
@@ -50,9 +64,9 @@ fun Workspace(
             labels = labels,
             onLaunch = onLaunch,
             drag = drag,
-            handlersFor = { page, item -> drag?.handlersFor(item, page) },
-            onPagePositioned = { page, bounds -> drag?.onHomePagePositioned?.invoke(page, bounds) },
-            landing = { page -> drag?.plannedHomeFootprint(page) },
+            handlersFor = handlersFor,
+            onPagePositioned = onPagePositioned,
+            landing = landing,
             modifier = Modifier.testTag(WORKSPACE_TAG),
             onHoldEmpty = onHoldEmpty,
             resize = resize,

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,10 +104,9 @@ fun WidgetResizeFrame(
     BackHandler(onBack = host::dismiss)
     // No pointer input of its own: a sibling that took touches would keep every one of them from
     // the pages beneath, hit or not. Touches outside are watched from the root ([dismissesResize]).
+    val hasAnchor by remember(host) { derivedStateOf { host.anchor != null } }
     Box(Modifier.fillMaxSize()) {
-        val anchor = host.anchor
-        if (anchor != null) {
-            pull.anchor = anchor
+        if (hasAnchor) {
             Frame(
                 pull,
                 limits,
@@ -305,8 +305,9 @@ private class Pull(
     /** The cells the widget has now, previewed or stored. */
     var footprint = Footprint(0, 0)
 
-    /** Where the widget's cell is (root px); state, so the frame follows the cell as it grows. */
-    var anchor by mutableStateOf(Rect.Zero)
+    /** Where the widget's cell is (root px); read from [host], so the frame follows as it grows. */
+    private val anchor: Rect
+        get() = host.anchor ?: Rect.Zero
 
     var chips: Rect?
         get() = host.chips

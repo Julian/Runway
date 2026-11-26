@@ -41,7 +41,7 @@ class AppGraph(private val context: Context) {
     val wallpapers: WallpaperPicker by lazy { WallpaperPicker(context) }
     val notificationShade: NotificationShade by lazy { NotificationShade(context) }
     val widgets: WidgetHost by lazy { WidgetHost(context) }
-    val badges: BadgeHost by lazy { BadgeHost(context) }
+    val badges: BadgeHost by lazy { BadgeHost(context, appScope) }
 
     /** Wiring that must run for the process lifetime. Called once from [RunwayApp]. */
     fun start() {

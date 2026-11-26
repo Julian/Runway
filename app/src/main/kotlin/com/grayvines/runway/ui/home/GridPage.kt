@@ -18,12 +18,10 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -75,6 +73,9 @@ internal fun PagedGrid(
         userScrollEnabled = drag?.active != true,
         modifier = modifier.fillMaxSize(),
     ) { page ->
+        val pageHandlersFor: (HomeItem) -> DragHandlers? =
+            remember(page, handlersFor) { { item -> handlersFor(page, item) } }
+        val pageLanding: () -> Footprint? = remember(page, landing) { { landing(page) } }
         GridPage(
             items = pages[page].items,
             cell = cell,
@@ -82,10 +83,10 @@ internal fun PagedGrid(
             labels = labels,
             onLaunch = onLaunch,
             drag = drag,
-            handlersFor = { item -> handlersFor(page, item) },
+            handlersFor = pageHandlersFor,
             onHoldEmpty = onHoldEmpty,
             resize = resize,
-            landing = { landing(page) },
+            landing = pageLanding,
             modifier =
                 Modifier.onGloballyPositioned { coords ->
                     onPagePositioned(page, coords.boundsInRoot().toBounds())
@@ -126,12 +127,13 @@ internal fun GridPage(
                 val cellDrag = rememberCellDrag(item, drag, resize)
                 val settlingHere = cellDrag.settlingHere
                 val placement = Modifier.then(rememberCellPlacement(cellDrag, cellW, cellH))
+                val itemHandlers = remember(item, handlersFor) { handlersFor(item) }
                 if (item.kind == ItemKind.WIDGET) {
                     WidgetCell(
                         item,
                         cell,
                         modifier = placement,
-                        drag = handlersFor(item),
+                        drag = itemHandlers,
                         session = drag,
                         lifted = cellDrag.lifted || settlingHere != null,
                         settlingHere = settlingHere,
@@ -144,7 +146,7 @@ internal fun GridPage(
                         iconSize,
                         labels,
                         onLaunch,
-                        handlersFor(item),
+                        itemHandlers,
                         placement,
                     )
                 }
@@ -193,7 +195,7 @@ private fun IconCell(
  * recomposition. Carried by the cell itself: a list filled as the cells compose could be read by a
  * measure before it is.
  */
-private class CellPlacement(val position: State<IntOffset>, val size: State<IntSize>) :
+private data class CellPlacement(val position: State<IntOffset>, val size: State<IntSize>) :
     ParentDataModifier {
     override fun Density.modifyParentData(parentData: Any?) = this@CellPlacement
 }
@@ -221,7 +223,7 @@ private fun rememberCellPlacement(cellDrag: CellDrag, cellW: Int, cellH: Int): C
             if (cellDrag.resizing) resizeTween() else snap(),
             label = "cell size",
         )
-    return CellPlacement(position, size)
+    return remember(position, size) { CellPlacement(position, size) }
 }
 
 /** How long a widget takes to reach the cells a resize handle snapped it to. */
@@ -241,21 +243,20 @@ private val LANDING_CORNER = 12.dp
  * finger's every move changes the plan, and this must cost a redraw, not a recomposition.
  */
 private fun Modifier.outlines(landing: () -> Footprint?, cellW: Int, cellH: Int): Modifier =
-    drawWithContent {
-        drawContent()
-        landing()?.let { f ->
-            val inset = LANDING_INSET.toPx()
-            val topLeft = Offset(f.x * cellW + inset, f.y * cellH + inset)
-            val size = Size(f.width * cellW - 2 * inset, f.height * cellH - 2 * inset)
-            val corner = CornerRadius(LANDING_CORNER.toPx())
-            drawRoundRect(Color.White.copy(alpha = LANDING_FILL_ALPHA), topLeft, size, corner)
-            drawRoundRect(
-                Color.White.copy(alpha = LANDING_ALPHA),
-                topLeft,
-                size,
-                corner,
-                style = Stroke(LANDING_STROKE.toPx()),
-            )
+    drawWithCache {
+        val inset = LANDING_INSET.toPx()
+        val corner = CornerRadius(LANDING_CORNER.toPx())
+        val stroke = Stroke(LANDING_STROKE.toPx())
+        val fill = Color.White.copy(alpha = LANDING_FILL_ALPHA)
+        val border = Color.White.copy(alpha = LANDING_ALPHA)
+        onDrawWithContent {
+            drawContent()
+            landing()?.let { f ->
+                val topLeft = Offset(f.x * cellW + inset, f.y * cellH + inset)
+                val size = Size(f.width * cellW - 2 * inset, f.height * cellH - 2 * inset)
+                drawRoundRect(fill, topLeft, size, corner)
+                drawRoundRect(border, topLeft, size, corner, style = stroke)
+            }
         }
     }
 
@@ -300,24 +301,26 @@ private fun Modifier.holdsEmptyCells(
     cellH: Int,
     onHold: ((Point) -> Unit)?,
 ): Modifier {
-    if (onHold == null) return this
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    if (onHold == null || cellW <= 0 || cellH <= 0) return this
+    val coords = remember { GridCoordsRef() }
     val current = rememberUpdatedState(items)
     val hold = rememberUpdatedState(onHold)
-    return onGloballyPositioned { coords = it }
+    return onGloballyPositioned { coords.value = it }
         .pointerInput(cellW, cellH) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val cellX = (down.position.x / cellW).toInt()
                 val cellY = (down.position.y / cellH).toInt()
-                val covered =
-                    current.value.any { item ->
-                        cellX in item.x until item.x + item.spanX &&
-                            cellY in item.y until item.y + item.spanY
+                val press =
+                    if (current.value.covers(cellX, cellY)) {
+                        null
+                    } else {
+                        awaitLongPressOrCancellation(down.id)
                     }
-                val press = if (covered) null else awaitLongPressOrCancellation(down.id)
                 if (press != null) {
-                    val root = coords?.localToRoot(press.position) ?: press.position
+                    val root =
+                        coords.value?.takeIf { it.isAttached }?.localToRoot(press.position)
+                            ?: press.position
                     hold.value(Point(root.x, root.y))
                     // The finger is the menu's now: no scroll or pull from here on.
                     do {
@@ -328,6 +331,12 @@ private fun Modifier.holdsEmptyCells(
             }
         }
 }
+
+private fun List<HomeItem>.covers(cellX: Int, cellY: Int): Boolean = any { item ->
+    cellX in item.x until item.x + item.spanX && cellY in item.y until item.y + item.spanY
+}
+
+private class GridCoordsRef(var value: LayoutCoordinates? = null)
 
 /**
  * What the drag means for one cell, derived: a finger's every move changes the drag state, but only

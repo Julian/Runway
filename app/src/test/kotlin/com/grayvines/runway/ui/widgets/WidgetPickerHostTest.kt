@@ -12,10 +12,14 @@ import com.grayvines.runway.system.widgets.WidgetProvider
 import com.grayvines.runway.system.widgets.Widgets
 import com.grayvines.runway.ui.drag.PendingMove
 import com.grayvines.runway.ui.drag.WorkspaceLookup
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -293,6 +297,59 @@ class WidgetPickerHostTest {
         assertEquals(listOf(101), deleted)
         assertEquals(emptyList<Long>(), placed)
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `dismissing before providers finish loading does not repopulate providers`() = runTest {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val slowWidgets =
+            object : Widgets by widgets {
+                override fun providers(): List<WidgetProvider> {
+                    started.countDown()
+                    release.await(5, TimeUnit.SECONDS)
+                    return listOf(provider())
+                }
+            }
+        val host =
+            WidgetPickerHost(
+                workspace = workspace,
+                widgets = slowWidgets,
+                scope = backgroundScope,
+                lookup = lookup,
+                shownPage = { 0 },
+            )
+
+        host.open()
+        runCurrent()
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        host.dismiss()
+        release.countDown()
+        advanceUntilIdle()
+
+        assertFalse(host.isOpen)
+        assertNull(host.providers.value)
+    }
+
+    @Test
+    fun `open finishes with an empty list instead of spinning forever when provider loading fails`() =
+        runTest {
+            val failingWidgets =
+                object : Widgets by widgets {
+                    override fun providers(): List<WidgetProvider> = error("binder dead")
+                }
+            val host =
+                WidgetPickerHost(
+                    workspace = workspace,
+                    widgets = failingWidgets,
+                    scope = backgroundScope,
+                    lookup = lookup,
+                    shownPage = { 0 },
+                )
+
+            host.open()
+            assertEquals(emptyList<WidgetProvider>(), host.providers.first { it != null })
+        }
 
     private fun provider(targetW: Int = 1, targetH: Int = 1, needsSetup: Boolean = false) =
         WidgetProvider(

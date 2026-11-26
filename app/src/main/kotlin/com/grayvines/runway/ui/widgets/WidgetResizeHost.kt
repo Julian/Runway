@@ -52,7 +52,8 @@ class WidgetResizeHost(
         private set
 
     /** Where the frame's Remove and Edit chips sit (root px), so tapping one never dismisses. */
-    var chips by mutableStateOf<Rect?>(null)
+    @Volatile
+    var chips: Rect? = null
         internal set
 
     /**

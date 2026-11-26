@@ -13,7 +13,6 @@ import com.grayvines.runway.data.Dropped
 import com.grayvines.runway.data.FolderContent
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.data.WorkspaceRepository
-import com.grayvines.runway.data.WorkspaceSnapshot
 import com.grayvines.runway.data.addToDrawerFolder
 import com.grayvines.runway.data.foldInto
 import com.grayvines.runway.data.folderIdentity
@@ -30,7 +29,6 @@ import com.grayvines.runway.data.settings.SwipeAction
 import com.grayvines.runway.data.unfold
 import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
-import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.search.SearchTarget
@@ -131,10 +129,6 @@ data class HomeState(
     val drawerFolders: List<HomeItem> = emptyList(),
     /** Every folder by id, with all its stored app refs, available or not. */
     val folders: Map<Long, FolderContent> = emptyMap(),
-    /** Active notification counts per package and profile. */
-    val badgeCounts: Map<PackageKey, Int> = emptyMap(),
-    /** Apps whose notification badges are muted everywhere. */
-    val badgeMutes: Set<AppRef> = emptySet(),
     val loaded: Boolean = false,
 ) {
     /**
@@ -169,6 +163,20 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
      */
     var drawerQuery by mutableStateOf("")
 
+    /**
+     * Notification badge state, kept off [state] so incoming notifications do not rebuild pages,
+     * folders, and the drawer list or recompose unaffected icons.
+     */
+    val badges: StateFlow<BadgeState> =
+        combine(
+                graph.settings.settings.map { it.badgeStyle }.distinctUntilChanged(),
+                graph.badges.counts,
+                graph.workspace.observeBadgeMutes(),
+            ) { style, counts, muted ->
+                BadgeState(style, counts, muted)
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), BadgeState())
+
     /** The long-press item menu. */
     // Neither menu opens over a live drag: a second finger's long press changes nothing.
     val itemMenu =
@@ -176,7 +184,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             graph,
             viewModelScope,
             mayOpen = { dragging.drag.value == null },
-            isBadgesMuted = { ref -> ref in state.value.badgeMutes },
+            isBadgesMuted = { ref -> ref in badges.value.muted },
             onShortcutLaunched = {
                 closeDrawer()
                 closeFolder()
@@ -292,15 +300,16 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     /**
      * Asking the package manager who handles a web search is slow: done only when the chosen
-     * package or the installed apps change, not on every layout write.
+     * package or installed packages change, not on icon shape, density, or layout writes.
      */
     private val searchTarget =
         combine(
                 graph.settings.settings.map { it.searchTarget }.distinctUntilChanged(),
-                graph.appRepository.apps,
+                graph.appRepository.packageChanges,
             ) { chosen, _ ->
                 graph.searchTargets.resolve(chosen)
             }
+            .flowOn(Dispatchers.IO)
             .distinctUntilChanged()
 
     /** The latest x tapped in a sheet, which the sweep as the sheet closes must come after. */
@@ -313,16 +322,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                 graph.appRepository.apps,
                 searchTarget,
                 graph.workspace.observeHiddenApps(),
-                graph.badges.counts,
-                graph.workspace.observeBadgeMutes(),
-            ) { flows ->
-                @Suppress("UNCHECKED_CAST") val settings = flows[0] as Settings
-                val snapshot = flows[1] as WorkspaceSnapshot
-                @Suppress("UNCHECKED_CAST") val apps = flows[2] as List<AppEntry>
-                val target = flows[3] as SearchTarget?
-                @Suppress("UNCHECKED_CAST") val hidden = flows[4] as Set<AppRef>
-                @Suppress("UNCHECKED_CAST") val badgeCounts = flows[5] as Map<PackageKey, Int>
-                @Suppress("UNCHECKED_CAST") val badgeMutes = flows[6] as Set<AppRef>
+            ) { settings, snapshot, apps, target, hidden ->
                 val byRef = apps.associateBy { it.ref }
                 val byFolder = snapshot.folders.associateBy { it.id }
                 HomeState(
@@ -341,8 +341,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                     searchTarget = target,
                     apps = apps,
                     drawerApps = apps.filter { it.ref !in hidden },
-                    badgeCounts = badgeCounts,
-                    badgeMutes = badgeMutes,
                     // Not before the app list: with it empty every icon would be hidden and
                     // every cell would look free.
                     loaded = apps.isNotEmpty(),

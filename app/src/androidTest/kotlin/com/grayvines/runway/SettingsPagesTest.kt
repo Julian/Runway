@@ -1,7 +1,6 @@
 package com.grayvines.runway
 
 import android.content.ComponentName
-import android.graphics.drawable.ColorDrawable
 import android.os.Process
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
@@ -231,7 +230,6 @@ class SettingsPagesTest {
                 Process.myUserHandle(),
                 profileSerial = 0,
                 label = label,
-                icon = ColorDrawable(),
                 bitmap = ImageBitmap(1, 1),
             )
     }

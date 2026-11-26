@@ -10,6 +10,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,10 +49,11 @@ fun PageDots(pager: PagerState, modifier: Modifier = Modifier) {
             shown = false
         }
     }
-    val alpha by animateFloatAsState(if (shown && pager.pageCount > 1) 1f else 0f, label = "dots")
-    if (alpha == 0f) return
+    val alpha = animateFloatAsState(if (shown && pager.pageCount > 1) 1f else 0f, label = "dots")
+    val visible by remember { derivedStateOf { alpha.value > 0f } }
+    if (!visible) return
     Row(
-        modifier.graphicsLayer { this.alpha = alpha }.testTag(PAGE_DOTS_TAG),
+        modifier.graphicsLayer { this.alpha = alpha.value }.testTag(PAGE_DOTS_TAG),
         horizontalArrangement = Arrangement.spacedBy(GAP),
     ) {
         repeat(pager.pageCount) { page ->

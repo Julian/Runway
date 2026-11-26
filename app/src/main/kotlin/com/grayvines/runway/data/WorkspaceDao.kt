@@ -61,8 +61,6 @@ interface WorkspaceDao {
     )
     suspend fun setFolderPosition(folderId: Long, component: String, profile: Long, position: Int)
 
-    @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
-
     @Query("UPDATE folders SET name = :name WHERE id = :id")
     suspend fun renameFolder(id: Long, name: String)
 
@@ -108,21 +106,16 @@ interface WorkspaceDao {
     @Query("DELETE FROM folders") suspend fun deleteAllFolders()
 
     /** Hand-placed apps in their order, then the rest; see [FolderAppEntity.position]. */
-    @Query("SELECT * FROM folder_apps $FOLDER_APP_ORDER")
-    fun observeFolderApps(): Flow<List<FolderAppEntity>>
-
     @Query("SELECT * FROM folder_apps WHERE folder_id = :folderId $FOLDER_APP_ORDER")
     suspend fun folderApps(folderId: Long): List<FolderAppEntity>
 
     @Query("SELECT * FROM folder_apps $FOLDER_APP_ORDER")
     suspend fun folderApps(): List<FolderAppEntity>
 
-    @Query("SELECT * FROM items") fun observeAllItems(): Flow<List<ItemEntity>>
-
     @Query("SELECT * FROM items") suspend fun items(): List<ItemEntity>
 
-    @Query("SELECT * FROM pages ORDER BY container, page_index")
-    fun observeAllPages(): Flow<List<PageEntity>>
+    @Query("SELECT * FROM items WHERE container = :container AND page_index = :page")
+    suspend fun itemsOnPage(container: Container, page: Int): List<ItemEntity>
 
     @Query("SELECT * FROM pages ORDER BY container, page_index")
     suspend fun allPages(): List<PageEntity>

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,8 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -89,18 +88,25 @@ internal fun Menu(
         val keyboard = with(density) { WindowInsets.ime.getBottom(this) }
         val clear = IntSize(room.width, (room.height - keyboard).coerceAtLeast(0))
         Box(Modifier.fillMaxSize().testTag(tag)) {
-            if (content != null) {
-                var size by remember { mutableStateOf(IntSize.Zero) }
+            if (content != null && clear != IntSize.Zero) {
                 val gap = with(density) { MENU_GAP.roundToPx() }
                 Surface(
                     modifier =
-                        Modifier.offset { menuOffset(anchor, size, clear, gap) }
+                        Modifier.layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
+                                val pos =
+                                    menuOffset(
+                                        anchor,
+                                        IntSize(placeable.width, placeable.height),
+                                        clear,
+                                        gap,
+                                    )
+                                layout(placeable.width, placeable.height) {
+                                    placeable.placeRelative(pos)
+                                }
+                            }
                             .width(MENU_WIDTH)
-                            .heightIn(max = with(density) { clear.height.toDp() })
-                            .onSizeChanged { size = it }
-                            // Not yet measured: not yet placed. One frame in the wrong place would
-                            // show.
-                            .graphicsLayer { alpha = if (size == IntSize.Zero) 0f else 1f },
+                            .heightIn(max = with(density) { clear.height.toDp() }),
                     shape = RoundedCornerShape(CORNER),
                     color = SURFACE,
                     contentColor = Color.White,

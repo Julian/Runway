@@ -11,7 +11,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +28,7 @@ import com.grayvines.runway.model.PackageKey
 import com.grayvines.runway.model.badgeCountForApp
 import com.grayvines.runway.model.badgeCountForFolder
 import com.grayvines.runway.model.formatBadgeCount
+import com.grayvines.runway.system.apps.AppEntry
 
 const val BADGE_TAG = "badge"
 
@@ -53,7 +56,18 @@ internal fun BadgeState.countFor(app: AppRef): Int = badgeCountForApp(app, count
 internal fun BadgeState.countFor(apps: Iterable<AppRef>): Int =
     badgeCountForFolder(apps, counts, muted)
 
-internal val LocalBadges = compositionLocalOf { BadgeState() }
+internal fun BadgeState.countForEntries(apps: List<AppEntry>): Int = apps.sumOf {
+    badgeCountForApp(it.ref, counts, muted)
+}
+
+/**
+ * Held as a [State] inside a static local so notification changes never recompose the tree; each
+ * icon derives its own count and recomposes only when that count or [BadgeStyle] changes.
+ */
+internal val LocalBadges =
+    staticCompositionLocalOf<State<BadgeState>> {
+        mutableStateOf(BadgeState())
+    }
 
 /**
  * A notification badge at the top-right corner of an icon or folder tile: a count pill ("99+" above

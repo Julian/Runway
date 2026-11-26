@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 @Suppress("TooGenericExceptionCaught")
 suspend fun attempt(
     what: String,
-    log: (String, Throwable) -> Unit = { message, e -> Log.e(TAG, message, e) },
+    log: (String, Throwable) -> Unit = { message, e -> runCatching { Log.e(TAG, message, e) } },
     block: suspend () -> Unit,
 ): Boolean =
     try {
