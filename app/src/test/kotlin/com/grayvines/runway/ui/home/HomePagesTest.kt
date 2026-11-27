@@ -99,12 +99,31 @@ class HomePagesTest {
     }
 
     @Test
+    fun `a folder placement whose folder is missing is not drawn and not foldable`() {
+        val orphan = PlacedItem(3, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
+        val page =
+            ContainerContent(listOf(PageContent(0, listOf(orphan))))
+                .toHomePages(apps = emptyMap(), folders = emptyMap())
+                .single()
+        assertEquals(emptyList<HomeItem>(), page.items)
+        assertEquals(
+            listOf(Placed(3, Footprint(2, 0), foldable = false, identity = "folder:7")),
+            page.occupied,
+        )
+    }
+
+    @Test
     fun `an item outside the grid dimensions is not drawn and not foldable, but still occupies its cell`() {
         val inside = PlacedItem(1, ItemKind.FOLDER, Container.HOME, 0, x = 2, y = 0, folderId = 7)
         val outside = PlacedItem(2, ItemKind.FOLDER, Container.HOME, 0, x = 3, y = 0, folderId = 8)
+        val folders =
+            mapOf(
+                7L to FolderContent(7, "Inside", emptyList()),
+                8L to FolderContent(8, "Outside", emptyList()),
+            )
         val page =
             ContainerContent(listOf(PageContent(0, listOf(inside, outside))))
-                .toHomePages(emptyMap(), columns = 3, rows = 4)
+                .toHomePages(emptyMap(), folders = folders, columns = 3, rows = 4)
                 .single()
         assertEquals(listOf(1L), page.items.map { it.id })
         assertEquals(

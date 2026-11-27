@@ -49,11 +49,13 @@ fun DropAreas.onBin(pointer: Point): Boolean = bin?.contains(pointer) == true
  */
 fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): DropTarget? {
     val topLeft = Point(pointer.x - grab.x, pointer.y - grab.y)
-    val homeArea = home?.takeIf { pointer.y in it.top..it.bottom }
-    val dockArea = dock?.takeIf { pointer.y in it.top..it.bottom }
+    val homeArea = home?.takeIf {
+        it.hasSize() && columns > 0 && rows > 0 && pointer.y in it.top..it.bottom
+    }
+    val dockArea = dock?.takeIf { it.hasSize() && dockSlots > 0 && pointer.y in it.top..it.bottom }
     return when {
-        homeArea != null && (spanX > columns || spanY > rows) -> {
-            null // wider than the grid: nowhere to go
+        homeArea != null && (spanX <= 0 || spanY <= 0 || spanX > columns || spanY > rows) -> {
+            null // wider than the grid or degenerate: nowhere to go
         }
         homeArea != null -> {
             val cellW = homeArea.width / columns
@@ -79,19 +81,23 @@ fun DropAreas.targetFor(pointer: Point, grab: Point, spanX: Int, spanY: Int): Dr
 fun DropAreas.centreOf(container: Container, footprint: Footprint): Point? =
     when (container) {
         Container.HOME ->
-            home?.let { area ->
-                val cellW = area.width / columns
-                val cellH = area.height / rows
-                Point(
-                    area.left + (footprint.x + footprint.width / 2f) * cellW,
-                    area.top + (footprint.y + footprint.height / 2f) * cellH,
-                )
-            }
+            home
+                ?.takeIf { it.hasSize() && columns > 0 && rows > 0 }
+                ?.let { area ->
+                    val cellW = area.width / columns
+                    val cellH = area.height / rows
+                    Point(
+                        area.left + (footprint.x + footprint.width / 2f) * cellW,
+                        area.top + (footprint.y + footprint.height / 2f) * cellH,
+                    )
+                }
         Container.DOCK ->
-            dock?.let { area ->
-                val slotW = area.width / dockSlots
-                Point(area.left + (footprint.x + HALF) * slotW, area.top + area.height / 2f)
-            }
+            dock
+                ?.takeIf { it.hasSize() && dockSlots > 0 }
+                ?.let { area ->
+                    val slotW = area.width / dockSlots
+                    Point(area.left + (footprint.x + HALF) * slotW, area.top + area.height / 2f)
+                }
         Container.DRAWER -> null
     }
 
@@ -116,8 +122,8 @@ fun DropAreas.homeCellAt(pointer: Point): DropTarget.HomeCell? =
  * there means "onto what is here" rather than "next to it".
  */
 fun DropAreas.cellUnder(pointer: Point, zone: Float = FOLD_ZONE): DropTarget? {
-    val homeArea = home?.takeIf { pointer in it }
-    val dockArea = dock?.takeIf { pointer in it }
+    val homeArea = home?.takeIf { it.hasSize() && columns > 0 && rows > 0 && pointer in it }
+    val dockArea = dock?.takeIf { it.hasSize() && dockSlots > 0 && pointer in it }
     return when {
         homeArea != null -> {
             val cellW = homeArea.width / columns
@@ -141,6 +147,8 @@ fun DropAreas.cellUnder(pointer: Point, zone: Float = FOLD_ZONE): DropTarget? {
         }
     }
 }
+
+private fun Bounds.hasSize() = width > 0f && height > 0f
 
 /** Whether a cell coordinate's fraction lies within the middle [zone] of the cell. */
 private fun Float.wellInside(zone: Float): Boolean {
@@ -177,7 +185,7 @@ fun DropAreas.edgeAt(pointer: Point): EdgeHover? =
         ?: dock?.edgeAt(pointer, dockSlots)?.let { EdgeHover(Container.DOCK, it) }
 
 private fun Bounds.edgeAt(pointer: Point, cellsAcross: Int): Edge? {
-    if (pointer.y !in top..bottom) return null
+    if (!hasSize() || cellsAcross <= 0 || pointer.y !in top..bottom) return null
     val zone = width / cellsAcross * EDGE_CELL_FRACTION
     return when {
         pointer.x < left + zone -> Edge.LEFT

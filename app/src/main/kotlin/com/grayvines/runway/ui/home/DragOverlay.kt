@@ -126,7 +126,7 @@ private fun DragState.carried(
 ): Point {
     val under = Point(pointer.x - grab.x, pointer.y - grab.y)
     val at =
-        if (pickedUpFrom == null || arrival >= 1f) {
+        if (pickedUpFrom == null) {
             under
         } else {
             val from = Point(pickedUpFrom.x - half.x, pickedUpFrom.y - half.y)

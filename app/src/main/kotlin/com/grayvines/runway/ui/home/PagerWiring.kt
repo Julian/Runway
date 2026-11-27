@@ -12,7 +12,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalView
+import com.grayvines.runway.ui.drag.PageFlip
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -116,33 +118,36 @@ private fun PageShown(pager: PagerState, onShown: (page: Int, settled: Boolean) 
 internal fun PagerCommands(
     pager: PagerState,
     goHome: Flow<Unit>,
-    flipPage: Flow<Int>,
+    flipPage: Flow<PageFlip>,
     showPage: Flow<Int>,
 ) {
-    LaunchedEffect(goHome) { goHome.collect { pager.animateScrollToPage(0) } }
-    LaunchedEffect(showPage) {
+    LaunchedEffect(pager, goHome) { goHome.collect { pager.animateScrollToPage(0) } }
+    LaunchedEffect(pager, showPage) {
         showPage.collect { page ->
             // The page was just written; the pager learns of it a composition later.
-            snapshotFlow { pager.pageCount }.first { it > page }
-            pager.animateScrollToPage(page)
+            if (pager.knows(page, SHOW_PAGE_WAIT_MS)) pager.animateScrollToPage(page)
         }
     }
     PageFlips(pager, flipPage)
 }
 
 /**
- * Flips [pager] by each delta on [flipPage]; deltas with no page to go to are ignored. The scroll
- * is shorter than the dwell between ticks, so each page settles before the next flip.
+ * Flips [pager] for each request on [flipPage]; out-of-range targets are ignored. [collectLatest]
+ * lets a return-to-source flip interrupt an in-flight scroll and land on the exact page.
  *
  * A flip onto a page the dwell has just added can arrive before the pager knows the page: the
  * layout is written and the flip emitted in the same turn, while the pager's count comes from the
  * composed state, one composition behind. Such a flip waits for the count, briefly.
  */
 @Composable
-internal fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
-    LaunchedEffect(flipPage) {
-        flipPage.collect { delta ->
-            val next = pager.currentPage + delta
+internal fun PageFlips(pager: PagerState, flipPage: Flow<PageFlip>) {
+    LaunchedEffect(pager, flipPage) {
+        flipPage.collectLatest { flip ->
+            val next =
+                when (flip) {
+                    is PageFlip.By -> pager.currentPage + flip.delta
+                    is PageFlip.To -> flip.page
+                }
             if (next >= 0 && pager.knows(next)) {
                 pager.animateScrollToPage(next, animationSpec = tween(FLIP_SCROLL_MS))
             }
@@ -150,12 +155,13 @@ internal fun PageFlips(pager: PagerState, flipPage: Flow<Int>) {
     }
 }
 
-private suspend fun PagerState.knows(page: Int): Boolean =
+private suspend fun PagerState.knows(page: Int, timeoutMs: Long = PAGE_COUNT_LAG_MS): Boolean =
     page < pageCount ||
-        withTimeoutOrNull(PAGE_COUNT_LAG_MS) { snapshotFlow { pageCount }.first { it > page } } !=
-            null
+        withTimeoutOrNull(timeoutMs) { snapshotFlow { pageCount }.first { it > page } } != null
 
 /** How long a flip's scroll takes. */
 internal const val FLIP_SCROLL_MS = 250
 /** How long a flip waits for the pager to learn of a page just added: a few compositions. */
 private const val PAGE_COUNT_LAG_MS = 250L
+/** Upper bound for [showPage] waiting for a newly added page to reach the pager. */
+private const val SHOW_PAGE_WAIT_MS = 2_000L

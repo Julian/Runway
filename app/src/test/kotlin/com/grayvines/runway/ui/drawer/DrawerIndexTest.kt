@@ -38,5 +38,9 @@ class DrawerIndexTest {
         assertEquals('S', index.under(y = 900f, height = 400f)?.letter) // past the end still counts
         assertEquals('C', index.under(y = -5f, height = 400f)?.letter)
         assertNull(emptyList<IndexEntry>().under(y = 10f, height = 400f))
+        assertNull(index.under(y = 10f, height = 0f))
+        assertNull(index.under(y = 10f, height = -50f))
+        assertNull(index.under(y = Float.NaN, height = 400f))
+        assertNull(index.under(y = 10f, height = Float.NaN))
     }
 }

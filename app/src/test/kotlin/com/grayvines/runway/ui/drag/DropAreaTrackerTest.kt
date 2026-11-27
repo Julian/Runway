@@ -71,4 +71,18 @@ class DropAreaTrackerTest {
         assertEquals(2, changes.size)
         assertEquals(3, changes.last().dockSlots)
     }
+
+    @Test
+    fun `gridChanged updates grid dimensions immediately and notifies listeners`() {
+        tracker.homePagePositioned(0, page0, 4, 3)
+        tracker.dockPagePositioned(0, Bounds(0f, 100f, 100f, 120f), 4)
+        val before = changes.size
+        tracker.gridChanged(columns = 5, rows = 6, dockSlots = 5)
+        assertEquals(before + 1, changes.size)
+        assertEquals(5, tracker.areas.columns)
+        assertEquals(6, tracker.areas.rows)
+        assertEquals(5, tracker.areas.dockSlots)
+        tracker.gridChanged(columns = 5, rows = 6, dockSlots = 5) // unchanged: no extra notice
+        assertEquals(before + 1, changes.size)
+    }
 }

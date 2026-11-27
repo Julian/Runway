@@ -19,6 +19,7 @@ import com.grayvines.runway.ui.drag.Bounds
 import com.grayvines.runway.ui.drag.DragSource
 import com.grayvines.runway.ui.drag.DragState
 import com.grayvines.runway.ui.drag.DropPlan
+import com.grayvines.runway.ui.drag.PageFlip
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drag.Settling
 import com.grayvines.runway.ui.widgets.WidgetSpan
@@ -45,8 +46,9 @@ class DragSession(
     val onHomePageShown: (page: Int, settled: Boolean) -> Unit = { _, _ -> },
     val onDockPagePositioned: (page: Int, Bounds) -> Unit = { _, _ -> },
     val onDockPageShown: (page: Int, settled: Boolean) -> Unit = { _, _ -> },
-    val flipHomePage: Flow<Int> = emptyFlow(),
-    val flipDockPage: Flow<Int> = emptyFlow(),
+    val onGridChanged: (columns: Int, rows: Int, dockSlots: Int) -> Unit = { _, _, _ -> },
+    val flipHomePage: Flow<PageFlip> = emptyFlow(),
+    val flipDockPage: Flow<PageFlip> = emptyFlow(),
     /**
      * Whether a finger landing at this root point is on a widget, whose vertical drags are its own.
      */

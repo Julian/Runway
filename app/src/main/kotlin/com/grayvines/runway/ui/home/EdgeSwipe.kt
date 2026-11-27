@@ -15,6 +15,8 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
@@ -42,6 +44,8 @@ internal fun Modifier.swipesPastFirstPage(
     pager: PagerState,
     sensitivity: DrawerSwipe,
     enabled: Boolean,
+    startsOnWidget: (Offset) -> Boolean = { false },
+    isDragging: () -> Boolean = { false },
     onSwipe: () -> Unit,
 ): Modifier {
     if (!enabled) return this
@@ -49,18 +53,41 @@ internal fun Modifier.swipesPastFirstPage(
     val swipe = rememberUpdatedState(sensitivity)
     val screenHeight = rememberUpdatedState(LocalWindowInfo.current.containerSize.height)
     val direction = rememberUpdatedState(LocalLayoutDirection.current)
-    return this.then(
-        remember(pager) {
-            Modifier.pointerInput(pager) {
-                awaitEachGesture {
-                    val outwards = if (direction.value == LayoutDirection.Ltr) 1f else -1f
-                    val pull = edgePull(swipe.value, screenHeight.value)
-                    if (awaitSwipePastFirstPage(pager, outwards, pull)) swiped.value()
+    val ignoresWidget = rememberUpdatedState(startsOnWidget)
+    val dragging = rememberUpdatedState(isDragging)
+    val coords = remember { EdgeSwipeCoords() }
+    return this.onGloballyPositioned { coords.value = it }
+        .then(
+            remember(pager) {
+                Modifier.pointerInput(pager) {
+                    awaitEachGesture {
+                        val outwards = if (direction.value == LayoutDirection.Ltr) 1f else -1f
+                        val pull = edgePull(swipe.value, screenHeight.value)
+                        val ignoreDown: (Offset) -> Boolean = { local ->
+                            dragging.value() ||
+                                coords.value
+                                    ?.takeIf { it.isAttached }
+                                    ?.localToRoot(local)
+                                    ?.let { ignoresWidget.value(it) } == true
+                        }
+                        if (
+                            awaitSwipePastFirstPage(
+                                pager,
+                                outwards,
+                                pull,
+                                ignoreDown,
+                                isDragging = { dragging.value() },
+                            )
+                        ) {
+                            swiped.value()
+                        }
+                    }
                 }
             }
-        }
-    )
+        )
 }
+
+private class EdgeSwipeCoords(var value: LayoutCoordinates? = null)
 
 /** The rules for a swipe measured by [swipe] on a screen [screenHeightPx] tall. */
 private fun Density.edgePull(swipe: DrawerSwipe, screenHeightPx: Int) =
@@ -79,18 +106,23 @@ private suspend fun AwaitPointerEventScope.awaitSwipePastFirstPage(
     pager: PagerState,
     outwards: Float,
     pull: EdgePull,
+    ignoreDown: (local: Offset) -> Boolean,
+    isDragging: () -> Boolean,
 ): Boolean {
     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
     // A finger still inside slop by then has held whatever it is on.
     val hold = maxOf(LIFT_HOLD_MS, viewConfiguration.longPressTimeoutMillis)
     val start =
-        if (pager.canScrollBackward) {
+        if (pager.canScrollBackward || ignoreDown(down.position)) {
             null
         } else {
             withTimeoutOrNull(hold) { awaitSidewaysSlop(down.id) }
         }
-    val velocity = start?.takeIf { it.way == outwards }?.let { followPull(it, pull, outwards) }
-    return velocity != null && pull.runs(velocity * outwards)
+    val velocity =
+        start
+            ?.takeIf { it.way == outwards && !isDragging() }
+            ?.let { followPull(it, pull, outwards, isDragging) }
+    return velocity != null && !isDragging() && pull.runs(velocity * outwards)
 }
 
 /**
@@ -117,7 +149,7 @@ private suspend fun AwaitPointerEventScope.awaitSidewaysSlop(pointer: PointerId)
         change?.let { moved += it.positionChangeIgnoreConsumed() }
     } while (change != null && abs(moved.x) < slop && abs(moved.y) < slop)
     return change
-        ?.takeIf { abs(moved.x) >= slop }
+        ?.takeIf { abs(moved.x) >= slop && abs(moved.x) > abs(moved.y) }
         ?.let { SidewaysStart(it, moved.x.sign, moved.x - slop * moved.x.sign) }
 }
 
@@ -130,15 +162,16 @@ private suspend fun AwaitPointerEventScope.followPull(
     start: SidewaysStart,
     pull: EdgePull,
     outwards: Float,
+    isDragging: () -> Boolean,
 ): Float? {
     val tracker = VelocityTracker()
     tracker.addPosition(start.change.uptimeMillis, start.change.position)
     pull.moveBy(start.overSlopX * outwards)
     while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
         val change =
-            awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull {
-                it.id == start.change.id
-            } ?: return null
+            event.changes.firstOrNull { it.id == start.change.id }?.takeUnless { isDragging() }
+                ?: return null
         if (!change.pressed) {
             return if (change.isConsumed) null else tracker.calculateVelocity().x
         }

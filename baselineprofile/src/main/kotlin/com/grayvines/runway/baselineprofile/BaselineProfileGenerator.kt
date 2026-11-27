@@ -5,8 +5,9 @@ import android.graphics.Point
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.SearchCondition
+import androidx.test.uiautomator.Searchable
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -54,7 +55,7 @@ class BaselineProfileGenerator {
             val homeCenter = device.point(MIDDLE, MIDDLE)
             device.holdAndDrag(start, homeCenter)
             assertTrue(
-                "Drawer did not close under drag",
+                "Drawer did not close under drag of '$label' from $start to $homeCenter",
                 device.wait(Until.gone(By.text(DRAWER_SEARCH_HINT)), TIMEOUT_MS),
             )
             val placed = device.wait(Until.findObject(By.desc(label)), TIMEOUT_MS)
@@ -95,18 +96,30 @@ class BaselineProfileGenerator {
     }
 
     private fun UiDevice.firstDrawerApp(): Pair<String, Point> {
-        val searchBottom = findObject(By.text(DRAWER_SEARCH_HINT))?.visibleBounds?.bottom ?: 0
-        val app: UiObject2? =
-            findObjects(By.pkg(PACKAGE).clickable(true)).firstOrNull { node ->
-                val desc = node.contentDescription
-                val bounds = node.visibleBounds
-                !desc.isNullOrBlank() &&
-                    bounds.top > searchBottom &&
-                    bounds.width() > 0 &&
-                    bounds.height() > 0
-            }
-        assertNotNull("No clickable app icon found in drawer", app)
-        return app!!.contentDescription to app.visibleCenter
+        val found =
+            wait(
+                object : SearchCondition<Pair<String, Point>?>() {
+                    override fun apply(searchable: Searchable): Pair<String, Point>? {
+                        val list = searchable.findObject(By.res(DRAWER_LIST_TAG)) ?: return null
+                        val node =
+                            list.findObjects(By.pkg(PACKAGE)).firstOrNull { candidate ->
+                                val desc = candidate.contentDescription
+                                val bounds = candidate.visibleBounds
+                                !desc.isNullOrBlank() && bounds.width() > 0 && bounds.height() > 0
+                            } ?: return null
+                        return node.contentDescription to node.visibleCenter
+                    }
+                },
+                TIMEOUT_MS,
+            )
+        if (found == null) {
+            val summary =
+                findObjects(By.pkg(PACKAGE)).take(20).joinToString("; ") { n ->
+                    "cls=${n.className} res=${n.resourceName} click=${n.isClickable} text=${n.text} desc=${n.contentDescription} bounds=${n.visibleBounds}"
+                }
+            assertNotNull("No app icon found in drawer list (nodes: $summary)", found)
+        }
+        return found!!
     }
 
     /** A swipe between points given as shares of the screen's width and height. */
@@ -136,6 +149,7 @@ class BaselineProfileGenerator {
     private companion object {
         const val PACKAGE = "com.grayvines.runway"
         const val DRAWER_SEARCH_HINT = "Search apps"
+        const val DRAWER_LIST_TAG = "drawer-list"
         const val TIMEOUT_MS = 10_000L
         const val MAX_BACKS_TO_CLOSE = 2
         const val STEPS = 20

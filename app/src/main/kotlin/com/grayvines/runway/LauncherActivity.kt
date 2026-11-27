@@ -59,6 +59,7 @@ class LauncherActivity : ComponentActivity() {
             open = viewModel::openDrawer,
             close = viewModel::closeDrawer,
             openShade = ::openNotifications,
+            isOpen = { viewModel.drawerOpen.value },
         )
     }
 
@@ -282,6 +283,7 @@ class LauncherActivity : ComponentActivity() {
                 onHomePageShown = reports::homePageShown,
                 onDockPagePositioned = reports::dockPagePositioned,
                 onDockPageShown = reports::dockPageShown,
+                onGridChanged = viewModel.dragging.areas::gridChanged,
                 flipHomePage = viewModel.dragging.flipHomePage,
                 flipDockPage = viewModel.dragging.flipDockPage,
                 startsOnWidget = { p ->

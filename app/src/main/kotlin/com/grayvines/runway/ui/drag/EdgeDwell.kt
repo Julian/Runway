@@ -7,12 +7,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
+ * A page scroll requested during a drag: relative ([By], from dwelling at an edge) or exact ([To],
+ * when returning to a source page after a refused or cancelled drop).
+ */
+sealed interface PageFlip {
+    data class By(val delta: Int) : PageFlip
+
+    data class To(val page: Int) : PageFlip
+}
+
+/**
  * What resting a dragged item at a page edge does over time: a flip every [FLIP_MS]; past the last
  * page, one new page after [ADD_PAGE_MS] of holding there. Home and dock pages alike. Time comes
  * from the coroutine clock, so tests run it under virtual time.
  */
 class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions) {
     interface Actions {
+        /** True when [hover] is at the start of the pager, with no earlier page to flip to. */
+        fun isAtStart(hover: EdgeHover): Boolean = false
+
         /** True when flipping in [hover]'s direction has nowhere to go. */
         fun isPastTheEnd(hover: EdgeHover): Boolean
 
@@ -43,15 +56,21 @@ class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions)
         var addedPage = false
         while (true) {
             delay(FLIP_MS)
-            if (!actions.isPastTheEnd(hover)) {
-                heldAtEnd = 0 // arriving at the end starts the long hold from zero
-                actions.flip(hover.container, hover.edge.pageDelta)
-            } else {
-                heldAtEnd += FLIP_MS
-                if (!addedPage && heldAtEnd >= ADD_PAGE_MS) {
-                    addedPage = true // one attempt per hold, whether or not it worked
-                    if (actions.addPage(hover.container)) {
-                        actions.flip(hover.container, hover.edge.pageDelta)
+            when {
+                actions.isAtStart(hover) -> {
+                    heldAtEnd = 0
+                }
+                !actions.isPastTheEnd(hover) -> {
+                    heldAtEnd = 0 // arriving at the end starts the long hold from zero
+                    actions.flip(hover.container, hover.edge.pageDelta)
+                }
+                else -> {
+                    heldAtEnd += FLIP_MS
+                    if (!addedPage && heldAtEnd >= ADD_PAGE_MS) {
+                        addedPage = true // one attempt per hold, whether or not it worked
+                        if (actions.addPage(hover.container)) {
+                            actions.flip(hover.container, hover.edge.pageDelta)
+                        }
                     }
                 }
             }

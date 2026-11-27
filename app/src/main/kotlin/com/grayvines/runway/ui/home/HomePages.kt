@@ -113,7 +113,7 @@ private fun FolderContent.held(
     return if (handSorted) entries else entries.sortedWith(byEntry)
 }
 
-/** Null when the item's app is absent; those are not drawn. */
+/** Null when the item's app or folder is absent; those are not drawn. */
 private fun PlacedItem.toHomeItem(
     apps: Map<AppRef, AppEntry>,
     appLabels: Map<String, String>,
@@ -123,6 +123,7 @@ private fun PlacedItem.toHomeItem(
     val app = appRef()?.let(apps::get)
     if (kind == ItemKind.APP && app == null) return null
     val folder = folderId?.let { folders[it] }
+    if (kind == ItemKind.FOLDER && folder == null) return null
     return HomeItem(
         id = id,
         kind = kind,

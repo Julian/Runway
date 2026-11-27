@@ -42,6 +42,10 @@ class DrawerSearchTest {
     @Test
     fun `a label or word that starts with it comes before one that merely contains it`() {
         assertEquals(listOf("Google Maps", "Maps Go", "Lego"), search("go"))
+        assertEquals(
+            listOf("Google Maps", "My Google Maps"),
+            listOf("My Google Maps", "Google Maps").matching("google m") { it },
+        )
     }
 
     @Test

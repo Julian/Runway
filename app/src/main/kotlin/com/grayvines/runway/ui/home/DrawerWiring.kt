@@ -11,14 +11,21 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.ui.drag.Point
 import com.grayvines.runway.ui.drawer.DrawerMotion
 import com.grayvines.runway.ui.drawer.drawerPull
 import com.grayvines.runway.ui.drawer.releasesAbandonedPull
 
-/** What a vertical swipe on the home screen can ask for. */
-class DrawerActions(val open: () -> Unit, val close: () -> Unit, val openShade: () -> Unit)
+/** What a vertical swipe on the home screen can ask for, plus a live check of drawer state. */
+class DrawerActions(
+    val open: () -> Unit,
+    val close: () -> Unit,
+    val openShade: () -> Unit,
+    val isOpen: (() -> Boolean)? = null,
+)
 
 /** The drawer's motion, its release decision, and what a pull must know, wired once. */
 @Stable
@@ -54,6 +61,11 @@ internal fun rememberDrawer(
     val motion = remember { DrawerMotion(scope) }
     val currentOpen by rememberUpdatedState(open)
     LaunchedEffect(open) { motion.settle(open) }
+    // Launching an app closes the drawer just before the activity stops; snap to rest so the
+    // spring never freezes mid-screen while the frame clock is paused.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        motion.snap(actions.isOpen?.invoke() ?: currentOpen)
+    }
     return remember(motion, actions, startsOnWidget) {
         val release = { velocity: Float ->
             motion.release(velocity, currentOpen, actions.open, actions.close, actions.openShade)

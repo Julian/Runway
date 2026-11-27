@@ -46,6 +46,7 @@ fun PendingMove.applyTo(
 }
 
 private fun PendingMove.relocate(pages: List<HomePage>): Pair<HomeItem?, Placed?> {
+    if (itemId == 0L) return null to freshPlaced()
     val moved = pages.flatMap { it.items }.firstOrNull { it.id == itemId }
     val relocated = moved?.copy(x = x, y = y)
     val movedPlaced =
@@ -53,7 +54,6 @@ private fun PendingMove.relocate(pages: List<HomePage>): Pair<HomeItem?, Placed?
             ?: relocated?.let {
                 Placed(it.id, it.footprint, it.kind != ItemKind.WIDGET, it.identity)
             }
-            ?: freshPlaced()
     val relocatedPlaced = movedPlaced?.let {
         it.copy(footprint = Footprint(x, y, it.footprint.width, it.footprint.height))
     }

@@ -1,9 +1,7 @@
 package com.grayvines.runway.ui.drawer
 
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,19 +11,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import com.grayvines.runway.system.apps.AppEntry
 import com.grayvines.runway.system.apps.LabelOrder
+import kotlin.math.roundToInt
 
 const val DRAWER_INDEX_TAG = "drawer-index"
 
@@ -58,7 +60,8 @@ internal fun <T> List<T>.index(label: (T) -> String): List<IndexEntry> {
 
 /** Which entry a finger at [y] of [height] is on: the strip is divided evenly between them. */
 internal fun List<IndexEntry>.under(y: Float, height: Float): IndexEntry? {
-    if (isEmpty()) return null
+    val validBounds = y.isFinite() && height.isFinite() && height > 0f
+    if (isEmpty() || !validBounds) return null
     val slot = (y / height * size).toInt().coerceIn(0, size - 1)
     return this[slot]
 }
@@ -79,29 +82,26 @@ fun DrawerIndex(entries: List<IndexEntry>, onJump: (position: Int) -> Unit, modi
             jump.value(entry.position)
         }
     }
-    Column(
+    IndexStrip(
         modifier =
-            modifier
-                .width(INDEX_WIDTH)
-                .testTag(DRAWER_INDEX_TAG)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = {
-                            touch(it.y, size.height.toFloat())
-                            tryAwaitRelease()
-                            held = null
+            modifier.width(INDEX_WIDTH).testTag(DRAWER_INDEX_TAG).pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    try {
+                        touch(down.position.y, size.height.toFloat())
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null || !change.pressed) break
+                            change.consume()
+                            touch(change.position.y, size.height.toFloat())
                         }
-                    )
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = { held = null },
-                        onDragCancel = { held = null },
-                    ) { change, _ ->
-                        touch(change.position.y, size.height.toFloat())
+                    } finally {
+                        held = null
                     }
-                },
-        horizontalAlignment = Alignment.CenterHorizontally,
+                }
+            }
     ) {
         entries.forEach { entry ->
             val bright = entry.letter == held
@@ -110,7 +110,7 @@ fun DrawerIndex(entries: List<IndexEntry>, onJump: (position: Int) -> Unit, modi
                 style = MaterialTheme.typography.labelMedium,
                 color = Color.White.copy(alpha = if (bright) 1f else LETTER_ALPHA),
                 modifier =
-                    Modifier.padding(vertical = LETTER_PADDING).clearAndSetSemantics {
+                    Modifier.clearAndSetSemantics {
                         contentDescription = "Jump to ${entry.letter}"
                         role = Role.Button
                         onClick {
@@ -119,6 +119,42 @@ fun DrawerIndex(entries: List<IndexEntry>, onJump: (position: Int) -> Unit, modi
                         }
                     },
             )
+        }
+    }
+}
+
+/**
+ * Stacks the letters with [LETTER_PADDING] above and below each when they fit, or distributes them
+ * evenly across the available height when space is tight (e.g. above the keyboard) so every letter
+ * stays reachable and aligned with [under].
+ */
+@Composable
+private fun IndexStrip(modifier: Modifier, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val width = constraints.constrainWidth(INDEX_WIDTH.roundToPx())
+        if (measurables.isEmpty()) {
+            layout(width, constraints.constrainHeight(0)) {}
+        } else {
+            val loose =
+                constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+            val placeables = measurables.map { it.measure(loose) }
+            val padPx = LETTER_PADDING.roundToPx()
+            val maxGlyphHeight = placeables.maxOf { it.height }
+            val naturalHeight = (maxGlyphHeight + padPx * 2) * placeables.size
+            val totalHeight = constraints.constrainHeight(naturalHeight)
+            layout(width, totalHeight) {
+                if (totalHeight >= maxGlyphHeight) {
+                    val step = totalHeight.toFloat() / placeables.size
+                    placeables.forEachIndexed { index, placeable ->
+                        val maxY = (totalHeight - placeable.height).coerceAtLeast(0)
+                        val y =
+                            (index * step + (step - placeable.height) / 2f)
+                                .roundToInt()
+                                .coerceIn(0, maxY)
+                        placeable.placeRelative((width - placeable.width) / 2, y)
+                    }
+                }
+            }
         }
     }
 }

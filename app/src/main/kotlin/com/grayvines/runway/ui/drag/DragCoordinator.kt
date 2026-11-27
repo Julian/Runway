@@ -65,12 +65,12 @@ class DragCoordinator(
      */
     val settling: StateFlow<Settling?> = _settling
 
-    private val _flipHomePage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
-    private val _flipDockPage = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val _flipHomePage = MutableSharedFlow<PageFlip>(extraBufferCapacity = 1)
+    private val _flipDockPage = MutableSharedFlow<PageFlip>(extraBufferCapacity = 1)
 
-    /** Page deltas requested by dwelling at a home or dock edge. */
-    val flipHomePage: SharedFlow<Int> = _flipHomePage
-    val flipDockPage: SharedFlow<Int> = _flipDockPage
+    /** Page flips requested by edge dwells or returning to a source page. */
+    val flipHomePage: SharedFlow<PageFlip> = _flipHomePage
+    val flipDockPage: SharedFlow<PageFlip> = _flipDockPage
 
     /**
      * Where home and dock are on screen; a still finger is re-evaluated when that changes, and a
@@ -94,6 +94,17 @@ class DragCoordinator(
         EdgeDwell(
             scope,
             object : EdgeDwell.Actions {
+                override fun isAtStart(hover: EdgeHover): Boolean {
+                    if (hover.edge != Edge.LEFT) return false
+                    val shown =
+                        if (hover.container == Container.DOCK) {
+                            areas.areas.dockPage
+                        } else {
+                            areas.areas.homePage
+                        }
+                    return shown <= 0
+                }
+
                 override fun isPastTheEnd(hover: EdgeHover): Boolean {
                     if (hover.edge != Edge.RIGHT) return false
                     val shown =
@@ -106,10 +117,11 @@ class DragCoordinator(
                 }
 
                 override fun flip(container: Container, delta: Int) {
+                    val request = PageFlip.By(delta)
                     if (container == Container.DOCK) {
-                        _flipDockPage.tryEmit(delta)
+                        _flipDockPage.tryEmit(request)
                     } else {
-                        _flipHomePage.tryEmit(delta)
+                        _flipHomePage.tryEmit(request)
                     }
                 }
 
@@ -193,6 +205,7 @@ class DragCoordinator(
      * on a page, and takes what it is given at once.
      */
     fun endDrag() {
+        if (released) return
         edgeDwell.stop()
         resting?.cancel()
         val state = drag.value ?: return
@@ -310,12 +323,12 @@ class DragCoordinator(
                 Container.DOCK -> areas.areas.dockPage
                 Container.DRAWER -> return
             }
-        val delta = source.page - shown
-        if (delta == 0) return
+        if (shown == source.page && areas.areas.settled) return
+        val flip = PageFlip.To(source.page)
         if (source.container == Container.DOCK) {
-            _flipDockPage.tryEmit(delta)
+            _flipDockPage.tryEmit(flip)
         } else {
-            _flipHomePage.tryEmit(delta)
+            _flipHomePage.tryEmit(flip)
         }
     }
 

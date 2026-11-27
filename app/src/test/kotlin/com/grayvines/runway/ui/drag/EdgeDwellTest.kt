@@ -20,6 +20,11 @@ class EdgeDwellTest {
         val events = mutableListOf<String>()
         val containers = mutableListOf<Container>()
 
+        override fun isAtStart(hover: EdgeHover): Boolean {
+            val shown = if (hover.container == Container.DOCK) dockPage else page
+            return hover.edge == Edge.LEFT && shown <= 0
+        }
+
         override fun isPastTheEnd(hover: EdgeHover): Boolean {
             val (shown, count) =
                 if (hover.container == Container.DOCK) dockPage to dockPages else page to pages
@@ -105,11 +110,11 @@ class EdgeDwellTest {
     }
 
     @Test
-    fun `the left edge on the first page does nothing harmful`() = runTest {
+    fun `the left edge on the first page emits no flips and adds no pages`() = runTest {
         val fake = Fake(pages = 3, page = 0)
         EdgeDwell(backgroundScope, fake).hover(EdgeHover(Container.HOME, Edge.LEFT))
         advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
-        assertEquals(0, fake.events.count { it == "add" })
+        assertEquals(emptyList<String>(), fake.events)
         assertEquals(0, fake.page)
     }
 

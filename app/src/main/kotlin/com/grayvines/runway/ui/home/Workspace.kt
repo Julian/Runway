@@ -53,7 +53,9 @@ fun Workspace(
                 pagerState,
                 swipeSensitivity,
                 swipeRightEnabled,
-                onSwipePastFirstPage,
+                startsOnWidget = { p -> drag?.startsOnWidget?.invoke(Point(p.x, p.y)) == true },
+                isDragging = { drag?.active == true },
+                onSwipe = onSwipePastFirstPage,
             )
     ) {
         PagedGrid(

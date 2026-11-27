@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import kotlinx.coroutines.launch
 
 const val REMOVE_BIN_TAG = "remove-bin"
 const val REMOVE_BIN_LIT_TAG = "remove-bin-lit"
@@ -105,6 +104,15 @@ private class BinMotion {
 
     /** Anything to draw at all; read in composition, so only a change of answer recomposes. */
     val visible by derivedStateOf { shown.value > 0f }
+
+    suspend fun updateGlow(lit: Boolean) {
+        // A lift after the last drop's bin has gone starts unlit, whatever that one was.
+        if (shown.value == 0f && !lit) {
+            glow.snapTo(0f)
+        } else {
+            glow.animateTo(if (lit) 1f else 0f, tween(DragMotion.FOLDING_MS))
+        }
+    }
 }
 
 /**
@@ -115,15 +123,13 @@ private class BinMotion {
 @Composable
 private fun rememberBinMotion(removable: Boolean, lit: Boolean): BinMotion {
     val motion = remember { BinMotion() }
+    LaunchedEffect(removable) {
+        val target = if (removable) 1f else 0f
+        val spec = if (removable) DragMotion.lift else DragMotion.settle
+        motion.shown.animateTo(target, spec)
+    }
     LaunchedEffect(removable, lit) {
-        if (removable) {
-            // A lift after the last drop's bin has gone starts unlit, whatever that one was.
-            if (motion.shown.value == 0f) motion.glow.snapTo(0f)
-            launch { motion.glow.animateTo(if (lit) 1f else 0f, tween(DragMotion.FOLDING_MS)) }
-            motion.shown.animateTo(1f, DragMotion.lift)
-        } else {
-            motion.shown.animateTo(0f, DragMotion.settle)
-        }
+        if (removable) motion.updateGlow(lit)
     }
     return motion
 }

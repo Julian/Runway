@@ -13,7 +13,6 @@ import androidx.compose.ui.test.swipeRight
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
-import androidx.test.uiautomator.Until
 import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.settings.DrawerSwipe
 import com.grayvines.runway.data.settings.SwipeAction
@@ -142,13 +141,10 @@ class SwipeRightTest : LauncherFixture() {
         opener: BySelector,
         choice: BySelector,
     ) {
-        assertTrue("no $opener in settings", device.wait(Until.hasObject(opener), TIMEOUT_MS))
+        waitUntil(TIMEOUT_MS) { device.hasObject(opener) }
         device.findObject(opener).click()
-        compose.waitForIdle()
-        assertTrue(
-            "the list of apps did not open",
-            device.wait(Until.hasObject(By.text("Swipe right opens")), TIMEOUT_MS),
-        )
+        waitUntil(TIMEOUT_MS) { device.hasObject(By.text("Swipe right opens")) }
+        waitUntil(TIMEOUT_MS) { device.hasObject(choice) }
         device.findObject(choice).click()
         compose.waitForIdle()
     }

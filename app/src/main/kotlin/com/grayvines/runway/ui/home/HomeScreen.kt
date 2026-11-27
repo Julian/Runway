@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -102,6 +103,9 @@ fun HomeScreen(
     PagerCommands(homePager, goHome, drag.flipHomePage, homeMenu.showPage)
     PageFlips(dockPager, drag.flipDockPage)
     PagesShown(homePager, dockPager, drag.onHomePageShown, drag.onDockPageShown)
+    LaunchedEffect(drag, settings.columns, settings.pageRows, settings.dockSlots) {
+        drag.onGridChanged(settings.columns, settings.pageRows, settings.dockSlots)
+    }
     WallpaperParallax(homePager, settings.wallpaperParallax)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.
@@ -161,6 +165,9 @@ fun HomeScreen(
             openFolder?.let { OpenFolder(state, it, iconSize, folderActions, drag) }
             WidgetResizeOverlay(state, widgetResize, cell, drag)
             Menus(state.settings, itemMenu, homeMenu, widgetPicker, cell, iconSize, drag)
+            // Topmost Back priority: enters composition only while dragging so it registers on
+            // top of any already-open overlay in OnBackPressedDispatcher's LIFO stack.
+            if (drag.active) BackHandler { drag.cancel() }
             // Between the dock and the pages' last row, across the search bar when it sits there,
             // as
             // drawn once the home area has stepped back about the screen's middle.

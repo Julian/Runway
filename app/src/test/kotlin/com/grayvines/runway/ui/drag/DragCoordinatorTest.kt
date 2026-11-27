@@ -76,7 +76,7 @@ class DragCoordinatorTest {
     fun `a refused drop after a page flip flips back to the source page`() = runTest {
         val c = DragCoordinator(backgroundScope, lookup, FakeWorkspace())
         c.layOut()
-        val flips = mutableListOf<Int>()
+        val flips = mutableListOf<PageFlip>()
         backgroundScope.launch { c.flipHomePage.collect { flips += it } }
         runCurrent() // collecting before anything is emitted
         c.startDrag(source, Point(50f, 50f), grab)
@@ -84,7 +84,7 @@ class DragCoordinatorTest {
         c.dragTo(Point(150f, 400f)) // off every area: no target
         c.endDrag()
         runCurrent()
-        assertEquals(listOf(-1), flips) // back to page 0, where the icon settles
+        assertEquals(listOf(PageFlip.To(0)), flips) // back to page 0, where the icon settles
         assertEquals(1L, c.settling.value?.itemId)
     }
 
@@ -424,85 +424,6 @@ class DragCoordinatorTest {
     }
 
     @Test
-    fun `dwelling at the right edge flips, and past the end adds a page`() = runTest {
-        val workspace = FakeWorkspace(pages = 2)
-        val c = DragCoordinator(backgroundScope, lookup, workspace)
-        val flips = mutableListOf<Int>()
-        backgroundScope.launch { c.flipHomePage.collect { flips += it } }
-        c.layOut()
-        c.startDrag(source, Point(50f, 50f), grab)
-        c.dragTo(Point(150f, 50f))
-        c.dragTo(Point(299f, 50f)) // right edge of page 0
-        advanceTimeBy(EdgeDwell.FLIP_MS + 1)
-        assertEquals(listOf(1), flips)
-        c.areas.homePagePositioned(1, Bounds(0f, 0f, 300f, 200f), 3, 2)
-        c.areas.homePageShown(1, 3, 2) // now on the last page
-        // Up to the tick that adds the page, and not the one after: the fake's shown page only
-        // advances when told, and until it does that page is no longer the last.
-        advanceTimeBy(EdgeDwell.ADD_PAGE_MS)
-        assertEquals(3, workspace.pages)
-        assertEquals(listOf(1, 1), flips) // the second flip is onto the new page
-        c.areas.homePagePositioned(2, Bounds(0f, 0f, 300f, 200f), 3, 2)
-        c.areas.homePageShown(2, 3, 2)
-        val flipsSoFar = flips.size
-        advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
-        assertEquals(3, workspace.pages) // one page per hold
-        assertEquals(flipsSoFar, flips.size) // and nothing to flip to
-        c.cancelDrag()
-        advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
-        assertEquals(3, workspace.pages) // nothing after cancel
-    }
-
-    @Test
-    fun `dwelling at the dock's edge flips dock pages, and past the end adds a dock page`() =
-        runTest {
-            val workspace = FakeWorkspace(pages = 2, dockPages = 1)
-            val c = DragCoordinator(backgroundScope, lookup, workspace)
-            val homeFlips = mutableListOf<Int>()
-            val dockFlips = mutableListOf<Int>()
-            backgroundScope.launch { c.flipHomePage.collect { homeFlips += it } }
-            backgroundScope.launch { c.flipDockPage.collect { dockFlips += it } }
-            c.layOut()
-            c.startDrag(source, Point(50f, 50f), grab)
-            c.dragTo(Point(150f, 225f))
-            c.dragTo(Point(299f, 225f)) // right edge of the only dock page
-            advanceTimeBy(EdgeDwell.ADD_PAGE_MS + EdgeDwell.FLIP_MS)
-            assertEquals(2, workspace.dockPages)
-            assertEquals(listOf(1), dockFlips)
-            assertEquals(emptyList<Int>(), homeFlips)
-            assertEquals(2, workspace.pages) // the home pages are untouched
-            c.areas.dockPagePositioned(1, Bounds(0f, 200f, 300f, 250f), 1)
-            c.areas.dockPageShown(1, 1)
-            c.dragTo(Point(1f, 225f)) // over to the left edge: flips back, never adds
-            advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
-            assertEquals(2, workspace.dockPages)
-            assertEquals(-1, dockFlips[1])
-            c.cancelDrag()
-        }
-
-    @Test
-    fun `an item lifted inside an edge zone flips nothing until the finger has left the zone`() =
-        runTest {
-            val workspace = FakeWorkspace(pages = 1, dockPages = 1)
-            val c = DragCoordinator(backgroundScope, lookup, workspace)
-            val flips = mutableListOf<Int>()
-            backgroundScope.launch { c.flipDockPage.collect { flips += it } }
-            c.layOut()
-            val inTheZone = Point(295f, 225f) // the last dock slot's icon sits here
-            c.startDrag(source.copy(container = Container.DOCK, x = 2), inTheZone, grab)
-            c.dragTo(inTheZone)
-            advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 3)
-            assertEquals(1, workspace.dockPages)
-            assertEquals(emptyList<Int>(), flips)
-            c.dragTo(Point(150f, 225f)) // away, then back to the edge: now it counts
-            c.dragTo(inTheZone)
-            advanceTimeBy(EdgeDwell.ADD_PAGE_MS + EdgeDwell.FLIP_MS)
-            assertEquals(2, workspace.dockPages)
-            assertEquals(listOf(1), flips)
-            c.cancelDrag()
-        }
-
-    @Test
     fun `empty pages are pruned once the drop is written, and after refused or cancelled drags`() =
         runTest {
             val workspace = FakeWorkspace()
@@ -622,6 +543,23 @@ class DragCoordinatorTest {
             val move = workspace.moves.single()
             assertEquals(1L, move.itemId)
             assertNull(move.newApp)
+            assertEquals(7L, move.fromFolder)
+        }
+
+    @Test
+    fun `dropping a folder app onto its own existing cell still removes it from the folder`() =
+        runTest {
+            val app = AppRef("a/.Main", 0)
+            val workspace = FakeWorkspace()
+            val c = DragCoordinator(backgroundScope, holding(app), workspace)
+            c.layOut()
+            c.startDrag(fromDrawer(app).copy(fromFolder = 7L), Point(50f, 50f), grab)
+            c.dragTo(Point(50f, 50f)) // right over cell (0,0) where placement 1 already sits
+            c.endDrag()
+            runCurrent()
+            val move = workspace.moves.single()
+            assertEquals(1L, move.itemId)
+            assertEquals(0 to 0, move.x to move.y)
             assertEquals(7L, move.fromFolder)
         }
 

@@ -35,6 +35,13 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
 
     fun binPositioned(bounds: Bounds) = update(areas.copy(bin = bounds))
 
+    /**
+     * Updates the grid dimensions immediately when settings change without waiting for a layout
+     * pass.
+     */
+    fun gridChanged(columns: Int, rows: Int, dockSlots: Int) =
+        update(areas.copy(columns = columns, rows = rows, dockSlots = dockSlots))
+
     private fun refreshHome(columns: Int, rows: Int) =
         update(
             areas.copy(

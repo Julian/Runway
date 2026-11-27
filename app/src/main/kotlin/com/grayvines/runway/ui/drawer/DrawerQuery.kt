@@ -19,6 +19,9 @@ internal fun <T> List<T>.matching(query: String, label: (T) -> String): List<T> 
     val folded = associateWith { LabelOrder.folded(label(it)) }
     val (starts, contains) =
         filter { folded.getValue(it).contains(wanted) }
-            .partition { entry -> folded.getValue(entry).split(' ').any { it.startsWith(wanted) } }
+            .partition { entry ->
+                val text = folded.getValue(entry)
+                text.startsWith(wanted) || text.split(' ').any { it.startsWith(wanted) }
+            }
     return starts + contains
 }

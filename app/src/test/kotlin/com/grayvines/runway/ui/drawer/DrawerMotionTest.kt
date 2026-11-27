@@ -2,11 +2,15 @@ package com.grayvines.runway.ui.drawer
 
 import androidx.compose.runtime.MonotonicFrameClock
 import com.grayvines.runway.data.settings.DrawerSwipe
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -247,6 +251,94 @@ class DrawerMotionTest {
             // A list fling reporting itself after a scroll back to the top: nothing was pulled.
             assertEquals(Asked.NOTHING, release(500f, true))
         }
+
+    @Test
+    fun `snap immediately lands the drawer at rest and cancels any pull or shade give`() =
+        runWithMotion { motion, release ->
+            // Pull downward first so shade `given` is non-zero before snapping.
+            motion.dragBy(15f)
+            advanceUntilIdle()
+            assertTrue(motion.given.value > 0f)
+            assertTrue(motion.pulling)
+
+            motion.snap(open = false)
+            assertFalse(motion.pulling)
+            assertEquals(0f, motion.shown.value, 0.001f)
+            advanceUntilIdle()
+            assertEquals(0f, motion.revealed.value, 0.001f)
+            assertEquals(0f, motion.given.value, 0.001f)
+
+            // An abandoned release after snap decides nothing.
+            assertEquals(Asked.NOTHING, release(0f, false))
+
+            motion.snap(open = true)
+            assertEquals(1f, motion.shown.value, 0.001f)
+            advanceUntilIdle()
+            assertEquals(1f, motion.revealed.value, 0.001f)
+        }
+
+    @Test
+    fun `snap interrupts a paused mid-close spring as on ON_STOP`() = runTest {
+        val paused = CompletableDeferred<Long>()
+        val frozenClock =
+            object : MonotonicFrameClock {
+                override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
+                    onFrame(paused.await())
+            }
+        val motion = DrawerMotion(CoroutineScope(coroutineContext + frozenClock))
+        motion.laidOut(heightPx = 1000f, density = 1f, swipe = DrawerSwipe.MEDIUM)
+        motion.revealed.snapTo(1f)
+
+        val closeJob = launch(frozenClock) { motion.settle(open = false) }
+        runCurrent()
+        assertEquals(1f, motion.shown.value, 0.001f) // suspended mid-close waiting for a frame
+
+        motion.snap(open = false)
+        assertEquals(0f, motion.shown.value, 0.001f)
+        runCurrent()
+        assertEquals(0f, motion.revealed.value, 0.001f)
+        assertTrue(closeJob.isCompleted)
+    }
+
+    @Test
+    fun `external settle cancels an active pull so an abandoned release cannot re-open it`() =
+        runWithMotion { motion, release ->
+            motion.revealed.snapTo(1f)
+            motion.startPull(null)
+            motion.dragBy(100f) // pulling down inside open drawer (way == 1, pulled > openAt)
+            assertTrue(motion.pulling)
+
+            withContext(ImmediateFrames) { motion.settle(open = false) }
+            assertFalse(motion.pulling)
+            assertEquals(0f, motion.revealed.value, 0.001f)
+            assertEquals(Asked.NOTHING, release(0f, false))
+        }
+
+    @Test
+    fun `release holds the drawn position synchronously without flashing before coroutines run`() =
+        runWithMotion { motion, release ->
+            motion.startPull(fingerY = 800f)
+            motion.dragBy(-10f)
+            advanceUntilIdle()
+            motion.dragBy(-100f)
+            val beforeRelease = motion.shown.value
+            assertEquals(Asked.OPEN, release(0f, false))
+            // Immediately after release, before any advanceUntilIdle, shown stays at the same spot.
+            assertEquals(beforeRelease, motion.shown.value, 0.001f)
+        }
+
+    @Test
+    fun `dragging before layout or with zero height produces finite values`() = runTest {
+        val motion = DrawerMotion(CoroutineScope(coroutineContext + ImmediateFrames))
+        motion.dragBy(20f)
+        motion.dragBy(-40f)
+        assertTrue(motion.shown.value.isFinite())
+        assertTrue(motion.given.value.isFinite())
+        motion.laidOut(heightPx = 0f, density = 1f, swipe = DrawerSwipe.MEDIUM)
+        motion.dragBy(10f)
+        assertTrue(motion.shown.value.isFinite())
+        assertTrue(motion.given.value.isFinite())
+    }
 }
 
 /** Animations finish at once: these tests care about decisions, not frames. */

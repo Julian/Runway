@@ -1,5 +1,6 @@
 package com.grayvines.runway.ui.home
 
+import com.grayvines.runway.data.AppRef
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.data.ItemKind
 import com.grayvines.runway.model.Footprint
@@ -247,6 +248,45 @@ class PendingMoveTest {
         val applied = state.applying(widgetMove)
         val occupied = applied.homePages.first { it.index == 0 }.occupied
         assertTrue(occupied.any { it.footprint == Footprint(2, 1, 2, 2) && !it.foldable })
+    }
+
+    @Test
+    fun `concurrent fresh drops with itemId 0 do not collide on occupied entries`() {
+        val widgetMove =
+            PendingMove(
+                itemId = 0,
+                container = Container.HOME,
+                page = 0,
+                x = 2,
+                y = 1,
+                spanX = 2,
+                spanY = 2,
+                displaced = emptyMap(),
+                newWidget = WidgetProvider("pkg/.Widget", key = "0/pkg/.Widget"),
+            )
+        val app = AppRef("new/.Main", 0)
+        val appMove =
+            PendingMove(
+                itemId = 0,
+                container = Container.HOME,
+                page = 0,
+                x = 0,
+                y = 1,
+                displaced = emptyMap(),
+                newApp = app,
+            )
+        val applied = state.applying(listOf(widgetMove, appMove))
+        val occupied = applied.homePages.first { it.index == 0 }.occupied
+        assertTrue(
+            occupied.any {
+                it.footprint == Footprint(2, 1, 2, 2) && !it.foldable && it.identity == null
+            }
+        )
+        assertTrue(
+            occupied.any {
+                it.footprint == Footprint(0, 1, 1, 1) && it.foldable && it.identity == app.identity
+            }
+        )
     }
 
     @Test

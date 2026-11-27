@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -51,6 +52,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -132,24 +134,26 @@ fun AppDrawer(
     val present by remember(open) { derivedStateOf { open || shown.value > 0f } }
     if (!present) return
     val list = rememberLazyGridState()
-    val pullToClose = rememberPullToClose(open, shown, list, onPull, onPullEnd)
+    val pullToClose = rememberPullToClose(shown, list, onPull, onPullEnd)
+    LaunchedEffect(query.text) {
+        if (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0) {
+            list.scrollToItem(0)
+        }
+    }
     // Apps in drawer folders are reached through them, or by search, not from the grid.
     val searching = query.text.isNotBlank()
     val shownFolders = if (searching) emptyList() else folders
-    val shownApps =
-        remember(apps, searchableApps, folders, query.text) {
-            if (searching) {
-                searchableApps.matching(query.text)
-            } else {
-                val folded = folders.flatMapTo(HashSet()) { f -> f.folder.map { it.ref } }
-                apps.filter { it.ref !in folded }
-            }
-        }
+    val shownApps = rememberShownApps(apps, searchableApps, folders, query.text)
     BoxWithConstraints(
-        Modifier.fillMaxSize().arriving { shown.value }.background(SURFACE).testTag(DRAWER_TAG)
+        Modifier.fillMaxSize()
+            .arriving { shown.value }
+            .background(SURFACE)
+            .blocksBehind()
+            .semantics { testTagsAsResourceId = true }
+            .testTag(DRAWER_TAG)
     ) {
         val icon = fittedIconSize(iconSize, maxWidth, insets, columns)
-        val contentPadding = rememberDrawerContentPadding(insets, indexed = index)
+        val contentPadding = rememberDrawerContentPadding(insets, indexed = index && !searching)
         Column(Modifier.fillMaxSize()) {
             SearchField(
                 query,
@@ -177,6 +181,22 @@ fun AppDrawer(
         }
     }
 }
+
+@Composable
+private fun rememberShownApps(
+    apps: List<AppEntry>,
+    searchableApps: List<AppEntry>,
+    folders: List<HomeItem>,
+    query: String,
+): List<AppEntry> =
+    remember(apps, searchableApps, folders, query) {
+        if (query.isNotBlank()) {
+            searchableApps.matching(query)
+        } else {
+            val folded = folders.flatMapTo(HashSet()) { f -> f.folder.map { it.ref } }
+            apps.filter { it.ref !in folded }
+        }
+    }
 
 /** The folder section, then the apps, in one grid; the index over its right edge when [indexed]. */
 @Composable
@@ -414,9 +434,15 @@ private fun DrawerApp(
     )
 }
 
+/**
+ * Captures hit-testing over the drawer surface so touches in margins or empty space never reach the
+ * home screen siblings behind it, without consuming events that child touch-slop detectors check on
+ * the final pass.
+ */
+private fun Modifier.blocksBehind() = pointerInput(Unit) {}
+
 @Composable
 private fun rememberPullToClose(
-    open: Boolean,
     shown: State<Float>,
     list: LazyGridState,
     onPull: (Float) -> Unit,
@@ -424,7 +450,7 @@ private fun rememberPullToClose(
 ): PullToClose {
     val pull = rememberUpdatedState(onPull)
     val pullEnd = rememberUpdatedState(onPullEnd)
-    return remember(open) {
+    return remember(shown, list) {
         PullToClose(
             revealed = { shown.value },
             atTop = { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0 },
@@ -447,17 +473,26 @@ internal class PullToClose(
     private val onPull: (Float) -> Unit,
     private val onPullEnd: (Float) -> Unit,
 ) : NestedScrollConnection {
-    /** Whether the swipe in progress may pull: decided as it begins, from where the list was. */
-    private var pulling: Boolean? = null
+    /** Whether the swipe in progress began at the top and has not scrolled down into the list. */
+    private var startedAtTop: Boolean? = null
+
+    /** Whether this gesture has actually begun pulling the drawer down. */
+    private var pulled = false
 
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-        val pulls =
-            pulling ?: (source == NestedScrollSource.UserInput && atTop()).also { pulling = it }
-        if (pulls && revealed() < 1f && available.y < 0f) {
+        if (startedAtTop == null && source == NestedScrollSource.UserInput) {
+            startedAtTop = atTop()
+        }
+        if (pullsBackUp(available, source)) {
             onPull(available.y)
-            return available
+            return Offset(0f, available.y)
         }
         return Offset.Zero
+    }
+
+    private fun pullsBackUp(available: Offset, source: NestedScrollSource): Boolean {
+        val userUp = source == NestedScrollSource.UserInput && available.y < 0f
+        return pulled && userUp && revealed() < 1f
     }
 
     override fun onPostScroll(
@@ -465,18 +500,31 @@ internal class PullToClose(
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        if (pulling != true || available.y <= 0f) return Offset.Zero
+        if (consumed.y < 0f && !pulled) startedAtTop = false
+        if (startedAtTop != true || available.y <= 0f) return Offset.Zero
         // Once the finger is up, the list's fling may still have leftover: that is nobody's pull,
         // but the stretch is not for it either.
-        if (source == NestedScrollSource.UserInput) onPull(available.y)
-        return Offset(0f, available.y)
+        if (source == NestedScrollSource.UserInput) {
+            pulled = true
+            onPull(available.y)
+        }
+        return if (pulled) Offset(0f, available.y) else Offset.Zero
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+        if (!pulled || revealed() >= 1f) return Velocity.Zero
+        startedAtTop = null
+        pulled = false
+        onPullEnd(available.y)
+        return Velocity(0f, available.y)
     }
 
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        val pulled = pulling == true
-        pulling = null
-        if (!pulled) return Velocity.Zero
+        val didPull = pulled
+        startedAtTop = null
+        pulled = false
+        if (!didPull) return Velocity.Zero
         onPullEnd(available.y)
-        return available
+        return Velocity(0f, available.y)
     }
 }

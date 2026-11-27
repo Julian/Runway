@@ -126,6 +126,32 @@ class DragControllerTest {
     }
 
     @Test
+    fun `dropping a folder app onto its own existing cell or dock slot still plans a move`() {
+        controller.start(
+            DragSource(1, ItemKind.APP, Container.HOME, 0, 0, 0, fromFolder = 7L),
+            origin,
+            origin,
+        )
+        controller.move(origin, DropTarget.HomeCell(0, 0, 0))
+        assertEquals(
+            DropPlan.Move(DropTarget.HomeCell(0, 0, 0), emptyMap()),
+            controller.state.value?.plan,
+        )
+
+        controller.cancel()
+        controller.start(
+            DragSource(9, ItemKind.APP, Container.DOCK, 0, 0, 0, fromFolder = 7L),
+            origin,
+            origin,
+        )
+        controller.move(origin, DropTarget.DockSlot(0, 0))
+        assertEquals(
+            DropPlan.Move(DropTarget.DockSlot(0, 0), emptyMap()),
+            controller.state.value?.plan,
+        )
+    }
+
+    @Test
     fun `empty dock slot accepts, occupied slot refuses`() {
         lift(1)
         controller.move(origin, DropTarget.DockSlot(0, 1))

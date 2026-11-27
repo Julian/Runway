@@ -3,8 +3,9 @@ package com.grayvines.runway.ui.home
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
-import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangedIgnoreConsumed
@@ -32,34 +33,43 @@ fun Modifier.tracksDrag(session: () -> DragSession): Modifier =
     }
 
 /**
- * The finger carrying the drag, followed until it lifts; whatever drag is live meanwhile moves with
- * it. Until a drag names its finger ([DragSession.finger]) that is the first finger down, and every
- * move and lift of it are forwarded whether or not a drag is known to be live: the drag state
- * reaches the screen a frame after the long press, and a hold, move and lift can all arrive in one
- * batch of input, which would otherwise leave the lifted icon with no finger to end it. A drag
- * begun by another finger while one is already resting on the screen is followed from that one
- * instead.
+ * The finger carrying the live drag, followed from the moment a cell names it
+ * ([DragSession.finger]) until it lifts or is cancelled. Reading [DragSession.finger] directly
+ * handles a hold, move, and lift arriving in one input batch before [DragSession.active]
+ * recomposes, while ignoring unrelated taps or hover/scroll events from other input devices.
  */
 private class Finger(private val session: () -> DragSession) {
     private var id: PointerId? = null
+    private var pointerType: PointerType? = null
 
     fun saw(event: PointerEvent) {
-        session().finger?.let { id = it }
-        val current = id
-        if (current == null) {
-            id = event.changes.firstOrNull { it.changedToDownIgnoreConsumed() }?.id
-            return
-        }
-        val change = event.changes.firstOrNull { it.id == current }
-        if (change == null) {
-            id = null
-            return
-        }
         val drag = session()
+        val activeId = drag.finger
+        if (activeId == null) {
+            clear()
+            return
+        }
+        if (id != activeId) {
+            id = activeId
+            pointerType = null
+        }
+        val change = event.changes.firstOrNull { it.id == activeId }
+        if (change == null) {
+            if (isSameStreamMissing(event)) {
+                drag.cancel()
+                clear()
+            }
+            return
+        }
+        pointerType = change.type
         when {
             change.changedToUpIgnoreConsumed() -> {
                 drag.end()
-                id = null
+                clear()
+            }
+            !change.pressed -> {
+                drag.cancel()
+                clear()
             }
             change.positionChangedIgnoreConsumed() -> {
                 drag.move(Point(change.position.x, change.position.y))
@@ -68,6 +78,28 @@ private class Finger(private val session: () -> DragSession) {
     }
 
     fun abandon() {
-        if (id != null) session().cancel()
+        val current = id ?: return
+        clear()
+        val drag = session()
+        if (drag.finger == current) drag.cancel()
+    }
+
+    private fun isSameStreamMissing(event: PointerEvent): Boolean {
+        val ignored =
+            event.type == PointerEventType.Enter ||
+                event.type == PointerEventType.Exit ||
+                event.type == PointerEventType.Scroll
+        if (ignored) return false
+        val trackedType = pointerType
+        return if (trackedType != null) {
+            event.changes.any { it.type == trackedType }
+        } else {
+            event.type == PointerEventType.Release
+        }
+    }
+
+    private fun clear() {
+        id = null
+        pointerType = null
     }
 }

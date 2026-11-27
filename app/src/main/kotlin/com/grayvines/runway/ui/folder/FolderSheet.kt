@@ -138,11 +138,11 @@ fun FolderSheet(
     leaving: Boolean = false,
 ) {
     val motion = rememberSheetMotion(actions.close)
-    BackHandler(onBack = motion.close)
+    BackHandler(enabled = !leaving, onBack = motion.close)
     val mode = remember { SheetMode() }
     val listing = mode.adding && folder.addTo != null
     // After the sheet's own, so while the list or the x's are up it is the one Back reaches.
-    BackHandler(enabled = listing || mode.editing) {
+    BackHandler(enabled = !leaving && (listing || mode.editing)) {
         if (listing) mode.adding = false else mode.editing = false
     }
     LaunchedEffect(leaving) { if (leaving) motion.close() }

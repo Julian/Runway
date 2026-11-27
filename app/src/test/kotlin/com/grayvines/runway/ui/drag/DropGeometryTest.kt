@@ -107,4 +107,25 @@ class DropGeometryTest {
         assertNull(DropAreas().centreOf(Container.HOME, Footprint(0, 0)))
         assertNull(DropAreas().centreOf(Container.DOCK, Footprint(0, 0)))
     }
+
+    @Test
+    fun `degenerate bounds or grid dimensions return null instead of crashing`() {
+        val empty = Bounds(10f, 10f, 10f, 10f)
+        val zeroBounds = DropAreas(home = empty, columns = 3, rows = 2, dock = empty, dockSlots = 3)
+        assertNull(zeroBounds.targetFor(Point(10f, 10f), noGrab, 1, 1))
+        assertNull(zeroBounds.cellUnder(Point(10f, 10f)))
+        assertNull(zeroBounds.centreOf(Container.HOME, Footprint(0, 0)))
+        assertNull(zeroBounds.centreOf(Container.DOCK, Footprint(0, 0)))
+        assertNull(zeroBounds.edgeAt(Point(10f, 10f)))
+
+        val zeroGrid = areas.copy(columns = 0, rows = 0, dockSlots = 0)
+        assertNull(zeroGrid.targetFor(Point(50f, 50f), noGrab, 1, 1))
+        assertNull(zeroGrid.targetFor(Point(50f, 225f), noGrab, 1, 1))
+        assertNull(zeroGrid.cellUnder(Point(50f, 50f)))
+        assertNull(zeroGrid.cellUnder(Point(50f, 225f)))
+        assertNull(zeroGrid.centreOf(Container.HOME, Footprint(0, 0)))
+        assertNull(zeroGrid.centreOf(Container.DOCK, Footprint(0, 0)))
+        assertNull(zeroGrid.edgeAt(Point(10f, 50f)))
+        assertNull(areas.targetFor(Point(50f, 50f), noGrab, 0, 1))
+    }
 }

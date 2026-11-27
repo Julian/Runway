@@ -14,6 +14,9 @@ import androidx.compose.runtime.setValue
 import com.grayvines.runway.data.settings.DrawerSwipe
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -24,6 +27,9 @@ private const val PULL_FRACTION = 0.35f
 
 /** A pull this far from rest (of its full travel) has made up its mind which way it goes. */
 private const val COMMIT = 0.01f
+
+/** Lower bound for [DrawerMotion.openAt] so division never produces NaN or Infinity. */
+private const val MIN_OPEN_AT = 0.001f
 
 /** How long the drawer takes to catch up with the finger at the start of a pull. */
 private const val CATCH_UP_MS = 120
@@ -55,18 +61,33 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * it is [revealed].
      */
     val shown: State<Float> = derivedStateOf {
+        val held = handoff
         when {
-            !pulling || heightPx <= 0f -> revealed.value
-            // Only a swipe committed upward moves the drawer; downward, or not yet decided, it
-            // stays exactly where it was, so a pull towards the shade never lifts it.
-            way == 1 ->
-                ((basePx + catchUpPx * caughtUp.value + pulledPx) / heightPx).coerceIn(0f, 1f)
-            else -> basePx / heightPx
+            pulling && heightPx > 0f ->
+                // Only a swipe committed upward moves the drawer; downward, or not yet decided, it
+                // stays exactly where it was, so a pull towards the shade never lifts it.
+                if (way == 1) {
+                    ((basePx + catchUpPx * caughtUp.value + pulledPx) / heightPx).coerceIn(0f, 1f)
+                } else {
+                    basePx / heightPx
+                }
+            held != null -> held
+            else -> revealed.value
         }
     }
 
     private val caughtUp = Animatable(0f)
     private var heightPx by mutableFloatStateOf(0f)
+
+    /**
+     * Held visual position between a synchronous release/snap and [revealed] catching up, so
+     * [shown] never flashes back to an outdated [revealed] value for a frame.
+     */
+    private var handoff by mutableStateOf<Float?>(null)
+    private var catchUpJob: Job? = null
+    private var givenJob: Job? = null
+    private var transitionJob: Job? = null
+    private var lastGiven = 0f
 
     /**
      * Of the screen: the drawer showing when the pull began, and what it must gain to be at the
@@ -98,7 +119,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
      */
     val given = Animatable(0f)
     private var travel = 1f
-    private var openAt = 0f
+    private var openAt = 1f
     private var flick = 0f
 
     /**
@@ -125,9 +146,9 @@ class DrawerMotion(private val scope: CoroutineScope) {
 
     /** [swipe] sets the pull (a share of the screen) and the flick (dp/s, scaled by [density]). */
     fun laidOut(heightPx: Float, density: Float, swipe: DrawerSwipe) {
-        this.heightPx = heightPx
-        travel = heightPx * PULL_FRACTION
-        openAt = swipe.openAt / PULL_FRACTION
+        this.heightPx = heightPx.coerceAtLeast(0f)
+        travel = (this.heightPx * PULL_FRACTION).coerceAtLeast(1f)
+        openAt = (swipe.openAt / PULL_FRACTION).coerceAtLeast(MIN_OPEN_AT)
         flick = swipe.flickDpPerSecond * density
         reversalPx = REVERSAL_DP * density
         against = AGAINST_DP_PER_SECOND * density
@@ -139,15 +160,22 @@ class DrawerMotion(private val scope: CoroutineScope) {
      * sets off to meet the finger.
      */
     fun startPull(fingerY: Float?) {
+        val start = handoff ?: revealed.value
+        transitionJob?.cancel()
+        catchUpJob?.cancel()
+        givenJob?.cancel()
+        handoff = null
         pulling = true
-        pulled = revealed.value
+        pulled = start
+        lastGiven = given.value
         way = 0
         heading = 0
         pulledPx = 0f
         farthestPx = 0f
-        basePx = revealed.value * heightPx
+        basePx = start * heightPx
         catchUpPx = fingerY?.let { (heightPx - it - basePx).coerceAtLeast(0f) } ?: 0f
-        scope.launch { caughtUp.snapTo(0f) }
+        transitionJob = scope.launch(start = CoroutineStart.UNDISPATCHED) { revealed.stop() }
+        catchUpJob = scope.launch(start = CoroutineStart.UNDISPATCHED) { caughtUp.snapTo(0f) }
     }
 
     /** The finger moved [dy] pixels (negative is up) with the drawer under it. */
@@ -167,7 +195,14 @@ class DrawerMotion(private val scope: CoroutineScope) {
             way = if (moved > 0f) 1 else -1
             heading = if (pulledPx > 0f) 1 else -1
             // Committed upward: now the drawer's top edge sets off to meet the finger.
-            if (way == 1) scope.launch { caughtUp.animateTo(1f, tween(CATCH_UP_MS)) }
+            if (way == 1) {
+                catchUpJob?.cancel()
+                catchUpJob =
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        caughtUp.snapTo(0f)
+                        caughtUp.animateTo(1f, tween(CATCH_UP_MS))
+                    }
+            }
         }
         pulled =
             when (way) {
@@ -176,7 +211,11 @@ class DrawerMotion(private val scope: CoroutineScope) {
                 else -> moved
             }
         val down = (-pulled / openAt).coerceIn(0f, 1f)
-        scope.launch { given.snapTo(down) }
+        if (down != lastGiven) {
+            lastGiven = down
+            givenJob?.cancel()
+            givenJob = scope.launch { given.snapTo(down) }
+        }
     }
 
     /**
@@ -192,36 +231,53 @@ class DrawerMotion(private val scope: CoroutineScope) {
         onClose: () -> Unit,
         onOpenShade: () -> Unit,
     ) {
+        if (!pulling) return
         // An open drawer pulled down closes by the mirror of the rule that opens it, unless the
         // finger changed its mind on the way: then it stays.
         val wantOpen = if (open) reversed() || !closes(velocity) else wantsOpen(velocity)
         val wantShade =
-            pulling &&
-                !open &&
-                way < 0 &&
-                !reversed() &&
-                shouldOpen(-pulled, velocity, openAt, flick, against)
+            !open && way < 0 && !reversed() && shouldOpen(-pulled, velocity, openAt, flick, against)
         // Whatever comes next animates from where the drawer is drawn now.
         val at = shown.value
-        scope.launch { revealed.snapTo(at) }
-        pulling = false
+        handoff = if (wantShade) 0f else at
+        cancelPull()
+        transitionJob?.cancel()
+        givenJob?.cancel()
         when {
             wantOpen && !open -> {
+                transitionJob =
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        revealed.snapTo(at)
+                        handoff = null
+                    }
                 onOpen()
             }
             !wantOpen && open -> {
+                transitionJob =
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        revealed.snapTo(at)
+                        handoff = null
+                    }
                 onClose()
             }
             wantShade -> {
                 onOpenShade()
                 // The shade is about to cover everything: snap back rather than animate under it.
-                scope.launch {
-                    given.snapTo(0f)
-                    revealed.snapTo(0f)
-                }
+                lastGiven = 0f
+                transitionJob =
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        given.snapTo(0f)
+                        revealed.snapTo(0f)
+                        handoff = null
+                    }
             }
             else -> {
-                scope.launch { settle(open) }
+                transitionJob =
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        revealed.snapTo(at)
+                        handoff = null
+                        animateToRest(open)
+                    }
             }
         }
     }
@@ -233,9 +289,7 @@ class DrawerMotion(private val scope: CoroutineScope) {
     private fun reversed() = pulling && abs(farthestPx - pulledPx) > reversalPx
 
     private fun wantsOpen(velocity: Float) =
-        way >= 0 &&
-            !reversed() &&
-            shouldOpen(if (pulling) pulled else revealed.value, -velocity, openAt, flick, against)
+        way >= 0 && !reversed() && shouldOpen(pulled, -velocity, openAt, flick, against)
 
     /**
      * Whether a pull down inside an open drawer closes it: the opening rule with the pull and the
@@ -246,8 +300,53 @@ class DrawerMotion(private val scope: CoroutineScope) {
 
     /** Follows the model: open animates the rest of the way in, closed the rest of the way out. */
     suspend fun settle(open: Boolean) {
-        scope.launch { given.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
-        revealed.animateTo(if (open) 1f else 0f, spring(stiffness = Spring.StiffnessMediumLow))
+        val from = handoff
+        cancelPull()
+        transitionJob?.cancel()
+        if (from != null) {
+            revealed.snapTo(from)
+            if (handoff == from) handoff = null
+        }
+        animateToRest(open)
+    }
+
+    /**
+     * Immediately places the drawer at its resting [open] state, cancelling any in-flight pull or
+     * spring. Used when the activity stops so an interrupted close never freezes mid-screen.
+     */
+    fun snap(open: Boolean) {
+        val target = if (open) 1f else 0f
+        cancelPull()
+        transitionJob?.cancel()
+        givenJob?.cancel()
+        lastGiven = 0f
+        handoff = target
+        transitionJob =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                given.snapTo(0f)
+                revealed.snapTo(target)
+                handoff = null
+            }
+    }
+
+    private fun cancelPull() {
+        pulling = false
+        way = 0
+        heading = 0
+        catchUpJob?.cancel()
+    }
+
+    private suspend fun animateToRest(open: Boolean) = coroutineScope {
+        val target = if (open) 1f else 0f
+        val springSpec = spring<Float>(stiffness = Spring.StiffnessMediumLow)
+        lastGiven = 0f
+        if (given.value != 0f || given.isRunning) {
+            givenJob?.cancel()
+            givenJob = launch { given.animateTo(0f, springSpec) }
+        }
+        if (revealed.value != target || revealed.isRunning) {
+            revealed.animateTo(target, springSpec)
+        }
     }
 }
 

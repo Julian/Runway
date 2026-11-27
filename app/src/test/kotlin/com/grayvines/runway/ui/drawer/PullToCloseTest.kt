@@ -91,4 +91,82 @@ class PullToCloseTest {
             assertEquals(Offset(0f, 25f), taken)
             assertEquals(listOf(25f), pulls)
         }
+
+    @Test
+    fun `scrolling down from the top and reversing back past top does not pull the drawer`() =
+        runTest {
+            // Starts at top, but swipes up to scroll the list down.
+            connection.onPreScroll(Offset(0f, -40f), NestedScrollSource.UserInput)
+            connection.onPostScroll(
+                consumed = Offset(0f, -40f),
+                available = Offset.Zero,
+                source = NestedScrollSource.UserInput,
+            )
+            // Reverses back down past the top in the same gesture.
+            val taken =
+                connection.onPostScroll(
+                    consumed = Offset(0f, 40f),
+                    available = Offset(0f, 30f),
+                    source = NestedScrollSource.UserInput,
+                )
+            assertEquals(Offset.Zero, taken)
+            assertEquals(Velocity.Zero, connection.onPostFling(Velocity.Zero, Velocity(0f, 300f)))
+            assertEquals(emptyList<Float>(), pulls)
+            assertEquals(null, ended)
+        }
+
+    @Test
+    fun `a normal upward scroll from the top does not fire onPullEnd`() = runTest {
+        connection.onPreScroll(Offset(0f, -50f), NestedScrollSource.UserInput)
+        connection.onPostScroll(
+            consumed = Offset(0f, -50f),
+            available = Offset.Zero,
+            source = NestedScrollSource.UserInput,
+        )
+        assertEquals(Velocity.Zero, connection.onPostFling(Velocity(0f, -800f), Velocity.Zero))
+        assertEquals(emptyList<Float>(), pulls)
+        assertEquals(null, ended)
+    }
+
+    @Test
+    fun `horizontal movement and velocity are left unconsumed during a pull`() = runTest {
+        connection.onPreScroll(Offset(10f, 30f), NestedScrollSource.UserInput)
+        connection.onPostScroll(Offset.Zero, Offset(10f, 30f), NestedScrollSource.UserInput)
+        revealed = 0.7f
+
+        val pre = connection.onPreScroll(Offset(12f, -15f), NestedScrollSource.UserInput)
+        assertEquals(Offset(0f, -15f), pre)
+        assertEquals(
+            Velocity(0f, 400f),
+            connection.onPostFling(Velocity.Zero, Velocity(120f, 400f)),
+        )
+    }
+
+    @Test
+    fun `onPreFling consumes an upward cancel flick mid-pull without double-firing in onPostFling`() =
+        runTest {
+            var endCalls = 0
+            val tracked =
+                PullToClose(
+                    revealed = { revealed },
+                    atTop = { atTop },
+                    onPull = { pulls += it },
+                    onPullEnd = {
+                        endCalls++
+                        ended = it
+                    },
+                )
+            tracked.onPreScroll(Offset(0f, 30f), NestedScrollSource.UserInput)
+            tracked.onPostScroll(Offset.Zero, Offset(0f, 30f), NestedScrollSource.UserInput)
+            revealed = 0.7f
+
+            val pre = tracked.onPreFling(Velocity(50f, -1800f))
+            assertEquals(Velocity(0f, -1800f), pre)
+            assertEquals(-1800f, ended)
+            assertEquals(1, endCalls)
+
+            // Subsequent onPostFling does not call onPullEnd a second time.
+            assertEquals(Velocity.Zero, tracked.onPostFling(Velocity(0f, -1800f), Velocity.Zero))
+            assertEquals(1, endCalls)
+        }
 }

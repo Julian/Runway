@@ -204,7 +204,9 @@ class DragController(private val lookup: WorkspaceLookup) {
 
     private fun planHome(source: DragSource, target: DropTarget.HomeCell): DropPlan {
         val footprint = Footprint(target.x, target.y, source.spanX, source.spanY)
-        if (source.isAt(Container.HOME, target.page, footprint)) return DropPlan.Invalid
+        if (source.fromFolder == null && source.isAt(Container.HOME, target.page, footprint)) {
+            return DropPlan.Invalid
+        }
         val others = lookup.homeItems(target.page).filter { it.id != source.itemId }
         if (source.isAlreadyAmong(others)) return DropPlan.Invalid
         val displaced =
@@ -220,7 +222,10 @@ class DragController(private val lookup: WorkspaceLookup) {
     private fun planDock(source: DragSource, target: DropTarget.DockSlot): DropPlan {
         if (source.kind == ItemKind.WIDGET) return DropPlan.Invalid
         if (target.slot !in 0 until lookup.dockSlots) return DropPlan.Invalid
-        if (source.isAt(Container.DOCK, target.page, Footprint(target.slot, 0))) {
+        if (
+            source.fromFolder == null &&
+                source.isAt(Container.DOCK, target.page, Footprint(target.slot, 0))
+        ) {
             return DropPlan.Invalid
         }
         val others = lookup.dockItems(target.page).filter { it.id != source.itemId }
