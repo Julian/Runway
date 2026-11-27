@@ -11,7 +11,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.LayoutDirection
 import com.grayvines.runway.ui.drag.PageFlip
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -26,6 +28,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @Composable
 internal fun WallpaperParallax(pager: PagerState, enabled: Boolean) {
     val view = LocalView.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val wallpaper = remember(view.context) { WallpaperManager.getInstance(view.context) }
     val sent = remember { ParallaxSent() }
     Spacer(
@@ -40,6 +43,7 @@ internal fun WallpaperParallax(pager: PagerState, enabled: Boolean) {
                         pager.currentPageOffsetFraction,
                         count,
                         enabled,
+                        rtl,
                     )
                 if (step != sent.step) {
                     wallpaper.setWallpaperOffsetSteps(step, 1f)
@@ -70,16 +74,19 @@ internal fun wallpaperStep(pageCount: Int, enabled: Boolean): Float =
 /**
  * The horizontal wallpaper offset in `[0, 1]` for [page] and [offsetFraction] across [pageCount]
  * pages when parallax is [enabled], or `0.5` (centred) when parallax is off or there is at most one
- * page.
+ * page. Inverted in [rtl] layouts so page 0 sits at the right edge of the wallpaper and scrolling
+ * leftward moves the wallpaper in step with the pages.
  */
 internal fun wallpaperOffset(
     page: Int,
     offsetFraction: Float,
     pageCount: Int,
     enabled: Boolean,
+    rtl: Boolean = false,
 ): Float =
     if (enabled && pageCount > 1) {
-        ((page + offsetFraction) / (pageCount - 1)).coerceIn(0f, 1f)
+        val fraction = ((page + offsetFraction) / (pageCount - 1)).coerceIn(0f, 1f)
+        if (rtl) 1f - fraction else fraction
     } else {
         CENTER_OFFSET
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
@@ -27,14 +28,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -42,14 +37,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -63,11 +55,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -83,10 +70,6 @@ import kotlin.math.roundToInt
 
 const val FOLDER_TAG = "folder"
 const val FOLDER_ITEM_TAG = "folder-app"
-const val FOLDER_NAME_TAG = "folder-name"
-
-/** Long enough for any name that fits a tile's label; short enough to stay a name. */
-private const val MAX_NAME_LENGTH = 40
 
 private val SURFACE = Color(0xFF202124)
 private val CORNER = 24.dp
@@ -157,7 +140,10 @@ fun FolderSheet(
     var room by remember { mutableStateOf(IntSize.Zero) }
     // Above the keyboard while something is typed (the name, or a search for apps to add), and
     // centred on the tapped folder cell as far as the screen's margins allow.
-    Box(Modifier.fillMaxSize().imePadding().onSizeChanged { room = it }) {
+    Box(
+        Modifier.fillMaxSize().imePadding().onSizeChanged { room = it },
+        contentAlignment = AbsoluteAlignment.TopLeft,
+    ) {
         // A sibling, not a parent: a clickable parent would merge the sheet's semantics into it.
         SheetScrim({ motion.progress }, onClick = motion.close)
         val columns = columnsFor(folder, listing, mode.editing)
@@ -192,7 +178,7 @@ private fun SheetSurface(
     val bottomInsetPx =
         (sysBars.getBottom(density) - WindowInsets.ime.getBottom(density)).coerceAtLeast(0)
     var measuredSize by remember { mutableStateOf(IntSize.Zero) }
-    var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val sheetCoords = remember { SheetCoordsRef() }
     val restOffset = {
         val within =
             Bounds(
@@ -213,12 +199,12 @@ private fun SheetSurface(
         }
     Surface(
         modifier =
-            Modifier.offset { restOffset() }
+            Modifier.absoluteOffset { restOffset() }
                 .width(CELL * columns + 32.dp)
                 .heightIn(max = maxHeight)
                 .onSizeChanged { measuredSize = it }
                 .growingFrom(from, restOffset, progress)
-                .onGloballyPositioned { sheetCoords = it }
+                .onGloballyPositioned { sheetCoords.value = it }
                 .graphicsLayer {
                     val solid =
                         if (size.width == 0f) 0f else (progress() / SOLID_AT).coerceIn(0f, 1f)
@@ -233,7 +219,7 @@ private fun SheetSurface(
         contentColor = Color.White,
     ) {
         content(
-            { sheetCoords?.boundsInRoot() },
+            { sheetCoords.value?.takeIf { it.isAttached }?.boundsInRoot() },
             Modifier.padding(16.dp).graphicsLayer { alpha = progress() },
         )
     }
@@ -499,68 +485,4 @@ private fun rememberSheetMotion(onClose: () -> Unit): SheetMotion {
     return remember(progress) { SheetMotion(progress.asState()) { closing = true } }
 }
 
-/**
- * The folder's name; a tap turns it into a field with the keyboard up. Done, leaving the field, or
- * closing the folder keeps what was typed. A blank name is no name: Done puts the old one back and
- * leaves the field open, so the refusal is seen rather than guessed at; closing on a blank keeps
- * the old name, there being no field left to show the refusal in.
- */
-@Composable
-private fun FolderName(name: String, modifier: Modifier, onRename: (String) -> Unit) {
-    var editing by remember { mutableStateOf(false) }
-    // The whole name selected as the field opens: what is typed replaces it, and a keep is a tap
-    // away, which is what a tap on a name usually means.
-    var field by remember(name) { mutableStateOf(TextFieldValue(name, TextRange(0, name.length))) }
-    val tagged = modifier.testTag(FOLDER_NAME_TAG)
-    if (!editing) {
-        Text(
-            name,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier =
-                tagged.clickable(role = Role.Button, onClickLabel = "Rename folder") {
-                    editing = true
-                },
-        )
-        return
-    }
-    // Reads the field as it is when called, not as it was when this was composed: the dispose
-    // below is set up once, and must still see the final text.
-    val commit = {
-        editing = false
-        val text = field.text
-        if (text != name && text.isNotBlank()) onRename(text)
-    }
-    val focus = remember { FocusRequester() }
-    var hadFocus by remember { mutableStateOf(false) }
-    BasicTextField(
-        value = field,
-        onValueChange = { field = it.copy(text = it.text.take(MAX_NAME_LENGTH)) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.titleMedium.copy(color = Color.White),
-        cursorBrush = SolidColor(Color.White),
-        keyboardOptions =
-            KeyboardOptions(
-                capitalization = KeyboardCapitalization.Sentences,
-                imeAction = ImeAction.Done,
-            ),
-        keyboardActions =
-            KeyboardActions(
-                onDone = {
-                    if (field.text.isBlank()) {
-                        field = TextFieldValue(name, TextRange(0, name.length))
-                    } else {
-                        commit()
-                    }
-                }
-            ),
-        modifier =
-            tagged.focusRequester(focus).onFocusChanged {
-                if (it.isFocused) hadFocus = true else if (hadFocus) commit()
-            },
-    )
-    LaunchedEffect(Unit) { focus.requestFocus() }
-    // Closing the folder mid-edit (a tap outside, back) keeps the name too.
-    DisposableEffect(Unit) { onDispose { if (editing) commit() } }
-}
+private class SheetCoordsRef(var value: LayoutCoordinates? = null)

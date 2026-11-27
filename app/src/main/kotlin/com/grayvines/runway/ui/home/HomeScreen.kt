@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.util.lerp
@@ -103,9 +104,11 @@ fun HomeScreen(
     PagerCommands(homePager, goHome, drag.flipHomePage, homeMenu.showPage)
     PageFlips(dockPager, drag.flipDockPage)
     PagesShown(homePager, dockPager, drag.onHomePageShown, drag.onDockPageShown)
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     LaunchedEffect(drag, settings.columns, settings.pageRows, settings.dockSlots) {
         drag.onGridChanged(settings.columns, settings.pageRows, settings.dockSlots)
     }
+    LaunchedEffect(drag, rtl) { drag.onLayoutDirectionChanged(rtl) }
     WallpaperParallax(homePager, settings.wallpaperParallax)
 
     // Sized from the inset-free root so the drag overlay can use root pixel coordinates.

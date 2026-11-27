@@ -144,4 +144,36 @@ class DragCoordinatorEdgeTest {
             assertEquals(listOf(PageFlip.By(1)), flips)
             c.cancelDrag()
         }
+
+    @Test
+    fun `in right-to-left layouts, left edge advances and adds pages while right edge returns`() =
+        runTest {
+            val workspace = FakeWorkspace(pages = 2)
+            val c = DragCoordinator(backgroundScope, lookup, workspace)
+            val flips = mutableListOf<PageFlip>()
+            backgroundScope.launch { c.flipHomePage.collect { flips += it } }
+            c.layOut()
+            c.areas.layoutDirectionChanged(rtl = true)
+            c.startDrag(source, Point(150f, 50f), grab)
+            c.dragTo(Point(150f, 50f)) // arm edges
+            // Right edge on page 0 is the start of the RTL pager: no flips, no pages added.
+            c.dragTo(Point(299f, 50f))
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS * 2)
+            assertEquals(emptyList<PageFlip>(), flips)
+            assertEquals(2, workspace.pages)
+            // Left edge advances to page 1, and past the last page adds page 2.
+            c.dragTo(Point(1f, 50f))
+            advanceTimeBy(EdgeDwell.FLIP_MS + 1)
+            assertEquals(listOf(PageFlip.By(1)), flips)
+            c.areas.homePagePositioned(1, Bounds(0f, 0f, 300f, 200f), 3, 2)
+            c.areas.homePageShown(1, 3, 2)
+            advanceTimeBy(EdgeDwell.ADD_PAGE_MS)
+            assertEquals(3, workspace.pages)
+            assertEquals(listOf(PageFlip.By(1), PageFlip.By(1)), flips)
+            // Right edge on page 1 flips back toward page 0.
+            c.dragTo(Point(299f, 50f))
+            advanceTimeBy(EdgeDwell.FLIP_MS + 1)
+            assertEquals(PageFlip.By(-1), flips[2])
+            c.cancelDrag()
+        }
 }

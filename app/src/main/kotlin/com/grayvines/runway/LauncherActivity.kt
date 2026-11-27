@@ -284,6 +284,7 @@ class LauncherActivity : ComponentActivity() {
                 onDockPagePositioned = reports::dockPagePositioned,
                 onDockPageShown = reports::dockPageShown,
                 onGridChanged = viewModel.dragging.areas::gridChanged,
+                onLayoutDirectionChanged = viewModel.dragging.areas::layoutDirectionChanged,
                 flipHomePage = viewModel.dragging.flipHomePage,
                 flipDockPage = viewModel.dragging.flipDockPage,
                 startsOnWidget = { p ->

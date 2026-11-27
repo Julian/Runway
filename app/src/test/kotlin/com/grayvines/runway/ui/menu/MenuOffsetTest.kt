@@ -38,6 +38,22 @@ class MenuOffsetTest {
     }
 
     @Test
+    fun `stays below the top system bar inset when flipped above or cramped`() {
+        val topAnchor = Bounds(left = 100f, top = 120f, right = 200f, bottom = 220f)
+        // Too little room below (room height 400 with menu height 300), so it flips above and
+        // clamps to topInset = 80 instead of sliding under the status bar.
+        assertEquals(
+            IntOffset(50, 80),
+            menuOffset(topAnchor, menu, room = IntSize(1000, 400), gap = gap, topInset = 80),
+        )
+        // Even when the available space is smaller than the menu, y never drops below topInset.
+        assertEquals(
+            IntOffset(50, 80),
+            menuOffset(topAnchor, menu, room = IntSize(1000, 250), gap = gap, topInset = 80),
+        )
+    }
+
+    @Test
     fun `remove chip sits on the top-right corner of the icon and clamps inside the room`() {
         val anchor = Bounds(left = 100f, top = 100f, right = 200f, bottom = 200f)
         assertEquals(

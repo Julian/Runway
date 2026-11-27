@@ -178,5 +178,16 @@ class WidgetResizeTest {
             IntOffset(36, 6),
             chipOffset(topLeft, room, size = 28, step = 36, place = 0, count = 2),
         )
+
+        // Flush below a status bar: chipOffset and chipsRect both clamp to topInset.
+        val belowStatusBar = Rect(200f, 60f, 400f, 160f)
+        assertEquals(
+            IntOffset(372, 60),
+            chipOffset(belowStatusBar, room, size = 28, step = 36, place = 0, topInset = 60),
+        )
+        assertEquals(
+            Rect(336f, 60f, 400f, 88f),
+            chipsRect(belowStatusBar, room, size = 28, step = 36, count = 2, topInset = 60),
+        )
     }
 }

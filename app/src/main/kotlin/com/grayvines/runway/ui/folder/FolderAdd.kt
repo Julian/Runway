@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,6 +104,12 @@ internal fun AddApps(
     onDone: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    val gridState = rememberLazyGridState()
+    LaunchedEffect(query) {
+        if (gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0) {
+            gridState.scrollToItem(0)
+        }
+    }
     val candidates =
         remember(apps, inFolder, query) {
             val inside = inFolder.mapTo(HashSet()) { it.ref }
@@ -109,21 +117,7 @@ internal fun AddApps(
         }
     val focusManager = LocalFocusManager.current
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
-                onClick = onDone,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-            ) {
-                Text("Done")
-            }
-        }
+        AddAppsHeader(name, onDone)
         SearchRowField(
             text = query,
             onChange = { query = it },
@@ -141,7 +135,11 @@ internal fun AddApps(
                     color = Color.White.copy(alpha = EMPTY_ALPHA),
                 )
             } else {
-                LazyVerticalGrid(GridCells.Fixed(MAX_COLUMNS), Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    GridCells.Fixed(MAX_COLUMNS),
+                    Modifier.fillMaxSize(),
+                    state = gridState,
+                ) {
                     items(candidates, key = { it.ref }) { app ->
                         AppTile(
                             app,
@@ -153,6 +151,25 @@ internal fun AddApps(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AddAppsHeader(name: String, onDone: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            name,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(
+            onClick = onDone,
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+        ) {
+            Text("Done")
         }
     }
 }

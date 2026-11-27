@@ -6,8 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -16,6 +16,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -217,45 +218,47 @@ private fun OverlayCell(
     iconSize: Dp,
     scale: () -> Float,
 ) {
-    Box(
-        modifier =
-            Modifier.offset {
-                    val p = at()
-                    IntOffset(p.x.toInt(), p.y.toInt())
-                }
-                .size(size),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (item.kind == ItemKind.WIDGET) {
-            val grown =
-                Modifier.fillMaxSize()
-                    .graphicsLayer {
-                        val s = scale()
-                        scaleX = s
-                        scaleY = s
+    Box(Modifier.fillMaxSize(), contentAlignment = AbsoluteAlignment.TopLeft) {
+        Box(
+            modifier =
+                Modifier.absoluteOffset {
+                        val p = at()
+                        IntOffset(p.x.toInt(), p.y.toInt())
                     }
-                    .testTag(DRAG_OVERLAY_TAG)
-            if (picture != null) {
-                Image(picture, contentDescription = item.label, modifier = grown)
-            } else {
-                Box(
-                    grown.background(
-                        Color.White.copy(alpha = BLANK_WIDGET_ALPHA),
-                        RoundedCornerShape(BLANK_WIDGET_CORNER),
+                    .size(size),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.kind == ItemKind.WIDGET) {
+                val grown =
+                    Modifier.fillMaxSize()
+                        .graphicsLayer {
+                            val s = scale()
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .testTag(DRAG_OVERLAY_TAG)
+                if (picture != null) {
+                    Image(picture, contentDescription = item.label, modifier = grown)
+                } else {
+                    Box(
+                        grown.background(
+                            Color.White.copy(alpha = BLANK_WIDGET_ALPHA),
+                            RoundedCornerShape(BLANK_WIDGET_CORNER),
+                        )
                     )
+                }
+            } else {
+                ItemIcon(
+                    item,
+                    Modifier.size(iconSize)
+                        .graphicsLayer {
+                            val s = scale()
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .testTag(DRAG_OVERLAY_TAG),
                 )
             }
-        } else {
-            ItemIcon(
-                item,
-                Modifier.size(iconSize)
-                    .graphicsLayer {
-                        val s = scale()
-                        scaleX = s
-                        scaleY = s
-                    }
-                    .testTag(DRAG_OVERLAY_TAG),
-            )
         }
     }
 }

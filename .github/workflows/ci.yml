@@ -123,10 +123,11 @@ jobs:
             pkill -f qemu-system || true
             rm -rf \
               .gradle/configuration-cache \
+              "${GRADLE_USER_HOME:-$HOME/.gradle}"/caches/modules-2/metadata-* \
               "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.temp" \
               "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.downloadIntermediates"
             flags=(--no-configuration-cache --refresh-dependencies)
-            sleep 5
+            sleep $((attempt * 15))
           done
       # Gradle boots the emulator headless, runs the tests and discards it.
       # The same task runs on a laptop.

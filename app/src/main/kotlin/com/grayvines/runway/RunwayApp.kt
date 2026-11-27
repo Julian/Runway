@@ -14,5 +14,11 @@ class RunwayApp : Application() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         graph.appRepository.configurationChanged(newConfig)
+        graph.widgets.configurationChanged(newConfig)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_BACKGROUND) graph.widgets.invalidateProviders()
     }
 }

@@ -94,8 +94,10 @@ class DragCoordinator(
         EdgeDwell(
             scope,
             object : EdgeDwell.Actions {
+                override fun delta(hover: EdgeHover): Int = hover.edge.pageDelta(areas.areas.rtl)
+
                 override fun isAtStart(hover: EdgeHover): Boolean {
-                    if (hover.edge != Edge.LEFT) return false
+                    if (delta(hover) >= 0) return false
                     val shown =
                         if (hover.container == Container.DOCK) {
                             areas.areas.dockPage
@@ -106,7 +108,7 @@ class DragCoordinator(
                 }
 
                 override fun isPastTheEnd(hover: EdgeHover): Boolean {
-                    if (hover.edge != Edge.RIGHT) return false
+                    if (delta(hover) <= 0) return false
                     val shown =
                         if (hover.container == Container.DOCK) {
                             areas.areas.dockPage

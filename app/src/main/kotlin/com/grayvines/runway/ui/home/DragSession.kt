@@ -47,6 +47,7 @@ class DragSession(
     val onDockPagePositioned: (page: Int, Bounds) -> Unit = { _, _ -> },
     val onDockPageShown: (page: Int, settled: Boolean) -> Unit = { _, _ -> },
     val onGridChanged: (columns: Int, rows: Int, dockSlots: Int) -> Unit = { _, _, _ -> },
+    val onLayoutDirectionChanged: (rtl: Boolean) -> Unit = {},
     val flipHomePage: Flow<PageFlip> = emptyFlow(),
     val flipDockPage: Flow<PageFlip> = emptyFlow(),
     /**

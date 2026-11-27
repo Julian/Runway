@@ -1,11 +1,11 @@
 package com.grayvines.runway.ui.menu
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddBox
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Wallpaper
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import com.grayvines.runway.R
 import com.grayvines.runway.ui.drag.Bounds
 import kotlinx.coroutines.flow.Flow
 
@@ -34,9 +34,9 @@ class HomeMenuSession(
 @Composable
 fun HomeMenu(at: Bounds, actions: HomeMenuActions, onDismiss: () -> Unit) {
     Menu(at, HOME_MENU_TAG, onDismiss) {
-        MenuRow("Wallpaper", Icons.Outlined.Wallpaper, actions.wallpaper)
-        MenuRow("Widgets", Icons.Outlined.Widgets, actions.widgets)
-        MenuRow("Add page", Icons.Outlined.AddBox, actions.addPage)
+        MenuRow("Wallpaper", ImageVector.vectorResource(R.drawable.ic_wallpaper), actions.wallpaper)
+        MenuRow("Widgets", ImageVector.vectorResource(R.drawable.ic_widgets), actions.widgets)
+        MenuRow("Add page", ImageVector.vectorResource(R.drawable.ic_add_box), actions.addPage)
         MenuRow("Settings", Icons.Outlined.Settings, actions.settings)
     }
 }

@@ -187,7 +187,7 @@ private fun FolderPreviewGrid(modifier: Modifier = Modifier, content: @Composabl
             placeables.forEachIndexed { index, placeable ->
                 val col = index % FOLDER_PREVIEW_COLUMNS
                 val row = index / FOLDER_PREVIEW_COLUMNS
-                placeable.place(col * cellW, row * cellH)
+                placeable.placeRelative(col * cellW, row * cellH)
             }
         }
     }
@@ -278,7 +278,7 @@ internal fun Modifier.dragAfterLongPress(
         if (current.onHold != null) {
             Modifier.semantics {
                 onLongClick {
-                    val c = coords()
+                    val c = coords()?.takeIf { it.isAttached }
                     val onHold = handlers()?.onHold
                     if (c != null && onHold != null) {
                         onHold(c.boundsInRoot().toBounds())
@@ -312,13 +312,17 @@ private class HoldThenDrag(
     fun held(local: Offset) {
         grab = local
         dragging = false
-        coords()?.let { handlers()?.onHold?.invoke(it.boundsInRoot().toBounds()) }
+        coords()
+            ?.takeIf { it.isAttached }
+            ?.let {
+                handlers()?.onHold?.invoke(it.boundsInRoot().toBounds())
+            }
     }
 
     fun moved(finger: PointerId, local: Offset) {
         if (dragging || (local - grab).getDistance() <= slop) return
         dragging = true
-        val root = coords()?.localToRoot(local) ?: local
+        val root = coords()?.takeIf { it.isAttached }?.localToRoot(local) ?: local
         handlers()?.let {
             it.onFinger(finger)
             it.onStart(root.toPoint(), grab.toPoint())

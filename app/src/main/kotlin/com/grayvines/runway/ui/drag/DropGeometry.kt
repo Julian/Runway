@@ -33,6 +33,8 @@ data class DropAreas(
     val dockSettled: Boolean = true,
     /** Where a placement let go is removed, whether or not the bin is showing right now. */
     val bin: Bounds? = null,
+    /** Whether the UI layout direction is right-to-left (reversing pager edge flip direction). */
+    val rtl: Boolean = false,
 ) {
     /** Neither pager is mid-scroll: what the areas say is where things will stay. */
     val settled: Boolean
@@ -163,7 +165,10 @@ private const val HALF = 0.5f
 /** Which side of an area a drag is hovering at. */
 enum class Edge(val pageDelta: Int) {
     LEFT(-1),
-    RIGHT(1),
+    RIGHT(1);
+
+    /** Page index change when dwelling on this edge, flipped for [rtl] pagers. */
+    fun pageDelta(rtl: Boolean): Int = if (rtl) -pageDelta else pageDelta
 }
 
 /** An edge of the home pages or of the dock, being hovered. */

@@ -29,6 +29,9 @@ class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions)
         /** True when flipping in [hover]'s direction has nowhere to go. */
         fun isPastTheEnd(hover: EdgeHover): Boolean
 
+        /** Page index change when flipping at [hover]. */
+        fun delta(hover: EdgeHover): Int = hover.edge.pageDelta
+
         fun flip(container: Container, delta: Int)
 
         /**
@@ -62,14 +65,14 @@ class EdgeDwell(private val scope: CoroutineScope, private val actions: Actions)
                 }
                 !actions.isPastTheEnd(hover) -> {
                     heldAtEnd = 0 // arriving at the end starts the long hold from zero
-                    actions.flip(hover.container, hover.edge.pageDelta)
+                    actions.flip(hover.container, actions.delta(hover))
                 }
                 else -> {
                     heldAtEnd += FLIP_MS
                     if (!addedPage && heldAtEnd >= ADD_PAGE_MS) {
                         addedPage = true // one attempt per hold, whether or not it worked
                         if (actions.addPage(hover.container)) {
-                            actions.flip(hover.container, hover.edge.pageDelta)
+                            actions.flip(hover.container, actions.delta(hover))
                         }
                     }
                 }

@@ -9,6 +9,7 @@ import com.grayvines.runway.model.Footprint
 import com.grayvines.runway.model.GridSize
 import com.grayvines.runway.model.Placed
 import com.grayvines.runway.system.widgets.WidgetProvider
+import com.grayvines.runway.system.widgets.WidgetProviderCache
 import com.grayvines.runway.system.widgets.Widgets
 import com.grayvines.runway.system.widgets.parseWidgetRemap
 import com.grayvines.runway.ui.drag.PendingMove
@@ -445,6 +446,95 @@ class WidgetPickerHostTest {
             assertEquals(listOf(101), allocated)
             assertEquals(listOf(101), deleted)
         }
+
+    @Test
+    fun `open uses cachedProviders immediately without reloading, and dismiss still clears flow`() =
+        runTest {
+            var loads = 0
+            val cached = listOf(provider())
+            val cachedWidgets =
+                object : Widgets by widgets {
+                    override val cachedProviders: List<WidgetProvider> = cached
+
+                    override fun providers(): List<WidgetProvider> {
+                        loads++
+                        return cached
+                    }
+                }
+            val host =
+                WidgetPickerHost(
+                    workspace = workspace,
+                    widgets = cachedWidgets,
+                    scope = backgroundScope,
+                    lookup = lookup,
+                    shownPage = { 0 },
+                )
+
+            host.open()
+            assertEquals(cached, host.providers.value)
+            assertEquals(0, loads)
+
+            host.dismiss()
+            assertFalse(host.isOpen)
+            assertNull(host.providers.value)
+        }
+
+    @Test
+    fun `WidgetProviderCache caches loads, ignores null failures, and rejects stale concurrent loads`() {
+        val cache = WidgetProviderCache()
+        assertNull(cache.peek())
+
+        // Transient failure returns empty and does not poison the cache.
+        assertEquals(emptyList<WidgetProvider>(), cache.getOrLoad { null })
+        assertNull(cache.peek())
+
+        // First successful load populates the cache; second call hits cache without reloading.
+        var loads = 0
+        val first = listOf(provider(targetW = 2))
+        assertEquals(
+            first,
+            cache.getOrLoad {
+                loads++
+                first
+            },
+        )
+        assertEquals(first, cache.peek())
+        assertEquals(
+            first,
+            cache.getOrLoad {
+                loads++
+                emptyList()
+            },
+        )
+        assertEquals(1, loads)
+
+        // Invalidation clears cache; an invalidation mid-load prevents the stale load from caching.
+        cache.invalidate()
+        assertNull(cache.peek())
+        val stale = listOf(provider(targetW = 3))
+        assertEquals(
+            stale,
+            cache.getOrLoad {
+                loads++
+                cache.invalidate()
+                stale
+            },
+        )
+        assertNull(cache.peek())
+        assertEquals(2, loads)
+
+        // Subsequent load after the racing invalidation caches cleanly.
+        val fresh = listOf(provider(targetW = 4))
+        assertEquals(
+            fresh,
+            cache.getOrLoad {
+                loads++
+                fresh
+            },
+        )
+        assertEquals(fresh, cache.peek())
+        assertEquals(3, loads)
+    }
 
     @Test
     fun `parseWidgetRemap drops invalid new ids and returns orphan or superseded valid new ids`() {

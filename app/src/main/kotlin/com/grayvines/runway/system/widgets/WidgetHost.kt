@@ -8,7 +8,10 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.os.UserHandle
 import android.os.UserManager
@@ -90,6 +93,13 @@ fun bindWidgetRequest(id: Int, provider: ComponentName, user: UserHandle): Inten
  * ids, and binding a provider to one.
  */
 interface Widgets {
+    /**
+     * Already-loaded home-screen widget providers from memory, or null when not cached or
+     * invalidated. Safe to read on the main thread.
+     */
+    val cachedProviders: List<WidgetProvider>?
+        get() = null
+
     /** A fresh id to bind a provider to; deleted again if the binding never happens. */
     fun allocateId(): Int
 
@@ -104,7 +114,7 @@ interface Widgets {
 
     /**
      * Every home-screen widget installed, across profiles, by app and then by name, with pictures:
-     * slow, for a picker that is opening, not for the main thread.
+     * slow on a cache miss, for a picker that is opening, not for the main thread.
      */
     fun providers(): List<WidgetProvider>
 }
@@ -119,6 +129,8 @@ class WidgetHost(context: Context) : Widgets {
     private val manager: AppWidgetManager = AppWidgetManager.getInstance(this.context)
     private val userManager = this.context.getSystemService(UserManager::class.java)
     private val infoCache = ConcurrentHashMap<Int, AppWidgetProviderInfo>()
+    private val providerCache = WidgetProviderCache()
+    private var configuration = Configuration(this.context.resources.configuration)
     private val host =
         object : AppWidgetHost(this.context, HOST_ID) {
             fun dropViews() = clearViews()
@@ -130,11 +142,13 @@ class WidgetHost(context: Context) : Widgets {
                 } else {
                     infoCache.remove(appWidgetId)
                 }
+                providerCache.invalidate()
             }
 
             override fun onProvidersChanged() {
                 super.onProvidersChanged()
                 infoCache.clear()
+                providerCache.invalidate()
             }
 
             override fun onAppWidgetRemoved(appWidgetId: Int) {
@@ -144,6 +158,9 @@ class WidgetHost(context: Context) : Widgets {
         }
     private var listeningActivity: Activity? = null
     private var viewActivity: Activity? = null
+
+    override val cachedProviders: List<WidgetProvider>?
+        get() = providerCache.peek()
 
     /** Providers start sending updates; hosted views draw them. */
     @Suppress("TooGenericExceptionCaught")
@@ -269,20 +286,28 @@ class WidgetHost(context: Context) : Widgets {
     }
 
     @Suppress("TooGenericExceptionCaught")
-    internal fun installedProviders(): List<AppWidgetProviderInfo> =
-        try {
-            userManager.userProfiles.flatMap { profile ->
-                try {
-                    manager.getInstalledProvidersForProfile(profile)
-                } catch (e: RuntimeException) {
-                    Log.w(TAG, "could not read widget providers for profile $profile", e)
-                    emptyList()
+    internal fun installedProvidersOrNull(): List<AppWidgetProviderInfo>? {
+        var failed = false
+        val list =
+            try {
+                userManager.userProfiles.flatMap { profile ->
+                    try {
+                        manager.getInstalledProvidersForProfile(profile)
+                    } catch (e: RuntimeException) {
+                        failed = true
+                        Log.w(TAG, "could not read widget providers for profile $profile", e)
+                        emptyList()
+                    }
                 }
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "could not list user profiles for widgets", e)
+                return null
             }
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "could not list user profiles for widgets", e)
-            emptyList()
-        }
+        return if (failed && list.isEmpty()) null else list
+    }
+
+    internal fun installedProviders(): List<AppWidgetProviderInfo> =
+        installedProvidersOrNull().orEmpty()
 
     /**
      * Starts the setup screen of the widget bound to [id] from [activity], which hears back in its
@@ -308,20 +333,18 @@ class WidgetHost(context: Context) : Widgets {
         }
     }
 
-    override fun providers(): List<WidgetProvider> {
-        val pm = context.packageManager
-        val density = context.resources.displayMetrics.density
-        val order = LabelOrder.comparator()
-        return installedProviders()
-            .filter { it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0 }
-            // Some ask to be kept out of pickers: a launcher's own internal widgets, say.
-            .filter {
-                it.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_HIDE_FROM_PICKER == 0
-            }
-            .mapNotNull { info -> info.toProvider(context, pm, density) }
-            .sortedWith(
-                compareBy<WidgetProvider, String>(order) { it.appLabel }.thenBy(order) { it.label }
-            )
+    internal fun invalidateProviders() {
+        providerCache.invalidate()
+    }
+
+    internal fun configurationChanged(config: Configuration) {
+        val changed = configuration.diff(config)
+        configuration = Configuration(config)
+        if (changed and PROVIDER_STALING_CHANGES != 0) providerCache.invalidate()
+    }
+
+    override fun providers(): List<WidgetProvider> = providerCache.getOrLoad {
+        installedProvidersOrNull()?.let { buildWidgetProviders(it, context) }
     }
 
     companion object {
@@ -333,6 +356,73 @@ class WidgetHost(context: Context) : Widgets {
 private const val ICON_DP = 48
 private const val PREVIEW_DP = 240
 private const val TAG = "Runway"
+private const val PROVIDER_STALING_CHANGES =
+    ActivityInfo.CONFIG_LOCALE or
+        ActivityInfo.CONFIG_LAYOUT_DIRECTION or
+        ActivityInfo.CONFIG_DENSITY or
+        ActivityInfo.CONFIG_UI_MODE
+
+/**
+ * Process-wide cache of rasterised widget providers. Invalidations bump an internal generation
+ * counter so a load that was already running across a package or configuration change cannot
+ * publish stale data.
+ */
+internal class WidgetProviderCache {
+    private val lock = Any()
+    private var generation = 0L
+    private var cached: List<WidgetProvider>? = null
+
+    fun peek(): List<WidgetProvider>? = synchronized(lock) { cached }
+
+    fun invalidate() {
+        synchronized(lock) {
+            generation++
+            cached = null
+        }
+    }
+
+    /**
+     * Returns the cached providers, or runs [load] outside the lock and caches its result when
+     * non-null and no [invalidate] raced with the load.
+     */
+    fun getOrLoad(load: () -> List<WidgetProvider>?): List<WidgetProvider> {
+        val hitOrGen = synchronized(lock) { cached to generation }
+        val hit = hitOrGen.first
+        if (hit != null) return hit
+        val loaded = load()
+        if (loaded != null) {
+            synchronized(lock) { if (generation == hitOrGen.second) cached = loaded }
+        }
+        return loaded.orEmpty()
+    }
+}
+
+internal fun buildWidgetProviders(
+    installed: List<AppWidgetProviderInfo>,
+    context: Context,
+): List<WidgetProvider> {
+    val pm = context.packageManager
+    val density = context.resources.displayMetrics.density
+    val iconPx = (ICON_DP * density).toInt()
+    val order = LabelOrder.comparator()
+    val appIcons = HashMap<Pair<UserHandle, String>, ImageBitmap?>()
+    return installed
+        .filter { it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0 }
+        // Some ask to be kept out of pickers: a launcher's own internal widgets, say.
+        .filter {
+            it.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_HIDE_FROM_PICKER == 0
+        }
+        .mapNotNull { info ->
+            info.toProvider(context, pm, density) { app ->
+                appIcons.getOrPut(info.profile to app.packageName) {
+                    pm.getApplicationIcon(app).toPicture(iconPx)
+                }
+            }
+        }
+        .sortedWith(
+            compareBy<WidgetProvider, String>(order) { it.appLabel }.thenBy(order) { it.label }
+        )
+}
 
 /** Null if the provider's package cannot be read: one broken app must not empty the list. */
 @Suppress("TooGenericExceptionCaught")
@@ -340,6 +430,9 @@ internal fun AppWidgetProviderInfo.toProvider(
     context: Context,
     pm: PackageManager,
     density: Float,
+    appIcon: (ApplicationInfo) -> ImageBitmap? = {
+        pm.getApplicationIcon(it).toPicture((ICON_DP * density).toInt())
+    },
 ) =
     try {
         val app = activityInfo.applicationInfo
@@ -349,7 +442,7 @@ internal fun AppWidgetProviderInfo.toProvider(
             key = "${profile.hashCode()}/$flat",
             label = loadLabel(pm),
             appLabel = pm.getApplicationLabel(app).toString(),
-            appIcon = pm.getApplicationIcon(app).toPicture((ICON_DP * density).toInt()),
+            appIcon = appIcon(app),
             preview = loadPreviewImage(context, 0)?.toPicture((PREVIEW_DP * density).toInt()),
             minWidthDp = minWidth / density,
             minHeightDp = minHeight / density,

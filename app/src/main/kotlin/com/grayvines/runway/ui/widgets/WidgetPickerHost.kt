@@ -65,7 +65,13 @@ class WidgetPickerHost(
     fun open() {
         if (!mayOpen()) return
         loadJob?.cancel()
+        loadJob = null
         _open.value = true
+        val cached = widgets.cachedProviders
+        if (cached != null) {
+            _providers.value = cached
+            return
+        }
         _providers.value = null
         loadJob = scope.launch {
             var loaded: List<WidgetProvider>? = null

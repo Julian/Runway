@@ -42,6 +42,9 @@ class DropAreaTracker(private val onChange: (DropAreas) -> Unit) {
     fun gridChanged(columns: Int, rows: Int, dockSlots: Int) =
         update(areas.copy(columns = columns, rows = rows, dockSlots = dockSlots))
 
+    /** Updates whether pagers run right-to-left so edge flips follow visual page order. */
+    fun layoutDirectionChanged(rtl: Boolean) = update(areas.copy(rtl = rtl))
+
     private fun refreshHome(columns: Int, rows: Int) =
         update(
             areas.copy(

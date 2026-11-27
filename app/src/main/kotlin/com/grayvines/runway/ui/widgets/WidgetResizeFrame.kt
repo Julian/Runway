@@ -7,9 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
@@ -22,6 +24,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -134,10 +137,14 @@ private fun Frame(
     val density = LocalDensity.current
     val chipSize = with(density) { CHIP_SIZE.roundToPx() }
     val chipStep = with(density) { (CHIP_SIZE + CHIP_GAP).roundToPx() }
-    Box(Modifier.fillMaxSize().onSizeChanged { room = it }.testTag(WIDGET_RESIZE_TAG)) {
+    val topInset = WindowInsets.systemBars.getTop(density)
+    Box(
+        Modifier.fillMaxSize().onSizeChanged { room = it }.testTag(WIDGET_RESIZE_TAG),
+        contentAlignment = AbsoluteAlignment.TopLeft,
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             val outline = pull.outline()
-            pull.chips = chipsRect(outline, room, chipSize, chipStep, count)
+            pull.chips = chipsRect(outline, room, chipSize, chipStep, count, topInset)
             val corner = CornerRadius(CORNER.toPx())
             drawRoundRect(
                 Color.White.copy(alpha = FILL_ALPHA),
@@ -159,6 +166,7 @@ private fun Frame(
             { room },
             place = 0,
             count = count,
+            topInset = topInset,
             Icons.Outlined.Clear,
             "Remove",
             REMOVE_CHIP,
@@ -170,6 +178,7 @@ private fun Frame(
                 { room },
                 place = 1,
                 count = count,
+                topInset = topInset,
                 Icons.Outlined.Edit,
                 "Edit",
                 CHIP,
@@ -192,7 +201,7 @@ private fun Handle(edge: Edge, pull: Pull) {
             Edge.BOTTOM -> "Bottom edge"
         }
     Box(
-        Modifier.offset {
+        Modifier.absoluteOffset {
                 val c = pull.outline().midpoint(edge)
                 IntOffset((c.x - touch / 2).toInt(), (c.y - touch / 2).toInt())
             }
@@ -223,7 +232,7 @@ private fun Handle(edge: Edge, pull: Pull) {
 
 /**
  * A round button on the outline's top edge, [place] chips left of its top-right corner, kept inside
- * [room] when the widget sits flush with a screen edge.
+ * [room] and below [topInset] when the widget sits flush with a screen edge.
  */
 @Suppress("LongParameterList") // one chip's inputs, passed from Frame
 @Composable
@@ -232,6 +241,7 @@ private fun Chip(
     room: () -> IntSize,
     place: Int,
     count: Int,
+    topInset: Int,
     icon: ImageVector,
     label: String,
     color: Color,
@@ -241,7 +251,9 @@ private fun Chip(
     val size = with(density) { CHIP_SIZE.roundToPx() }
     val step = with(density) { (CHIP_SIZE + CHIP_GAP).roundToPx() }
     Box(
-        Modifier.offset { chipOffset(outline(), room(), size, step, place, count) }
+        Modifier.absoluteOffset {
+                chipOffset(outline(), room(), size, step, place, count, topInset)
+            }
             .size(CHIP_SIZE)
             .background(color, CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
@@ -257,6 +269,7 @@ private fun Chip(
     }
 }
 
+@Suppress("LongParameterList") // pure geometry helper for chip placement and hit-testing
 internal fun chipOffset(
     outline: Rect,
     room: IntSize,
@@ -264,6 +277,7 @@ internal fun chipOffset(
     step: Int,
     place: Int,
     count: Int = place + 1,
+    topInset: Int = 0,
 ): IntOffset {
     val cornerX = (outline.right - size / 2).toInt()
     val rawY = (outline.top - size / 2).toInt()
@@ -273,13 +287,21 @@ internal fun chipOffset(
     val maxCornerX = (room.width - size).coerceAtLeast(0)
     val minCornerX = ((count - 1) * step).coerceAtMost(maxCornerX)
     val x = cornerX.coerceIn(minCornerX, maxCornerX) - place * step
-    val y = rawY.coerceIn(0, (room.height - size).coerceAtLeast(0))
+    val y = rawY.coerceIn(topInset, (room.height - size).coerceAtLeast(topInset))
     return IntOffset(x, y)
 }
 
-internal fun chipsRect(outline: Rect, room: IntSize, size: Int, step: Int, count: Int): Rect {
-    val right = chipOffset(outline, room, size, step, place = 0, count = count)
-    val left = chipOffset(outline, room, size, step, place = count - 1, count = count)
+internal fun chipsRect(
+    outline: Rect,
+    room: IntSize,
+    size: Int,
+    step: Int,
+    count: Int,
+    topInset: Int = 0,
+): Rect {
+    val right = chipOffset(outline, room, size, step, place = 0, count = count, topInset = topInset)
+    val left =
+        chipOffset(outline, room, size, step, place = count - 1, count = count, topInset = topInset)
     return Rect(
         left.x.toFloat(),
         right.y.toFloat(),
@@ -348,6 +370,8 @@ private class Pull(
 
     fun moved(delta: Offset) {
         val e = edge ?: return
+        val cell = if (e.horizontal) cellPx.width else cellPx.height
+        if (cell <= 0f) return
         val outward =
             when (e) {
                 Edge.LEFT -> -delta.x
@@ -355,7 +379,6 @@ private class Pull(
                 Edge.TOP -> -delta.y
                 Edge.BOTTOM -> delta.y
             }
-        val cell = if (e.horizontal) cellPx.width else cellPx.height
         pulled += outward
         px = pulled.coerceIn(within.start, within.endInclusive)
         cells = cellsPulled(px, cell, cells)

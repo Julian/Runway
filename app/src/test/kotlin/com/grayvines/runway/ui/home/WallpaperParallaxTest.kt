@@ -59,5 +59,28 @@ class WallpaperParallaxTest {
             0.5f,
             wallpaperOffset(page = 2, offsetFraction = 0f, pageCount = 3, enabled = false),
         )
+        assertEquals(
+            0.5f,
+            wallpaperOffset(
+                page = 0,
+                offsetFraction = 0f,
+                pageCount = 1,
+                enabled = true,
+                rtl = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `slides from 1 to 0 across pages in right-to-left layouts`() {
+        fun rtlOffset(page: Int, fraction: Float = 0f) =
+            wallpaperOffset(page, fraction, pageCount = 3, enabled = true, rtl = true)
+
+        assertEquals(1f, rtlOffset(page = 0))
+        assertEquals(0.75f, rtlOffset(page = 0, fraction = 0.5f))
+        assertEquals(0.5f, rtlOffset(page = 1))
+        assertEquals(0f, rtlOffset(page = 2))
+        assertEquals(1f, rtlOffset(page = 0, fraction = -0.2f))
+        assertEquals(0f, rtlOffset(page = 2, fraction = 0.2f))
     }
 }

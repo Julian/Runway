@@ -23,9 +23,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -73,8 +77,10 @@ internal class FolderOrder {
     private var takenFrom = IntOffset.Zero
     private var slot by mutableStateOf(IntOffset.Zero)
 
-    /** From a release until the folder's own order has caught up with the one written. */
-    private var written = false
+    /**
+     * Tracks in-flight reorder writes so stale pre-write emissions do not flicker the list back.
+     */
+    private val pending = PendingReorder()
 
     /** How much of the carry is still drawn: 1 under the finger, 0 once the tile has landed. */
     private var landing by mutableFloatStateOf(1f)
@@ -87,13 +93,14 @@ internal class FolderOrder {
 
     /**
      * Takes up the folder's own order, unless a finger is rearranging it or an order it left is
-     * still on its way to the store.
+     * still on its way to the store. External membership changes (add, remove, uninstall) always
+     * break through a pending write rather than staying frozen on the stale list.
      */
     fun follow(apps: List<AppEntry>) {
-        if (written && apps.refs() != shown.refs()) return
+        if (pending.shouldIgnore(apps.refs())) return
         own = apps
         if (held != null) return
-        written = false
+        pending.clear()
         shown = apps
     }
 
@@ -136,8 +143,8 @@ internal class FolderOrder {
      */
     fun dropped(): List<AppEntry>? {
         if (shown.refs() == own.refs()) return null
+        pending.record(before = own.refs(), after = shown.refs())
         own = shown
-        written = true
         return shown
     }
 
@@ -158,11 +165,36 @@ internal class FolderOrder {
         gesture++
         held = null
         landing = 1f
-        written = false
         shown = own
     }
 
     private fun List<AppEntry>.refs() = map { it.ref }
+}
+
+/**
+ * Tracks in-flight folder reorder writes so stale pre-write emissions from the database do not
+ * flicker the list back, while any external membership change (add, remove, uninstall) or external
+ * reorder breaks through immediately instead of freezing the folder on the stale order.
+ */
+internal class PendingReorder {
+    private var expected: List<AppRef>? = null
+    private val stale = mutableSetOf<List<AppRef>>()
+
+    fun record(before: List<AppRef>, after: List<AppRef>) {
+        stale += before
+        expected = after
+    }
+
+    fun shouldIgnore(incoming: List<AppRef>): Boolean {
+        val target = expected ?: return false
+        if (incoming == target) return false
+        return incoming in stale && incoming.toSet() == target.toSet()
+    }
+
+    fun clear() {
+        expected = null
+        stale.clear()
+    }
 }
 
 /**
@@ -195,23 +227,31 @@ internal fun Modifier.rearranges(
     onLiftOut: ((AppEntry, PointerId, Point, Point) -> Unit)? = null,
     onDropped: (List<AppEntry>) -> Unit,
 ): Modifier {
-    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val coords = remember { ReorderCoordsRef() }
     // The gesture coroutine outlives recompositions and must always report to the current sheet.
     val hooks by
         rememberUpdatedState(
             RearrangeHooks(sheetBounds, onHold, onMoveInSheet, onLiftOut, onDropped)
         )
     val scope = rememberCoroutineScope()
-    return onGloballyPositioned { coords = it }
+    return onGloballyPositioned { coords.value = it }
         .pointerInput(Unit) {
             val gesture =
-                FolderGesture(order, grid, viewConfiguration.touchSlop, scope, { coords }) { hooks }
+                FolderGesture(
+                    order,
+                    grid,
+                    viewConfiguration.touchSlop,
+                    scope,
+                    { coords.value?.takeIf { it.isAttached } },
+                ) {
+                    hooks
+                }
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val held = awaitLongPressOrCancellation(down.id)
                 if (held != null && gesture.held(held.position)) {
                     try {
-                        trackHeld(down.id, gesture)
+                        trackHeld(held.id, held.type, gesture)
                     } catch (e: CancellationException) {
                         gesture.cancelled()
                         throw e
@@ -221,23 +261,49 @@ internal fun Modifier.rearranges(
         }
 }
 
+private class ReorderCoordsRef(var value: LayoutCoordinates? = null)
+
 /**
  * Follows [downId] on the initial pass once a long press has claimed the gesture, consuming moves
- * and the release before the grid's own scroll or the tile's tap handler can take them.
+ * and the release before the grid's own scroll or the tile's tap handler can take them. Unrelated
+ * hover, scroll, and other-device pointer events are ignored so they do not abort the reorder.
  */
-private suspend fun AwaitPointerEventScope.trackHeld(downId: PointerId, gesture: FolderGesture) {
-    while (true) {
+private suspend fun AwaitPointerEventScope.trackHeld(
+    downId: PointerId,
+    downType: PointerType,
+    gesture: FolderGesture,
+) {
+    var tracking = true
+    while (tracking) {
         val event = awaitPointerEvent(PointerEventPass.Initial)
         val change = event.changes.firstOrNull { it.id == downId }
-        if (change == null || !change.pressed) {
-            change?.consume()
-            if (change != null) gesture.ended() else gesture.cancelled()
-            return
+        when {
+            change == null -> {
+                if (isSameStreamMissing(event, downType)) {
+                    gesture.cancelled()
+                    tracking = false
+                }
+            }
+            !change.pressed -> {
+                change.consume()
+                if (change.changedToUpIgnoreConsumed()) gesture.ended() else gesture.cancelled()
+                tracking = false
+            }
+            else -> {
+                val delta = change.positionChangeIgnoreConsumed()
+                change.consume()
+                if (delta != Offset.Zero) gesture.dragged(change, delta)
+            }
         }
-        val delta = change.positionChangeIgnoreConsumed()
-        change.consume()
-        if (delta != Offset.Zero) gesture.dragged(change, delta)
     }
+}
+
+private fun isSameStreamMissing(event: PointerEvent, downType: PointerType): Boolean {
+    val ignored =
+        event.type == PointerEventType.Enter ||
+            event.type == PointerEventType.Exit ||
+            event.type == PointerEventType.Scroll
+    return !ignored && event.changes.any { it.type == downType }
 }
 
 private class RearrangeHooks(

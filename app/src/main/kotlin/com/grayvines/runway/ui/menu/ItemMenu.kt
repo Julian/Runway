@@ -8,20 +8,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Launch
 import androidx.compose.material.icons.outlined.Clear
-import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.grayvines.runway.R
 import com.grayvines.runway.data.Container
 import com.grayvines.runway.system.apps.AppShortcut
 import com.grayvines.runway.ui.drag.Bounds
@@ -166,12 +166,20 @@ private fun AppActionBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showNewFolder) {
-            MenuIconButton("New folder", Icons.Outlined.CreateNewFolder, actions.newFolder)
+            MenuIconButton(
+                "New folder",
+                ImageVector.vectorResource(R.drawable.ic_create_new_folder),
+                actions.newFolder,
+            )
         }
         MenuIconButton("App info", Icons.Outlined.Info, actions.appInfo)
         MenuIconButton(
             if (badgesMuted) "Unmute badges" else "Mute badges",
-            if (badgesMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+            if (badgesMuted) {
+                Icons.Outlined.Notifications
+            } else {
+                ImageVector.vectorResource(R.drawable.ic_notifications_off)
+            },
             actions.toggleBadges,
         )
         MenuIconButton("Uninstall", Icons.Outlined.Delete, actions.uninstall)
@@ -196,7 +204,7 @@ private fun ShortcutRow(shortcut: AppShortcut, onClick: () -> Unit) {
             )
         } else {
             Icon(
-                Icons.AutoMirrored.Outlined.Launch,
+                ImageVector.vectorResource(R.drawable.ic_launch),
                 contentDescription = null,
                 tint = Color.White.copy(alpha = ICON_ALPHA),
                 modifier = Modifier.size(ROW_ICON),
@@ -229,7 +237,9 @@ private fun HeldRemoveChip(
     val labelPx = if (labelled) with(density) { labelStyle.lineHeight.roundToPx() } else 0
     Box(
         modifier =
-            Modifier.offset { removeChipOffset(anchor, iconPx, touchPx, insetPx, room, labelPx) }
+            Modifier.absoluteOffset {
+                    removeChipOffset(anchor, iconPx, touchPx, insetPx, room, labelPx)
+                }
                 .size(REMOVE_TOUCH)
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove" },

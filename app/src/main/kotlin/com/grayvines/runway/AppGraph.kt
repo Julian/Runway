@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -50,6 +51,9 @@ class AppGraph(private val context: Context) {
                 .map { it.iconShape }
                 .distinctUntilChanged()
                 .collect(appRepository::setIconShape)
+        }
+        appScope.launch {
+            appRepository.packageChanges.drop(1).collect { widgets.invalidateProviders() }
         }
         // Every reconciling refresh also reconciles the layout, for uninstalls missed while not
         // running; packages marked temporarily unavailable by the system are preserved.

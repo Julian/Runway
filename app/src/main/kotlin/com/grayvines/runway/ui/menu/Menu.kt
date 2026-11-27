@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,13 +29,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -82,63 +82,86 @@ internal fun Menu(
                 )
                 .semantics { contentDescription = "Dismiss" }
         )
-        val density = LocalDensity.current
-        // The keyboard covers the bottom of the room: the menu keeps clear of it, as it does of
-        // the screen's edges, or its rows could not be reached.
-        val keyboard = with(density) { WindowInsets.ime.getBottom(this) }
-        val clear = IntSize(room.width, (room.height - keyboard).coerceAtLeast(0))
-        Box(Modifier.fillMaxSize().testTag(tag)) {
-            if (content != null && clear != IntSize.Zero) {
-                val gap = with(density) { MENU_GAP.roundToPx() }
-                Surface(
-                    modifier =
-                        Modifier.layout { measurable, constraints ->
-                                val placeable = measurable.measure(constraints)
-                                val pos =
-                                    menuOffset(
-                                        anchor,
-                                        IntSize(placeable.width, placeable.height),
-                                        clear,
-                                        gap,
-                                    )
-                                layout(placeable.width, placeable.height) {
-                                    placeable.placeRelative(pos)
-                                }
-                            }
-                            .width(MENU_WIDTH)
-                            .heightIn(max = with(density) { clear.height.toDp() }),
-                    shape = RoundedCornerShape(CORNER),
-                    color = SURFACE,
-                    contentColor = Color.White,
-                    shadowElevation = 12.dp,
-                ) {
-                    // Scrolls when there are more rows than room.
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
-                        content = content,
-                    )
-                }
+        Box(Modifier.fillMaxSize().testTag(tag), contentAlignment = AbsoluteAlignment.TopLeft) {
+            if (content != null && room != IntSize.Zero) {
+                MenuCard(anchor, room, content)
             }
-            if (clear != IntSize.Zero) overlay(clear)
+            if (room != IntSize.Zero) overlay(room)
         }
     }
 }
 
+@Composable
+private fun MenuCard(anchor: Bounds, room: IntSize, content: @Composable ColumnScope.() -> Unit) {
+    val sysBars = WindowInsets.systemBars
+    val ime = WindowInsets.ime
+    Surface(
+        modifier =
+            Modifier.layout { measurable, constraints ->
+                    // Read system bars and keyboard in the layout phase so IME frames only
+                    // re-layout this surface rather than recomposing the menu.
+                    val topInset = sysBars.getTop(this)
+                    val bottomInset = maxOf(ime.getBottom(this), sysBars.getBottom(this))
+                    val clearHeight = (room.height - bottomInset).coerceAtLeast(0)
+                    val maxMenuHeight = (clearHeight - topInset).coerceAtLeast(0)
+                    val placeable =
+                        measurable.measure(
+                            constraints.copy(
+                                minHeight = 0,
+                                maxHeight = minOf(constraints.maxHeight, maxMenuHeight),
+                            )
+                        )
+                    val pos =
+                        menuOffset(
+                            anchor,
+                            IntSize(placeable.width, placeable.height),
+                            IntSize(room.width, clearHeight),
+                            MENU_GAP.roundToPx(),
+                            topInset = topInset,
+                        )
+                    layout(placeable.width, placeable.height) { placeable.place(pos) }
+                }
+                .width(MENU_WIDTH),
+        shape = RoundedCornerShape(CORNER),
+        color = SURFACE,
+        contentColor = Color.White,
+        shadowElevation = 12.dp,
+    ) {
+        // Scrolls when there are more rows than room.
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+            content = content,
+        )
+    }
+}
+
 /**
- * Where a menu of [size] goes beside [anchor] within [room] (the part of the screen the keyboard
- * leaves clear): below the anchor by [gap] when it fits, else above it; centred on it sideways as
- * far as the room allows; never past the room's edges, top and bottom included.
+ * Where a menu of [size] goes beside [anchor] within [room] (the part of the screen above the
+ * keyboard and navigation bar, below [topInset]): below the anchor by [gap] when it fits, else
+ * above it; centred on it sideways as far as the room allows; never past the room's edges, top and
+ * bottom included.
  */
-internal fun menuOffset(anchor: Bounds, size: IntSize, room: IntSize, gap: Int): IntOffset {
+internal fun menuOffset(
+    anchor: Bounds,
+    size: IntSize,
+    room: IntSize,
+    gap: Int,
+    topInset: Int = 0,
+): IntOffset {
     val x =
         (anchor.left.toInt() + (anchor.width.toInt() - size.width) / 2).coerceIn(
             0,
             (room.width - size.width).coerceAtLeast(0),
         )
     val below = anchor.bottom.toInt() + gap
+    val maxY = (room.height - size.height).coerceAtLeast(topInset)
     val y =
-        if (below + size.height <= room.height) below else anchor.top.toInt() - gap - size.height
-    return IntOffset(x, y.coerceIn(0, (room.height - size.height).coerceAtLeast(0)))
+        if (below + size.height <= room.height) {
+            below
+        } else {
+            anchor.top.toInt() - gap - size.height
+        }
+    return IntOffset(x, y.coerceIn(topInset, maxY))
 }
 
 @Composable
