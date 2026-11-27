@@ -179,6 +179,24 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Fetch the managed AOSP device image
+        run: |
+          flags=()
+          for attempt in 1 2 3; do
+            ./gradlew :baselineprofile:pixel9Api36AospSetup \
+              -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+              "${flags[@]}" && break
+            test "$attempt" -lt 3 || exit 1
+            ./gradlew --stop || true
+            pkill -f qemu-system || true
+            rm -rf \
+              .gradle/configuration-cache \
+              "${GRADLE_USER_HOME:-$HOME/.gradle}"/caches/modules-2/metadata-* \
+              "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.temp" \
+              "${ANDROID_HOME:-/usr/local/lib/android/sdk}/.downloadIntermediates"
+            flags=(--no-configuration-cache --refresh-dependencies)
+            sleep $((attempt * 15))
+          done
       # Without -PrunwayProfile the plugin writes what it records into src rather than baking it
       # straight into a build of its own, which is what lets the release job pick it up.
       - name: Record the profile on the managed AOSP emulator
